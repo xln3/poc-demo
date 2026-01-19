@@ -36,11 +36,10 @@ export default function App() {
   const [showDocument, setShowDocument] = useState(true);
   const [docTab, setDocTab] = useState('info'); // 'info' | 'readme'
   const [customSystemPrompt, setCustomSystemPrompt] = useState('');
-  const [isEditingPrompt, setIsEditingPrompt] = useState(false);
-  const [showSystemPrompt, setShowSystemPrompt] = useState(true);
+  const [isEditingLlmConfig, setIsEditingLlmConfig] = useState(false);
   const [customTestPayload, setCustomTestPayload] = useState('');
   const [isEditingPayload, setIsEditingPayload] = useState(false);
-  const [showTestPayload, setShowTestPayload] = useState(true);
+  const [payloadFiles, setPayloadFiles] = useState([]);
 
   // Sandbox states
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
@@ -56,7 +55,6 @@ export default function App() {
   const [llmTemperature, setLlmTemperature] = useState(CONFIG.llmParams.temperature);
   const [llmMaxTokens, setLlmMaxTokens] = useState(CONFIG.llmParams.max_tokens);
   const [llmTopP, setLlmTopP] = useState(CONFIG.llmParams.top_p);
-  const [showLlmParams, setShowLlmParams] = useState(true);
 
   // API 请求计时器
   const [apiStartTime, setApiStartTime] = useState(null);
@@ -243,10 +241,12 @@ export default function App() {
     setApiError('');
     // 切换场景时重置系统提示词为默认值
     setCustomSystemPrompt(currentScenario.systemPrompt || '');
-    setIsEditingPrompt(false);
+    setIsEditingLlmConfig(false);
     // 切换场景时重置测试 payload 为默认值
     setCustomTestPayload(currentAttack.testPayload || '');
     setIsEditingPayload(false);
+    // 重置添加的文件
+    setPayloadFiles([]);
 
     if (mode === 'mock') {
       const timer = setTimeout(() => {
@@ -307,12 +307,20 @@ export default function App() {
     setMessages([]);
     setLogs([]);
 
-    // 对于间接注入攻击，使用包含完整文件内容的 realTestPayload
-    // 如果用户修改了 payload，则优先使用修改后的内容
-    const actualPayload = customTestPayload !== currentAttack.testPayload && customTestPayload
-      ? customTestPayload
-      : (attack.realTestPayload || attack.testPayload);
-    const hasFileContent = !!attack.realTestPayload;
+    // 构建实际发送的 payload
+    // 优先级：用户添加的文件 + 自定义 payload > 攻击的 realTestPayload > 攻击的 testPayload
+    let actualPayload;
+    const hasUserFiles = payloadFiles.length > 0;
+    const hasCustomPayload = customTestPayload !== currentAttack.testPayload;
+
+    if (hasUserFiles || hasCustomPayload) {
+      // 用户有自定义内容，发送实际文件内容
+      actualPayload = getActualPayload();
+    } else {
+      // 使用攻击原有的 payload
+      actualPayload = attack.realTestPayload || attack.testPayload;
+    }
+    const hasFileContent = !!attack.realTestPayload || hasUserFiles;
 
     // 显示用户消息（显示简化版，但实际发送完整版）
     const userMsg = {
@@ -325,15 +333,18 @@ export default function App() {
 
     // 添加日志
     const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
-    const logs = [
+    const initialLogs = [
       { type: 'tool', content: `模型: ${modelName}`, status: 'normal' },
     ];
-    if (hasFileContent) {
-      logs.push({ type: 'data', content: `解析文件: ${attack.documentFileName}`, status: 'normal' });
-      logs.push({ type: 'alert', content: `⚠️ 文件包含隐藏的恶意内容`, status: 'warning' });
+    if (hasUserFiles) {
+      initialLogs.push({ type: 'data', content: `已添加 ${payloadFiles.length} 个文件: ${payloadFiles.map(f => f.name).join(', ')}`, status: 'normal' });
     }
-    logs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)...`, status: 'normal' });
-    setLogs(logs);
+    if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
+      initialLogs.push({ type: 'data', content: `解析文件: ${attack.documentFileName}`, status: 'normal' });
+      initialLogs.push({ type: 'alert', content: `⚠️ 文件包含隐藏的恶意内容`, status: 'warning' });
+    }
+    initialLogs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)...`, status: 'normal' });
+    setLogs(initialLogs);
 
     // 获取实际使用的系统提示词（自定义或默认）
     const activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
@@ -410,6 +421,34 @@ export default function App() {
 
   const toggleType = (type) => setExpanded(prev => ({ ...prev, type: prev.type === type ? null : type }));
   const toggleScenario = (scenario) => setExpanded(prev => ({ ...prev, scenario: prev.scenario === scenario ? null : scenario }));
+
+  // 文件处理函数
+  const handleAddFile = async (e) => {
+    const files = Array.from(e.target.files);
+    for (const file of files) {
+      const content = await file.text();
+      setPayloadFiles(prev => [...prev, { name: file.name, content }]);
+    }
+    e.target.value = ''; // 重置 input 以便再次选择同一文件
+  };
+
+  const removePayloadFile = (index) => {
+    setPayloadFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // 获取显示的 Payload（文件名 + 用户输入）
+  const getDisplayPayload = () => {
+    if (payloadFiles.length === 0) return customTestPayload;
+    const fileNames = payloadFiles.map(f => `[文件: ${f.name}]`).join('\n');
+    return `${fileNames}\n\n${customTestPayload}`;
+  };
+
+  // 获取实际发送的 Payload（文件内容 + 用户输入）
+  const getActualPayload = () => {
+    if (payloadFiles.length === 0) return customTestPayload;
+    const fileContents = payloadFiles.map(f => `=== ${f.name} ===\n${f.content}`).join('\n\n');
+    return `${fileContents}\n\n${customTestPayload}`;
+  };
 
   // 导出报告
   const exportReport = () => {
@@ -766,7 +805,7 @@ play();
                       docTab === 'readme' ? 'bg-orange-600' : 'bg-slate-700 hover:bg-slate-600'
                     }`}
                   >
-                    📋 详细文档
+                    📋 攻击详情
                   </button>
                 </div>
 
@@ -865,99 +904,63 @@ play();
               </button>
             </div>
 
-            {/* LLM 参数配置 */}
-            <div className="mb-3 p-2 bg-slate-900 rounded border border-slate-700">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400">⚙️ LLM 参数</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => {
-                      setLlmTemperature(CONFIG.llmParams.temperature);
-                      setLlmMaxTokens(CONFIG.llmParams.max_tokens);
-                      setLlmTopP(CONFIG.llmParams.top_p);
-                    }}
-                    className="px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
-                  >
-                    🔄 重置
-                  </button>
-                  <button
-                    onClick={() => setShowLlmParams(!showLlmParams)}
-                    className="px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
-                  >
-                    {showLlmParams ? '▼' : '▶'}
-                  </button>
-                </div>
-              </div>
-              {showLlmParams && (
-                <div className="grid grid-cols-3 gap-3 mt-3">
-                  {/* Temperature */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-slate-500">Temperature</span>
-                      <span className="text-xs text-cyan-400 font-mono">{llmTemperature.toFixed(1)}</span>
-                    </div>
+            {/* LLM 配置和测试 Payload 并排显示 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {/* LLM 配置模块 */}
+              <div className="bg-slate-900 rounded border border-slate-700 flex flex-col">
+                {/* 标题栏 - 参数显示在标题行 */}
+                <div className="flex items-center justify-between p-2 border-b border-slate-700">
+                  <div className="flex items-center gap-3 flex-wrap text-xs">
+                    <span className="text-slate-400 font-medium">LLM 配置</span>
+                    {/* 参数内联显示/编辑 */}
+                    <span className="text-slate-500">Temperature</span>
                     <input
-                      type="range"
+                      type="number"
                       min="0"
                       max="2"
                       step="0.1"
                       value={llmTemperature}
-                      onChange={(e) => setLlmTemperature(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      onChange={(e) => setLlmTemperature(parseFloat(e.target.value) || 0)}
+                      disabled={!isEditingLlmConfig}
+                      className={`w-12 bg-slate-800 border rounded px-1 text-cyan-400 font-mono text-xs ${
+                        isEditingLlmConfig ? 'border-blue-500' : 'border-slate-600'
+                      }`}
                     />
-                  </div>
-                  {/* Max Tokens */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-slate-500">Max Tokens</span>
-                      <span className="text-xs text-cyan-400 font-mono">{llmMaxTokens >= 1024 ? `${(llmMaxTokens / 1024).toFixed(0)}K` : llmMaxTokens}</span>
-                    </div>
+                    <span className="text-slate-500">Max Tokens</span>
                     <input
-                      type="range"
+                      type="number"
                       min="256"
                       max="131072"
                       step="1024"
                       value={llmMaxTokens}
-                      onChange={(e) => setLlmMaxTokens(parseInt(e.target.value))}
-                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      onChange={(e) => setLlmMaxTokens(parseInt(e.target.value) || 256)}
+                      disabled={!isEditingLlmConfig}
+                      className={`w-16 bg-slate-800 border rounded px-1 text-cyan-400 font-mono text-xs ${
+                        isEditingLlmConfig ? 'border-blue-500' : 'border-slate-600'
+                      }`}
                     />
-                  </div>
-                  {/* Top P */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-slate-500">Top P</span>
-                      <span className="text-xs text-cyan-400 font-mono">{llmTopP.toFixed(1)}</span>
-                    </div>
+                    <span className="text-slate-500">Top P</span>
                     <input
-                      type="range"
+                      type="number"
                       min="0"
                       max="1"
                       step="0.05"
                       value={llmTopP}
-                      onChange={(e) => setLlmTopP(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      onChange={(e) => setLlmTopP(parseFloat(e.target.value) || 0)}
+                      disabled={!isEditingLlmConfig}
+                      className={`w-12 bg-slate-800 border rounded px-1 text-cyan-400 font-mono text-xs ${
+                        isEditingLlmConfig ? 'border-blue-500' : 'border-slate-600'
+                      }`}
                     />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 系统提示词和测试Payload 并排显示 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {/* 系统提示词模块 */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">🔧 系统提示词</span>
                     {customSystemPrompt !== currentScenario.systemPrompt && (
-                      <span className="text-xs text-yellow-400">(已修改)</span>
+                      <span className="text-yellow-400">(已修改)</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    {isEditingPrompt ? (
+                    {isEditingLlmConfig ? (
                       <>
                         <button
-                          onClick={() => setIsEditingPrompt(false)}
+                          onClick={() => setIsEditingLlmConfig(false)}
                           className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
                         >
                           ✓ 保存
@@ -965,7 +968,10 @@ play();
                         <button
                           onClick={() => {
                             setCustomSystemPrompt(currentScenario.systemPrompt || '');
-                            setIsEditingPrompt(false);
+                            setLlmTemperature(CONFIG.llmParams.temperature);
+                            setLlmMaxTokens(CONFIG.llmParams.max_tokens);
+                            setLlmTopP(CONFIG.llmParams.top_p);
+                            setIsEditingLlmConfig(false);
                           }}
                           className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
                         >
@@ -975,47 +981,60 @@ play();
                     ) : (
                       <>
                         <button
-                          onClick={() => setIsEditingPrompt(true)}
+                          onClick={() => setIsEditingLlmConfig(true)}
                           className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
                         >
                           ✏️ 修改
                         </button>
                         <button
-                          onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+                          onClick={() => {
+                            setCustomSystemPrompt(currentScenario.systemPrompt || '');
+                            setLlmTemperature(CONFIG.llmParams.temperature);
+                            setLlmMaxTokens(CONFIG.llmParams.max_tokens);
+                            setLlmTopP(CONFIG.llmParams.top_p);
+                          }}
                           className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
                         >
-                          {showSystemPrompt ? '▼' : '▶'}
+                          🔄 重置
                         </button>
                       </>
                     )}
                   </div>
                 </div>
-                {showSystemPrompt && (
-                  isEditingPrompt ? (
+                {/* 内容区 - 系统提示词 */}
+                <div className="p-2 flex-1">
+                  {isEditingLlmConfig ? (
                     <textarea
                       value={customSystemPrompt}
                       onChange={(e) => setCustomSystemPrompt(e.target.value)}
-                      className="w-full h-32 text-xs bg-slate-900 p-2 rounded border border-blue-500 text-cyan-300 font-mono resize-none focus:outline-none custom-scroll"
+                      className="w-full h-full min-h-[10.5rem] max-h-[10.5rem] text-xs bg-slate-800 p-2 rounded border border-blue-500 text-cyan-300 font-mono resize-none focus:outline-none custom-scroll"
                       placeholder="输入系统提示词..."
                     />
                   ) : (
-                    <pre className="text-xs bg-slate-900 p-2 rounded overflow-auto max-h-32 custom-scroll text-cyan-300 whitespace-pre-wrap">
+                    <pre className="text-xs bg-slate-800 p-2 rounded overflow-auto max-h-[10.5rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
                       {customSystemPrompt || '(无系统提示词)'}
                     </pre>
-                  )
-                )}
+                  )}
+                </div>
               </div>
 
               {/* 测试 Payload 模块 */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">🎯 测试 Payload</span>
-                    {customTestPayload !== currentAttack.testPayload && (
-                      <span className="text-xs text-yellow-400">(已修改)</span>
+              <div className="bg-slate-900 rounded border border-slate-700 flex flex-col">
+                {/* 标题栏 */}
+                <div className="flex items-center justify-between p-2 border-b border-slate-700">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-400 font-medium">🎯 测试 Payload</span>
+                    {(customTestPayload !== currentAttack.testPayload || payloadFiles.length > 0) && (
+                      <span className="text-yellow-400">(已修改)</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
+                    {isEditingPayload && (
+                      <label className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded cursor-pointer transition">
+                        + 添加文件
+                        <input type="file" className="hidden" onChange={handleAddFile} multiple />
+                      </label>
+                    )}
                     {isEditingPayload ? (
                       <>
                         <button
@@ -1027,6 +1046,7 @@ play();
                         <button
                           onClick={() => {
                             setCustomTestPayload(currentAttack.testPayload || '');
+                            setPayloadFiles([]);
                             setIsEditingPayload(false);
                           }}
                           className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
@@ -1043,29 +1063,51 @@ play();
                           ✏️ 修改
                         </button>
                         <button
-                          onClick={() => setShowTestPayload(!showTestPayload)}
+                          onClick={() => {
+                            setCustomTestPayload(currentAttack.testPayload || '');
+                            setPayloadFiles([]);
+                          }}
                           className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
                         >
-                          {showTestPayload ? '▼' : '▶'}
+                          🔄 重置
                         </button>
                       </>
                     )}
                   </div>
                 </div>
-                {showTestPayload && (
-                  isEditingPayload ? (
+                {/* 文件列表（如果有） */}
+                {payloadFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1 px-2 pt-2">
+                    {payloadFiles.map((file, i) => (
+                      <span key={i} className="text-xs bg-slate-700 px-2 py-0.5 rounded flex items-center gap-1">
+                        📄 {file.name}
+                        {isEditingPayload && (
+                          <button
+                            onClick={() => removePayloadFile(i)}
+                            className="text-red-400 hover:text-red-300 ml-1"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* 内容区 - Payload 文本 */}
+                <div className="p-2 flex-1">
+                  {isEditingPayload ? (
                     <textarea
                       value={customTestPayload}
                       onChange={(e) => setCustomTestPayload(e.target.value)}
-                      className="w-full h-32 text-xs bg-slate-900 p-2 rounded border border-blue-500 text-orange-300 font-mono resize-none focus:outline-none custom-scroll"
+                      className="w-full h-full min-h-[10.5rem] max-h-[10.5rem] text-xs bg-slate-800 p-2 rounded border border-blue-500 text-orange-300 font-mono resize-none focus:outline-none custom-scroll break-all"
                       placeholder="输入测试 Payload..."
                     />
                   ) : (
-                    <pre className="text-xs bg-slate-900 p-2 rounded overflow-auto max-h-32 custom-scroll text-orange-300 whitespace-pre-wrap">
-                      {customTestPayload || '(无 Payload)'}
+                    <pre className="text-xs bg-slate-800 p-2 rounded overflow-y-auto overflow-x-hidden max-h-[10.5rem] custom-scroll text-orange-300 whitespace-pre-wrap break-all">
+                      {getDisplayPayload() || '(无 Payload)'}
                     </pre>
-                  )
-                )}
+                  )}
+                </div>
               </div>
             </div>
 
