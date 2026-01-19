@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { CONFIG, ATTACK_TYPES, RISK_LEVELS, LOG_TYPES } from './config';
-import { SCENARIOS } from './scenarios';
+import { SCENARIOS } from './scenarios/index.js';
 
 // 按攻击类型重组数据
 const getGroupedData = () => {
