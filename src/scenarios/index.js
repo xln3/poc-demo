@@ -14,12 +14,14 @@ import { persistent } from './system/persistent.js';
 import { salesData } from './industry/salesData.js';
 import { autoRepair } from './industry/autoRepair.js';
 import { finance } from './industry/finance.js';
+import { ragSecurity } from './industry/ragSecurity.js';
 
 // 间接注入场景
 import { indirectInjection } from './indirect/index.js';
 
 // 机密性攻击场景
 import { promptLeakage } from './confidentiality/promptLeakage.js';
+import { vehicleAssistant } from './confidentiality/vehicleAssistant.js';
 
 // 导出与原 scenarios.js 兼容的 SCENARIOS 对象
 export const SCENARIOS = {
@@ -36,6 +38,7 @@ export const SCENARIOS = {
   salesData,
   autoRepair,
   finance,
+  ragSecurity,
 
   // 间接注入攻击
   indirectInjection,
@@ -54,6 +57,7 @@ export {
   salesData,
   autoRepair,
   finance,
+  ragSecurity,
   indirectInjection,
   promptLeakage
 };

@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { CONFIG, ATTACK_TYPES, RISK_LEVELS, LOG_TYPES } from './config';
 import { SCENARIOS } from './scenarios/index.js';
+import { sandboxClient, ImageType, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
+import PDFUploadAndInject from './components/PDFUploadAndInject';
 
 // 按攻击类型重组数据
 const getGroupedData = () => {
@@ -19,7 +21,7 @@ const getGroupedData = () => {
 
 export default function App() {
   // 状态
-  const [mode, setMode] = useState('mock'); // 'mock' | 'real'
+  const [mode, setMode] = useState('mock'); // 'mock' | 'real' | 'general'
   const [selectedAttack, setSelectedAttack] = useState({ scenario: 'loan', index: 0 });
   const [expanded, setExpanded] = useState({ type: 'integrity', scenario: 'loan' });
   const [messages, setMessages] = useState([]);
@@ -33,13 +35,42 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState(CONFIG.models[0].id);
   const [documentReadme, setDocumentReadme] = useState('');
   const [showDocument, setShowDocument] = useState(true);
-  const [docTab, setDocTab] = useState('info'); // 'info' | 'readme'
+  const [docTab, setDocTab] = useState('info'); // 'info' | 'readme' | 'upload'
   const [customSystemPrompt, setCustomSystemPrompt] = useState('');
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = useState(true);
   const [customTestPayload, setCustomTestPayload] = useState('');
   const [isEditingPayload, setIsEditingPayload] = useState(false);
   const [showTestPayload, setShowTestPayload] = useState(true);
+
+  // General Panel specific states
+  const [generalSystemPrompt, setGeneralSystemPrompt] = useState('你是一个有用的AI助手。');
+  const [generalUserMessage, setGeneralUserMessage] = useState('');
+  const [generalHistory, setGeneralHistory] = useState([]); // Chat history for multi-turn conversation
+
+  // Sandbox states
+  const [sandboxEnabled, setSandboxEnabled] = useState(false);
+  const [sandboxStatus, setSandboxStatus] = useState('disconnected'); // 'disconnected' | 'connecting' | 'running' | 'error'
+  const [sandboxImage, setSandboxImage] = useState(ImageType.PYTHON);
+  const [containerInfo, setContainerInfo] = useState(null);
+  const [sandboxAvailable, setSandboxAvailable] = useState(false);
+  const [toolCommand, setToolCommand] = useState('');
+  const [toolResult, setToolResult] = useState(null);
+  const [showSandboxPanel, setShowSandboxPanel] = useState(true);
+
+  // LLM 参数配置 (所有模式共享)
+  const [llmTemperature, setLlmTemperature] = useState(CONFIG.llmParams.temperature);
+  const [llmMaxTokens, setLlmMaxTokens] = useState(CONFIG.llmParams.max_tokens);
+  const [llmTopP, setLlmTopP] = useState(CONFIG.llmParams.top_p);
+  const [showLlmParams, setShowLlmParams] = useState(true);
+
+  // 自定义 PDF 上传注入状态
+  const [uploadedInjectedPDF, setUploadedInjectedPDF] = useState(null);
+  const [showCustomUpload, setShowCustomUpload] = useState(false);
+
+  // API 请求计时器
+  const [apiStartTime, setApiStartTime] = useState(null);
+  const [apiElapsedTime, setApiElapsedTime] = useState(0);
 
   const chatRef = useRef(null);
   const logRef = useRef(null);
@@ -59,6 +90,162 @@ export default function App() {
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
   }, [logs]);
+
+  // 检查 sandbox 服务是否可用
+  useEffect(() => {
+    const checkSandbox = async () => {
+      const available = await sandboxClient.healthCheck();
+      setSandboxAvailable(available);
+    };
+    checkSandbox();
+    // 每 30 秒检查一次
+    const interval = setInterval(checkSandbox, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // API 请求计时器
+  useEffect(() => {
+    if (apiStatus === 'loading') {
+      // 开始计时 - 使用本地变量捕获开始时间
+      const startTime = Date.now();
+      setApiStartTime(startTime);
+      setApiElapsedTime(0);
+
+      // 每 100ms 更新一次显示时间
+      const interval = setInterval(() => {
+        setApiElapsedTime(Date.now() - startTime);
+      }, 100);
+
+      return () => clearInterval(interval);
+    } else {
+      // 请求结束，重置计时器
+      setApiStartTime(null);
+      setApiElapsedTime(0);
+    }
+  }, [apiStatus]);
+
+  // Sandbox WebSocket 日志回调
+  const handleSandboxLog = useCallback((log) => {
+    setLogs(prev => [...prev, {
+      type: log.type,
+      content: log.content,
+      status: log.status,
+      timestamp: log.timestamp,
+      details: log.details,
+    }]);
+  }, []);
+
+  // 启动容器
+  const startContainer = async () => {
+    setSandboxStatus('connecting');
+    try {
+      const info = await sandboxClient.createContainer(sandboxImage);
+      setContainerInfo(info);
+      setSandboxStatus('running');
+
+      // 连接 WebSocket 获取实时日志
+      sandboxClient.connectLogs(handleSandboxLog, (error) => {
+        console.error('Sandbox WebSocket error:', error);
+      });
+
+      setLogs(prev => [...prev, {
+        type: 'container',
+        content: `容器已启动: ${info.container_id} (${info.image})`,
+        status: 'success',
+      }]);
+    } catch (error) {
+      setSandboxStatus('error');
+      setLogs(prev => [...prev, {
+        type: 'error',
+        content: `容器启动失败: ${error.message}`,
+        status: 'danger',
+      }]);
+    }
+  };
+
+  // 停止容器
+  const stopContainer = async () => {
+    sandboxClient.disconnectLogs();
+    try {
+      await sandboxClient.destroyContainer();
+      setContainerInfo(null);
+      setSandboxStatus('disconnected');
+      setLogs(prev => [...prev, {
+        type: 'container',
+        content: '容器已停止',
+        status: 'warning',
+      }]);
+    } catch (error) {
+      setLogs(prev => [...prev, {
+        type: 'error',
+        content: `容器停止失败: ${error.message}`,
+        status: 'danger',
+      }]);
+    }
+  };
+
+  // 执行 shell 命令
+  const executeCommand = async () => {
+    if (!toolCommand.trim() || sandboxStatus !== 'running') return;
+
+    setToolResult(null);
+    setLogs(prev => [...prev, {
+      type: 'tool',
+      content: `执行命令: ${toolCommand}`,
+      status: 'normal',
+    }]);
+
+    try {
+      const result = await sandboxClient.runCommand(toolCommand);
+      setToolResult(result);
+
+      if (result.success) {
+        const output = result.result;
+        setLogs(prev => [...prev, {
+          type: 'tool',
+          content: `命令完成 (exit: ${output.exit_code})`,
+          status: output.exit_code === 0 ? 'success' : 'warning',
+        }]);
+      } else {
+        setLogs(prev => [...prev, {
+          type: 'error',
+          content: `命令失败: ${result.error}`,
+          status: 'danger',
+        }]);
+      }
+    } catch (error) {
+      setLogs(prev => [...prev, {
+        type: 'error',
+        content: `执行错误: ${error.message}`,
+        status: 'danger',
+      }]);
+    }
+  };
+
+  // 清理：组件卸载时断开 WebSocket
+  useEffect(() => {
+    return () => {
+      sandboxClient.disconnectLogs();
+    };
+  }, []);
+
+  // 处理 PDF 注入完成
+  const handleInjectedPDF = (result) => {
+    setUploadedInjectedPDF(result);
+    setLogs(prev => [
+      ...prev,
+      {
+        type: 'data',
+        content: `✓ 自定义 PDF 注入完成: ${result.filename}`,
+        status: 'success'
+      },
+      {
+        type: 'alert',
+        content: `⚠️ 注入位置: ${result.location}, 可见性: ${result.visibility}`,
+        status: 'warning'
+      }
+    ]);
+  };
 
   // 加载恶意文档说明文件
   useEffect(() => {
@@ -88,6 +275,11 @@ export default function App() {
     // 切换场景时重置测试 payload 为默认值
     setCustomTestPayload(currentAttack.testPayload || '');
     setIsEditingPayload(false);
+
+    // 切换到通用面板时的特殊处理
+    if (mode === 'general') {
+      setGeneralHistory([]);
+    }
 
     if (mode === 'mock') {
       const timer = setTimeout(() => {
@@ -149,7 +341,10 @@ export default function App() {
     setLogs([]);
 
     // 对于间接注入攻击，使用包含完整文件内容的 realTestPayload
-    const actualPayload = attack.realTestPayload || attack.testPayload;
+    // 如果用户修改了 payload，则优先使用修改后的内容
+    const actualPayload = customTestPayload !== currentAttack.testPayload && customTestPayload
+      ? customTestPayload
+      : (attack.realTestPayload || attack.testPayload);
     const hasFileContent = !!attack.realTestPayload;
 
     // 显示用户消息（显示简化版，但实际发送完整版）
@@ -180,24 +375,30 @@ export default function App() {
       const response = await CONFIG.callModel(
         [{ role: 'user', content: actualPayload }],
         activeSystemPrompt,
-        selectedModel
+        selectedModel,
+        { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP }
       );
-      
-      setRealResponse(response);
+
+      // Extract content from response object (handles both old string format and new object format)
+      const responseContent = typeof response === 'object' ? response.content : response;
+      const apiTime = typeof response === 'object' ? response.timing.totalTime : null;
+
+      setRealResponse(responseContent);
 
       // 显示模型响应
-      const agentMsg = { role: 'agent', content: response };
+      const agentMsg = { role: 'agent', content: responseContent };
       setMessages(prev => [...prev, agentMsg]);
 
-      // 添加日志：收到响应
+      // 添加日志：收到响应 + timing
       setLogs(prev => [
         ...prev,
-        { type: 'data', content: `收到响应 (${response.length} 字符)`, status: 'normal' },
+        { type: 'data', content: `收到响应 (${responseContent.length} 字符)`, status: 'normal' },
+        ...(apiTime ? [{ type: 'data', content: `⏱️ API 耗时: ${apiTime}ms`, status: 'normal' }] : []),
         { type: 'tool', content: `正在使用 ${CONFIG.judgeModel} 评判攻击结果...`, status: 'normal' }
       ]);
 
       // 调用评判模型（传入实际发送的 payload）
-      const judgeResult = await CONFIG.judgeAttackSuccess(attack, activeSystemPrompt, response, actualPayload);
+      const judgeResult = await CONFIG.judgeAttackSuccess(attack, activeSystemPrompt, responseContent, actualPayload);
 
       setApiStatus('success');
 
@@ -223,6 +424,65 @@ export default function App() {
         ]);
       }
 
+    } catch (error) {
+      setApiStatus('error');
+      setApiError(error.message);
+      setLogs(prev => [
+        ...prev,
+        { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
+      ]);
+    }
+  };
+
+  // 通用面板 API 测试
+  const runGeneralTest = async () => {
+    if (!generalUserMessage.trim()) return;
+
+    setApiStatus('loading');
+    setApiError('');
+
+    // Add user message to history and display
+    const userMsg = { role: 'user', content: generalUserMessage };
+    const newHistory = [...generalHistory, userMsg];
+    setGeneralHistory(newHistory);
+    setMessages(prev => [...prev, userMsg]);
+
+    // Add log
+    const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
+    setLogs(prev => [
+      ...prev,
+      { type: 'tool', content: `模型: ${modelName}`, status: 'normal' },
+      { type: 'data', content: `发送消息 (${generalUserMessage.length} 字符)...`, status: 'normal' }
+    ]);
+
+    // Clear user input
+    const userContent = generalUserMessage;
+    setGeneralUserMessage('');
+
+    try {
+      const response = await CONFIG.callModel(
+        newHistory,
+        generalSystemPrompt,
+        selectedModel,
+        { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP }
+      );
+
+      // Extract content from response object (handles both old string format and new object format)
+      const responseContent = typeof response === 'object' ? response.content : response;
+      const apiTime = typeof response === 'object' ? response.timing.totalTime : null;
+
+      // Add assistant response
+      const agentMsg = { role: 'agent', content: responseContent };
+      setGeneralHistory(prev => [...prev, agentMsg]);
+      setMessages(prev => [...prev, agentMsg]);
+
+      setLogs(prev => [
+        ...prev,
+        { type: 'data', content: `收到响应 (${responseContent.length} 字符)`, status: 'normal' },
+        ...(apiTime ? [{ type: 'data', content: `⏱️ API 耗时: ${apiTime}ms`, status: 'normal' }] : [])
+      ]);
+
+      setApiStatus('success');
     } catch (error) {
       setApiStatus('error');
       setApiError(error.message);
@@ -374,13 +634,94 @@ play();
             >
               🔬 真实测试
             </button>
+            <button
+              onClick={() => setMode('general')}
+              className={`flex-1 py-1.5 rounded text-xs transition ${
+                mode === 'general' ? 'bg-purple-600' : 'bg-slate-600 hover:bg-slate-500'
+              }`}
+            >
+              📋 通用面板
+            </button>
           </div>
+        </div>
+
+        {/* 沙箱控制 */}
+        <div className="mb-3 p-2 bg-slate-700 rounded">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-slate-400">🐳 沙箱环境</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded ${
+              !sandboxAvailable ? 'bg-slate-600 text-slate-400' :
+              sandboxStatus === 'running' ? 'bg-green-600 text-white' :
+              sandboxStatus === 'connecting' ? 'bg-yellow-600 text-white' :
+              sandboxStatus === 'error' ? 'bg-red-600 text-white' :
+              'bg-slate-600 text-slate-300'
+            }`}>
+              {!sandboxAvailable ? '离线' :
+               sandboxStatus === 'running' ? '运行中' :
+               sandboxStatus === 'connecting' ? '启动中' :
+               sandboxStatus === 'error' ? '错误' : '未启动'}
+            </span>
+          </div>
+
+          {sandboxAvailable ? (
+            <>
+              {sandboxStatus !== 'running' && (
+                <div className="mb-2">
+                  <select
+                    value={sandboxImage}
+                    onChange={(e) => setSandboxImage(e.target.value)}
+                    className="w-full bg-slate-600 text-white text-xs px-2 py-1 rounded border border-slate-500 focus:outline-none"
+                    disabled={sandboxStatus === 'connecting'}
+                  >
+                    <option value={ImageType.PYTHON}>🐍 Python 3.11</option>
+                    <option value={ImageType.UBUNTU}>🐧 Ubuntu 22.04</option>
+                    <option value={ImageType.NODE}>📦 Node 20</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex gap-1">
+                {sandboxStatus === 'running' ? (
+                  <button
+                    onClick={stopContainer}
+                    className="flex-1 py-1.5 rounded text-xs bg-red-600 hover:bg-red-500 transition"
+                  >
+                    ⏹️ 停止容器
+                  </button>
+                ) : (
+                  <button
+                    onClick={startContainer}
+                    disabled={sandboxStatus === 'connecting'}
+                    className={`flex-1 py-1.5 rounded text-xs transition ${
+                      sandboxStatus === 'connecting'
+                        ? 'bg-slate-600 cursor-not-allowed'
+                        : 'bg-emerald-600 hover:bg-emerald-500'
+                    }`}
+                  >
+                    {sandboxStatus === 'connecting' ? '⏳ 启动中...' : '▶️ 启动容器'}
+                  </button>
+                )}
+              </div>
+
+              {containerInfo && sandboxStatus === 'running' && (
+                <div className="mt-2 text-xs text-slate-400 font-mono">
+                  <div>ID: {containerInfo.container_id}</div>
+                  <div>Session: {containerInfo.session_id}</div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-xs text-slate-500 text-center py-2">
+              <div>后端服务未运行</div>
+              <div className="mt-1 text-slate-600">cd backend && ./run.sh</div>
+            </div>
+          )}
         </div>
 
         {/* 导出按钮 */}
         <div className="mb-3">
-          <button 
-            onClick={() => setShowExport(!showExport)} 
+          <button
+            onClick={() => setShowExport(!showExport)}
             className="w-full text-xs px-2 py-1.5 bg-slate-700 hover:bg-slate-600 rounded"
           >
             📤 导出功能
@@ -397,8 +738,11 @@ play();
           )}
         </div>
         
-        {/* 层级列表 */}
-        {Object.entries(groupedData).map(([typeKey, typeData]) => (
+        {/* 攻击场景库 - 在通用面板模式下隐藏 */}
+        {mode !== 'general' ? (
+          <>
+            {/* 层级列表 */}
+            {Object.entries(groupedData).map(([typeKey, typeData]) => (
           <div key={typeKey} className="mb-2">
             <button
               onClick={() => toggleType(typeKey)}
@@ -449,38 +793,67 @@ play();
             )}
           </div>
         ))}
-        
-        <div className="mt-4 pt-3 border-t border-slate-700 text-xs text-slate-500">
-          共 {Object.values(SCENARIOS).reduce((a, s) => a + s.attacks.length, 0)} 个场景
-        </div>
+        </>
+        ) : (
+          /* 通用面板模式的简化提示 */
+          <div className="p-3 text-center text-slate-500 text-xs">
+            <p className="mb-2">📋 通用面板模式</p>
+            <p>自由配置系统消息和用户消息进行对话测试</p>
+          </div>
+        )}
+
+        {mode !== 'general' && (
+          <div className="mt-4 pt-3 border-t border-slate-700 text-xs text-slate-500">
+            共 {Object.values(SCENARIOS).reduce((a, s) => a + s.attacks.length, 0)} 个场景
+          </div>
+        )}
       </div>
       
       {/* 右侧主区域 */}
       <div className="flex-1 p-4 overflow-hidden flex flex-col">
         {/* 标题区 */}
-        <div className="mb-4">
-          <div className="flex items-center gap-3 mb-1">
-            <h2 className="text-lg font-bold">{currentAttack.name}—{currentScenario.name}</h2>
-            {mode === 'real' && (
-              <span className="px-2 py-0.5 bg-green-600 rounded text-xs">🔬 真实测试模式</span>
+        {mode !== 'general' ? (
+          /* 标题区 - 通用面板模式下隐藏 */
+          <div className="mb-4">
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-lg font-bold">{currentAttack.name}—{currentScenario.name}</h2>
+              {mode === 'real' && (
+                <span className="px-2 py-0.5 bg-green-600 rounded text-xs">🔬 真实测试模式</span>
+              )}
+            </div>
+            <p className="text-slate-400 text-xs mt-1 leading-relaxed">{currentAttack.description}</p>
+            <div className="flex gap-2 mt-2 flex-wrap">
+              <span className={`px-2 py-0.5 rounded text-xs text-white ${attackType.color}`}>
+                {attackType.icon} {attackType.label}
+              </span>
+              <span className={`px-2 py-0.5 rounded text-xs ${riskLevel.color}`}>
+                危害等级：{riskLevel.label}
+              </span>
+              {mode === 'mock' && isPlaying && (
+                <span className="text-xs text-green-400 animate-pulse">● 演示中</span>
+              )}
+              {mode === 'real' && apiStatus === 'loading' && (
+                <span className="text-xs text-yellow-400 animate-pulse">● 请求中... {(apiElapsedTime / 1000).toFixed(1)}s</span>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* 通用面板标题 */
+          <div className="mb-4">
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-lg font-bold">📋 通用面板</h2>
+              <span className="px-2 py-0.5 bg-purple-600 rounded text-xs">自由对话测试</span>
+            </div>
+            <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+              自定义系统消息和用户消息，与 LLM 进行自由对话测试
+            </p>
+            {mode === 'general' && apiStatus === 'loading' && (
+              <div className="mt-2">
+                <span className="text-xs text-yellow-400 animate-pulse">● 发送中... {(apiElapsedTime / 1000).toFixed(1)}s</span>
+              </div>
             )}
           </div>
-          <p className="text-slate-400 text-xs mt-1 leading-relaxed">{currentAttack.description}</p>
-          <div className="flex gap-2 mt-2 flex-wrap">
-            <span className={`px-2 py-0.5 rounded text-xs text-white ${attackType.color}`}>
-              {attackType.icon} {attackType.label}
-            </span>
-            <span className={`px-2 py-0.5 rounded text-xs ${riskLevel.color}`}>
-              危害等级：{riskLevel.label}
-            </span>
-            {mode === 'mock' && isPlaying && (
-              <span className="text-xs text-green-400 animate-pulse">● 演示中</span>
-            )}
-            {mode === 'real' && apiStatus === 'loading' && (
-              <span className="text-xs text-yellow-400 animate-pulse">● 请求中...</span>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* 恶意文档预览 - 仅间接注入攻击显示 */}
         {currentAttack.documentFile && (
@@ -526,6 +899,14 @@ play();
                     }`}
                   >
                     📋 详细文档
+                  </button>
+                  <button
+                    onClick={() => setDocTab('upload')}
+                    className={`px-3 py-1 text-xs rounded transition ${
+                      docTab === 'upload' ? 'bg-cyan-600' : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                  >
+                    📤 自定义上传
                   </button>
                 </div>
 
@@ -587,6 +968,23 @@ play();
                     })}
                   </pre>
                 )}
+
+                {/* 自定义上传 Tab */}
+                {docTab === 'upload' && (
+                  <div className="space-y-3">
+                    <div className="bg-slate-900/50 p-3 rounded border border-cyan-500/30">
+                      <div className="text-xs text-cyan-400 mb-2">📤 自定义 PDF 注入</div>
+                      <p className="text-xs text-slate-400">
+                        上传您自己的 PDF 文件，注入自定义的隐藏文本，用于测试间接注入攻击。
+                        注入后的 PDF 可以下载或在真实测试中使用。
+                      </p>
+                    </div>
+                    <PDFUploadAndInject
+                      onInjectedPDF={handleInjectedPDF}
+                      disabled={apiStatus === 'loading'}
+                    />
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -620,8 +1018,85 @@ play();
                     : 'bg-green-600 hover:bg-green-500'
                 }`}
               >
-                {apiStatus === 'loading' ? '⏳ 请求中...' : '▶️ 执行测试'}
+                {apiStatus === 'loading' ? `⏳ 请求中... ${(apiElapsedTime / 1000).toFixed(1)}s` : '▶️ 执行测试'}
               </button>
+            </div>
+
+            {/* LLM 参数配置 */}
+            <div className="mb-3 p-2 bg-slate-900 rounded border border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">⚙️ LLM 参数</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      setLlmTemperature(CONFIG.llmParams.temperature);
+                      setLlmMaxTokens(CONFIG.llmParams.max_tokens);
+                      setLlmTopP(CONFIG.llmParams.top_p);
+                    }}
+                    className="px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                  >
+                    🔄 重置
+                  </button>
+                  <button
+                    onClick={() => setShowLlmParams(!showLlmParams)}
+                    className="px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                  >
+                    {showLlmParams ? '▼' : '▶'}
+                  </button>
+                </div>
+              </div>
+              {showLlmParams && (
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  {/* Temperature */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-500">Temperature</span>
+                      <span className="text-xs text-cyan-400 font-mono">{llmTemperature.toFixed(1)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={llmTemperature}
+                      onChange={(e) => setLlmTemperature(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    />
+                  </div>
+                  {/* Max Tokens */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-500">Max Tokens</span>
+                      <span className="text-xs text-cyan-400 font-mono">{llmMaxTokens >= 1024 ? `${(llmMaxTokens / 1024).toFixed(0)}K` : llmMaxTokens}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="256"
+                      max="131072"
+                      step="1024"
+                      value={llmMaxTokens}
+                      onChange={(e) => setLlmMaxTokens(parseInt(e.target.value))}
+                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    />
+                  </div>
+                  {/* Top P */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-500">Top P</span>
+                      <span className="text-xs text-cyan-400 font-mono">{llmTopP.toFixed(1)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={llmTopP}
+                      onChange={(e) => setLlmTopP(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 系统提示词和测试Payload 并排显示 */}
@@ -691,11 +1166,63 @@ play();
               {/* 测试 Payload 模块 */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-slate-400">🎯 测试 Payload</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">🎯 测试 Payload</span>
+                    {customTestPayload !== currentAttack.testPayload && (
+                      <span className="text-xs text-yellow-400">(已修改)</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isEditingPayload ? (
+                      <>
+                        <button
+                          onClick={() => setIsEditingPayload(false)}
+                          className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
+                        >
+                          ✓ 保存
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCustomTestPayload(currentAttack.testPayload || '');
+                            setIsEditingPayload(false);
+                          }}
+                          className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                        >
+                          ✕ 重置
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setIsEditingPayload(true)}
+                          className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                        >
+                          ✏️ 修改
+                        </button>
+                        <button
+                          onClick={() => setShowTestPayload(!showTestPayload)}
+                          className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                        >
+                          {showTestPayload ? '▼' : '▶'}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <pre className="text-xs bg-slate-900 p-2 rounded overflow-auto max-h-32 custom-scroll text-orange-300 whitespace-pre-wrap">
-                  {currentAttack.testPayload}
-                </pre>
+                {showTestPayload && (
+                  isEditingPayload ? (
+                    <textarea
+                      value={customTestPayload}
+                      onChange={(e) => setCustomTestPayload(e.target.value)}
+                      className="w-full h-32 text-xs bg-slate-900 p-2 rounded border border-blue-500 text-orange-300 font-mono resize-none focus:outline-none custom-scroll"
+                      placeholder="输入测试 Payload..."
+                    />
+                  ) : (
+                    <pre className="text-xs bg-slate-900 p-2 rounded overflow-auto max-h-32 custom-scroll text-orange-300 whitespace-pre-wrap">
+                      {customTestPayload || '(无 Payload)'}
+                    </pre>
+                  )
+                )}
               </div>
             </div>
 
@@ -704,7 +1231,167 @@ play();
             )}
           </div>
         )}
-        
+
+        {/* 通用面板模式控制 */}
+        {mode === 'general' && (
+          <div className="mb-4 p-3 bg-slate-800 rounded-lg border border-purple-500/30">
+            {/* Model Selector and Send Button */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">选择模型：</span>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500"
+                >
+                  {CONFIG.models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setGeneralHistory([]);
+                    setMessages([]);
+                    setLogs([]);
+                  }}
+                  className="px-3 py-1.5 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                >
+                  🗑️ 清空对话
+                </button>
+                <button
+                  onClick={runGeneralTest}
+                  disabled={apiStatus === 'loading' || !generalUserMessage.trim()}
+                  className={`px-4 py-1.5 rounded text-xs font-medium transition ${
+                    apiStatus === 'loading' || !generalUserMessage.trim()
+                      ? 'bg-slate-600 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-500'
+                  }`}
+                >
+                  {apiStatus === 'loading' ? `⏳ 发送中... ${(apiElapsedTime / 1000).toFixed(1)}s` : '▶️ 发送'}
+                </button>
+              </div>
+            </div>
+
+            {/* LLM 参数配置 */}
+            <div className="mb-3 p-2 bg-slate-900 rounded border border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">⚙️ LLM 参数</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      setLlmTemperature(CONFIG.llmParams.temperature);
+                      setLlmMaxTokens(CONFIG.llmParams.max_tokens);
+                      setLlmTopP(CONFIG.llmParams.top_p);
+                    }}
+                    className="px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                  >
+                    🔄 重置
+                  </button>
+                  <button
+                    onClick={() => setShowLlmParams(!showLlmParams)}
+                    className="px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                  >
+                    {showLlmParams ? '▼' : '▶'}
+                  </button>
+                </div>
+              </div>
+              {showLlmParams && (
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  {/* Temperature */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-500">Temperature</span>
+                      <span className="text-xs text-purple-400 font-mono">{llmTemperature.toFixed(1)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={llmTemperature}
+                      onChange={(e) => setLlmTemperature(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                  </div>
+                  {/* Max Tokens */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-500">Max Tokens</span>
+                      <span className="text-xs text-purple-400 font-mono">{llmMaxTokens >= 1024 ? `${(llmMaxTokens / 1024).toFixed(0)}K` : llmMaxTokens}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="256"
+                      max="131072"
+                      step="1024"
+                      value={llmMaxTokens}
+                      onChange={(e) => setLlmMaxTokens(parseInt(e.target.value))}
+                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                  </div>
+                  {/* Top P */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-500">Top P</span>
+                      <span className="text-xs text-purple-400 font-mono">{llmTopP.toFixed(1)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={llmTopP}
+                      onChange={(e) => setLlmTopP(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* System Message and User Message Inputs */}
+            <div className="space-y-3">
+              {/* System Message */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-slate-400">🔧 系统消息 (System Prompt)</span>
+                </div>
+                <textarea
+                  value={generalSystemPrompt}
+                  onChange={(e) => setGeneralSystemPrompt(e.target.value)}
+                  className="w-full h-24 text-xs bg-slate-900 p-2 rounded border border-slate-600 text-cyan-300 font-mono resize-none focus:outline-none focus:border-purple-500 custom-scroll"
+                  placeholder="输入系统提示词..."
+                />
+              </div>
+
+              {/* User Message */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-slate-400">💬 用户消息</span>
+                </div>
+                <textarea
+                  value={generalUserMessage}
+                  onChange={(e) => setGeneralUserMessage(e.target.value)}
+                  className="w-full h-24 text-xs bg-slate-900 p-2 rounded border border-slate-600 text-orange-300 font-mono resize-none focus:outline-none focus:border-purple-500 custom-scroll"
+                  placeholder="输入用户消息..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (generalUserMessage.trim() && apiStatus !== 'loading') {
+                        runGeneralTest();
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 主面板 */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
           {/* 对话面板 */}
@@ -712,7 +1399,7 @@ play();
             <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
               <span className="text-xs text-slate-400">🤖 被测模型：</span>
               <span className="text-xs font-mono text-blue-400">
-                {mode === 'real'
+                {mode === 'real' || mode === 'general'
                   ? (CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel)
                   : CONFIG.api.model}
               </span>
@@ -744,7 +1431,9 @@ play();
               )}
               {messages.length === 0 && !typingMsg && (
                 <div className="text-slate-500 text-center py-8">
-                  {mode === 'mock' ? '等待演示开始...' : '点击「执行测试」发送 Payload'}
+                  {mode === 'mock' ? '等待演示开始...' :
+                   mode === 'real' ? '点击「执行测试」发送 Payload' :
+                   '在通用面板中输入消息开始对话'}
                 </div>
               )}
             </div>
@@ -752,19 +1441,78 @@ play();
           
           {/* 日志面板 */}
           <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
-            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
-              <span className="text-xs text-slate-400">🖥️ 系统后台日志</span>
-              <span className="text-xs text-slate-500">({logs.length})</span>
+            <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">🖥️ 系统后台日志</span>
+                <span className="text-xs text-slate-500">({logs.length})</span>
+              </div>
+              <button
+                onClick={() => setLogs([])}
+                className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded transition"
+              >
+                清空
+              </button>
             </div>
+
+            {/* 沙箱命令执行区 */}
+            {sandboxStatus === 'running' && (
+              <div className="mb-2 p-2 bg-slate-900 rounded border border-emerald-500/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-emerald-400">⚡ 沙箱命令</span>
+                  <span className="text-xs text-slate-500 font-mono">{containerInfo?.image}</span>
+                </div>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={toolCommand}
+                    onChange={(e) => setToolCommand(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        executeCommand();
+                      }
+                    }}
+                    placeholder="输入命令，如: ls -la, python --version"
+                    className="flex-1 text-xs bg-slate-800 px-2 py-1 rounded border border-slate-600 text-green-300 font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    onClick={executeCommand}
+                    disabled={!toolCommand.trim()}
+                    className={`px-3 py-1 text-xs rounded transition ${
+                      toolCommand.trim()
+                        ? 'bg-emerald-600 hover:bg-emerald-500'
+                        : 'bg-slate-700 cursor-not-allowed'
+                    }`}
+                  >
+                    ▶️ 执行
+                  </button>
+                </div>
+                {toolResult && (
+                  <div className="mt-2 p-2 bg-slate-800 rounded text-xs font-mono">
+                    <div className="text-slate-500 mb-1">
+                      Exit: {toolResult.success ? toolResult.result?.exit_code : 'error'} |
+                      {toolResult.execution_time_ms}ms
+                    </div>
+                    <pre className="text-green-300 whitespace-pre-wrap max-h-32 overflow-auto custom-scroll">
+                      {toolResult.success
+                        ? toolResult.result?.output || '(无输出)'
+                        : toolResult.error}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div ref={logRef} className="flex-1 overflow-y-auto custom-scroll space-y-1 font-mono text-xs pr-1">
               {logs.map((log, i) => (
                 <div
                   key={i}
                   className={`p-2 rounded border-l-2 ${
                     log.status === 'normal' ? 'bg-slate-700/50 border-slate-500' :
+                    log.status === 'success' ? 'bg-emerald-900/30 border-emerald-500' :
                     log.status === 'warning' ? 'bg-yellow-900/30 border-yellow-500' :
                     log.status === 'bypassed' ? 'bg-orange-900/30 border-orange-500' :
-                    'bg-red-900/30 border-red-500'
+                    log.status === 'danger' ? 'bg-red-900/30 border-red-500' :
+                    'bg-slate-700/50 border-slate-500'
                   }`}
                 >
                   <span className={`inline-block w-12 ${LOG_TYPES[log.type]?.color || 'text-slate-400'}`}>

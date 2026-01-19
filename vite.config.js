@@ -7,4 +7,17 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    proxy: {
+      '/sandbox': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        ws: true,  // 支持 WebSocket
+      },
+      '/health': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })
