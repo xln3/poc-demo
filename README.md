@@ -1,16 +1,42 @@
-# React + Vite
+# LLM Agent 安全攻击演示平台
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+演示 LLM 智能体面临的安全攻击场景，支持模拟演示和真实 API 测试。
 
-Currently, two official plugins are available:
+## 功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **4 类攻击场景**：完整性、机密性、可用性、越狱攻击
+- **4 个智能体场景**：车贷审核、汽车客服、汽车维修、金融销售
+- **两种测试模式**：
+  - 模拟演示：预设对话动画展示攻击过程
+  - 真实测试：向真实模型发送攻击 Payload
+- **自动评判**：使用 glm-4.7 模型判断攻击是否成功
+- **多模型支持**：可切换被测模型
 
-## React Compiler
+## 运行
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+# 安装依赖
+npm install
 
-## Expanding the ESLint configuration
+# 启动开发服务器
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+浏览器访问 http://localhost:5173
+
+## 配置
+
+编辑 `src/config.js` 修改 API 配置：
+
+```javascript
+api: {
+  baseUrl: 'https://aihubmix.com/v1/chat/completions',
+  apiKey: 'your-api-key',
+  model: 'doubao-seed-1-8-251228',
+}
+```
+
+## 技术栈
+
+- React + Vite
+- Tailwind CSS
