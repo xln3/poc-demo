@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* 自定义滚动条样式 */
+@layer utilities {
+  .custom-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scroll::-webkit-scrollbar-track {
+    background: #1e293b;
+    border-radius: 3px;
+  }
+  .custom-scroll::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 3px;
+  }
+  .custom-scroll::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+}
+
+html, body, #root {
+  height: 100%;
+}
