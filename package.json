@@ -15,6 +15,9 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
     "@vitejs/plugin-react": "^4.3.4",
+    "docx": "^9.5.1",
+    "exceljs": "^4.4.0",
+    "pdf-lib": "^1.17.1",
     "tailwindcss": "^4.1.18",
     "vite": "^6.0.7"
   }

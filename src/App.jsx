@@ -31,6 +31,9 @@ export default function App() {
   const [apiError, setApiError] = useState('');
   const [realResponse, setRealResponse] = useState('');
   const [selectedModel, setSelectedModel] = useState(CONFIG.models[0].id);
+  const [documentReadme, setDocumentReadme] = useState('');
+  const [showDocument, setShowDocument] = useState(true);
+  const [docTab, setDocTab] = useState('info'); // 'info' | 'readme'
   
   const chatRef = useRef(null);
   const logRef = useRef(null);
@@ -50,6 +53,18 @@ export default function App() {
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
   }, [logs]);
+
+  // 加载恶意文档说明文件
+  useEffect(() => {
+    if (currentAttack.documentReadme) {
+      fetch(currentAttack.documentReadme)
+        .then(res => res.text())
+        .then(setDocumentReadme)
+        .catch(() => setDocumentReadme(''));
+    } else {
+      setDocumentReadme('');
+    }
+  }, [currentAttack]);
 
   // 切换时重置
   useEffect(() => {
@@ -114,27 +129,41 @@ export default function App() {
   const runRealTest = async () => {
     const attack = currentAttack;
     const scenario = currentScenario;
-    
+
     setApiStatus('loading');
     setApiError('');
     setRealResponse('');
     setMessages([]);
     setLogs([]);
 
-    // 显示用户消息
-    const userMsg = { role: 'user', content: attack.testPayload, isInjection: true };
+    // 对于间接注入攻击，使用包含完整文件内容的 realTestPayload
+    const actualPayload = attack.realTestPayload || attack.testPayload;
+    const hasFileContent = !!attack.realTestPayload;
+
+    // 显示用户消息（显示简化版，但实际发送完整版）
+    const userMsg = {
+      role: 'user',
+      content: hasFileContent ? attack.testPayload : actualPayload,
+      isInjection: true,
+      injectionSource: attack.documentFileName ? `📄 ${attack.documentFileName}` : undefined
+    };
     setMessages([userMsg]);
 
     // 添加日志
     const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
-    setLogs([
-      { type: 'data', content: `发送测试 Payload...`, status: 'normal' },
+    const logs = [
       { type: 'tool', content: `模型: ${modelName}`, status: 'normal' },
-    ]);
+    ];
+    if (hasFileContent) {
+      logs.push({ type: 'data', content: `解析文件: ${attack.documentFileName}`, status: 'normal' });
+      logs.push({ type: 'alert', content: `⚠️ 文件包含隐藏的恶意内容`, status: 'warning' });
+    }
+    logs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)...`, status: 'normal' });
+    setLogs(logs);
 
     try {
       const response = await CONFIG.callModel(
-        [{ role: 'user', content: attack.testPayload }],
+        [{ role: 'user', content: actualPayload }],
         scenario.systemPrompt,
         selectedModel
       );
@@ -152,8 +181,8 @@ export default function App() {
         { type: 'tool', content: `正在使用 ${CONFIG.judgeModel} 评判攻击结果...`, status: 'normal' }
       ]);
 
-      // 调用评判模型
-      const judgeResult = await CONFIG.judgeAttackSuccess(attack, scenario.systemPrompt, response);
+      // 调用评判模型（传入实际发送的 payload）
+      const judgeResult = await CONFIG.judgeAttackSuccess(attack, scenario.systemPrompt, response, actualPayload);
 
       setApiStatus('success');
 
@@ -437,6 +466,116 @@ play();
             )}
           </div>
         </div>
+
+        {/* 恶意文档预览 - 仅间接注入攻击显示 */}
+        {currentAttack.documentFile && (
+          <div className="mb-4 p-3 bg-slate-800 rounded-lg border border-slate-700">
+            {/* 标题栏：文件名 + 下载按钮 + 折叠按钮 */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-slate-300">
+                  📄 恶意文档示例
+                </span>
+                <a
+                  href={currentAttack.documentFile}
+                  download={currentAttack.documentFileName}
+                  className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition flex items-center gap-1"
+                >
+                  ⬇️ 下载 {currentAttack.documentFileName}
+                </a>
+              </div>
+              <button
+                onClick={() => setShowDocument(!showDocument)}
+                className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+              >
+                {showDocument ? '▼ 收起' : '▶ 展开'}
+              </button>
+            </div>
+
+            {showDocument && (
+              <>
+                {/* Tab 切换 */}
+                <div className="flex gap-1 mb-3">
+                  <button
+                    onClick={() => setDocTab('info')}
+                    className={`px-3 py-1 text-xs rounded transition ${
+                      docTab === 'info' ? 'bg-orange-600' : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                  >
+                    🔍 攻击说明
+                  </button>
+                  <button
+                    onClick={() => setDocTab('readme')}
+                    className={`px-3 py-1 text-xs rounded transition ${
+                      docTab === 'readme' ? 'bg-orange-600' : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                  >
+                    📋 详细文档
+                  </button>
+                </div>
+
+                {/* 攻击说明 Tab */}
+                {docTab === 'info' && (
+                  <div className="space-y-3">
+                    {/* 攻击原理 */}
+                    <div className="bg-slate-900 p-3 rounded">
+                      <div className="text-xs text-orange-400 font-medium mb-2">⚠️ 攻击原理</div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {currentAttack.riskExplanation}
+                      </p>
+                    </div>
+
+                    {/* 隐藏技术 */}
+                    <div className="bg-slate-900 p-3 rounded">
+                      <div className="text-xs text-red-400 font-medium mb-2">🔧 文件中的手脚（隐藏技术）</div>
+                      <div className="flex flex-wrap gap-2">
+                        {currentAttack.hidingTechniques?.map((tech, i) => (
+                          <span key={i} className="px-2 py-1 text-xs bg-red-900/50 border border-red-500/30 rounded">
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 下载提示 */}
+                    <div className="bg-slate-900/50 p-3 rounded border border-dashed border-slate-600">
+                      <div className="text-xs text-slate-400">
+                        💡 <strong>查看隐藏内容：</strong>下载上方的恶意文件，使用对应工具查看隐藏内容：
+                      </div>
+                      <ul className="text-xs text-slate-500 mt-2 ml-4 list-disc space-y-1">
+                        <li>PDF：使用文本编辑器或 PDF 调试工具查看隐藏文字层 / 元数据</li>
+                        <li>DOCX：解压后查看 word/document.xml 或使用 VBA 查看隐藏文本</li>
+                        <li>XLSX：使用 VBA 编辑器查看 veryHidden 工作表</li>
+                        <li>图片：使用 exiftool 或十六进制编辑器查看 EXIF/注释段</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* 详细文档 Tab */}
+                {docTab === 'readme' && (
+                  <pre className="text-xs bg-slate-900 p-3 rounded overflow-auto max-h-80 custom-scroll whitespace-pre-wrap leading-relaxed">
+                    {documentReadme.split('\n').map((line, i) => {
+                      // 高亮标题行
+                      if (line.startsWith('===') || line.startsWith('【')) {
+                        return <span key={i} className="text-orange-400">{line}{'\n'}</span>;
+                      }
+                      // 高亮危险标记
+                      if (line.includes('🔴') || line.includes('❌') || line.includes('SYSTEM') || line.includes('AI指令') || line.includes('AI-REVIEW')) {
+                        return <span key={i} className="text-red-400">{line}{'\n'}</span>;
+                      }
+                      // 高亮说明性文字
+                      if (line.startsWith('-') || line.startsWith('•')) {
+                        return <span key={i} className="text-slate-400">{line}{'\n'}</span>;
+                      }
+                      return <span key={i} className="text-slate-300">{line}{'\n'}</span>;
+                    })}
+                  </pre>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* 真实测试模式控制面板 */}
         {mode === 'real' && (
