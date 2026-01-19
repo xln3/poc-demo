@@ -34,7 +34,13 @@ export default function App() {
   const [documentReadme, setDocumentReadme] = useState('');
   const [showDocument, setShowDocument] = useState(true);
   const [docTab, setDocTab] = useState('info'); // 'info' | 'readme'
-  
+  const [customSystemPrompt, setCustomSystemPrompt] = useState('');
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false);
+  const [showSystemPrompt, setShowSystemPrompt] = useState(true);
+  const [customTestPayload, setCustomTestPayload] = useState('');
+  const [isEditingPayload, setIsEditingPayload] = useState(false);
+  const [showTestPayload, setShowTestPayload] = useState(true);
+
   const chatRef = useRef(null);
   const logRef = useRef(null);
   const abortRef = useRef(false);
@@ -76,7 +82,13 @@ export default function App() {
     setRealResponse('');
     setApiStatus('idle');
     setApiError('');
-    
+    // 切换场景时重置系统提示词为默认值
+    setCustomSystemPrompt(currentScenario.systemPrompt || '');
+    setIsEditingPrompt(false);
+    // 切换场景时重置测试 payload 为默认值
+    setCustomTestPayload(currentAttack.testPayload || '');
+    setIsEditingPayload(false);
+
     if (mode === 'mock') {
       const timer = setTimeout(() => {
         abortRef.current = false;
@@ -161,10 +173,13 @@ export default function App() {
     logs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)...`, status: 'normal' });
     setLogs(logs);
 
+    // 获取实际使用的系统提示词（自定义或默认）
+    const activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
+
     try {
       const response = await CONFIG.callModel(
         [{ role: 'user', content: actualPayload }],
-        scenario.systemPrompt,
+        activeSystemPrompt,
         selectedModel
       );
       
@@ -182,7 +197,7 @@ export default function App() {
       ]);
 
       // 调用评判模型（传入实际发送的 payload）
-      const judgeResult = await CONFIG.judgeAttackSuccess(attack, scenario.systemPrompt, response, actualPayload);
+      const judgeResult = await CONFIG.judgeAttackSuccess(attack, activeSystemPrompt, response, actualPayload);
 
       setApiStatus('success');
 
@@ -580,7 +595,8 @@ play();
         {/* 真实测试模式控制面板 */}
         {mode === 'real' && (
           <div className="mb-4 p-3 bg-slate-800 rounded-lg">
-            <div className="flex items-center gap-4 mb-3">
+            {/* 模型选择和执行按钮 */}
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-400">选择模型：</span>
                 <select
@@ -595,24 +611,94 @@ play();
                   ))}
                 </select>
               </div>
-            </div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-slate-400">测试 Payload（点击执行发送给真实模型）</span>
               <button
                 onClick={runRealTest}
                 disabled={apiStatus === 'loading'}
                 className={`px-4 py-1.5 rounded text-xs font-medium transition ${
-                  apiStatus === 'loading' 
-                    ? 'bg-slate-600 cursor-not-allowed' 
+                  apiStatus === 'loading'
+                    ? 'bg-slate-600 cursor-not-allowed'
                     : 'bg-green-600 hover:bg-green-500'
                 }`}
               >
                 {apiStatus === 'loading' ? '⏳ 请求中...' : '▶️ 执行测试'}
               </button>
             </div>
-            <pre className="text-xs bg-slate-900 p-2 rounded overflow-x-auto custom-scroll text-orange-300">
-              {currentAttack.testPayload}
-            </pre>
+
+            {/* 系统提示词和测试Payload 并排显示 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {/* 系统提示词模块 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">🔧 系统提示词</span>
+                    {customSystemPrompt !== currentScenario.systemPrompt && (
+                      <span className="text-xs text-yellow-400">(已修改)</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isEditingPrompt ? (
+                      <>
+                        <button
+                          onClick={() => setIsEditingPrompt(false)}
+                          className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
+                        >
+                          ✓ 保存
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCustomSystemPrompt(currentScenario.systemPrompt || '');
+                            setIsEditingPrompt(false);
+                          }}
+                          className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                        >
+                          ✕ 重置
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setIsEditingPrompt(true)}
+                          className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                        >
+                          ✏️ 修改
+                        </button>
+                        <button
+                          onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+                          className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                        >
+                          {showSystemPrompt ? '▼' : '▶'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {showSystemPrompt && (
+                  isEditingPrompt ? (
+                    <textarea
+                      value={customSystemPrompt}
+                      onChange={(e) => setCustomSystemPrompt(e.target.value)}
+                      className="w-full h-32 text-xs bg-slate-900 p-2 rounded border border-blue-500 text-cyan-300 font-mono resize-none focus:outline-none custom-scroll"
+                      placeholder="输入系统提示词..."
+                    />
+                  ) : (
+                    <pre className="text-xs bg-slate-900 p-2 rounded overflow-auto max-h-32 custom-scroll text-cyan-300 whitespace-pre-wrap">
+                      {customSystemPrompt || '(无系统提示词)'}
+                    </pre>
+                  )
+                )}
+              </div>
+
+              {/* 测试 Payload 模块 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-slate-400">🎯 测试 Payload</span>
+                </div>
+                <pre className="text-xs bg-slate-900 p-2 rounded overflow-auto max-h-32 custom-scroll text-orange-300 whitespace-pre-wrap">
+                  {currentAttack.testPayload}
+                </pre>
+              </div>
+            </div>
+
             {apiError && (
               <div className="mt-2 text-xs text-red-400">❌ {apiError}</div>
             )}

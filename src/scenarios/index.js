@@ -18,6 +18,9 @@ import { finance } from './industry/finance.js';
 // 间接注入场景
 import { indirectInjection } from './indirect/index.js';
 
+// 机密性攻击场景
+import { promptLeakage } from './confidentiality/promptLeakage.js';
+
 // 导出与原 scenarios.js 兼容的 SCENARIOS 对象
 export const SCENARIOS = {
   // 业务智能体场景
@@ -35,7 +38,10 @@ export const SCENARIOS = {
   finance,
 
   // 间接注入攻击
-  indirectInjection
+  indirectInjection,
+
+  // 机密性攻击（提示词窃取）
+  promptLeakage
 };
 
 // 便于按需导入的单独导出
@@ -48,7 +54,8 @@ export {
   salesData,
   autoRepair,
   finance,
-  indirectInjection
+  indirectInjection,
+  promptLeakage
 };
 
 // 导出类型定义
