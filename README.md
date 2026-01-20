@@ -18,23 +18,15 @@
 
 ```bash
 # 前端
-npm install && npm run dev    # http://localhost:5173
+npm install && npm run dev
 
 # 后端（F3-F5 场景需要）
-cd backend && ./run.sh        # http://localhost:8000
+cd backend && ./run.sh
 ```
 
 ## 配置
 
-复制 `.env.example` 为 `.env`，填入 API 密钥。或编辑 `src/config.js`：
-
-```javascript
-api: {
-  baseUrl: 'https://your-api-endpoint/v1/chat/completions',
-  apiKey: 'your-api-key',
-  model: 'mock',  // 'mock' 为模拟模式，换成真实模型名启用 API 测试
-}
-```
+复制 `.env.example` 为 `.env`，填入 API 密钥。
 
 ## 项目结构
 
