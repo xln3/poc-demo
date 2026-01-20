@@ -190,9 +190,16 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // 当 RAG 模式切换到 real 时，刷新文档列表
+  // 当 RAG 模式切换到 real 时，启动服务引擎并刷新文档列表
   useEffect(() => {
     if (ragMode === 'real' && ragServiceAvailable) {
+      // 调用 init 来启动服务引擎（如果未启动）
+      ragClient.init().then(() => {
+        // 刷新解析容器状态
+        ragClient.healthCheck().then(health => {
+          setParserContainerAvailable(health?.parser_available === true);
+        });
+      }).catch(console.error);
       refreshRagDocuments();
     }
   }, [ragMode, ragServiceAvailable]);
@@ -2170,7 +2177,7 @@ play();
         {/* 沙箱控制 */}
         <div className="mb-3 p-2 bg-slate-700 rounded">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-400">🐳 沙箱环境</span>
+            <span className="text-xs text-slate-400">🐳 运行沙箱</span>
             <span className={`text-xs px-1.5 py-0.5 rounded ${
               !sandboxAvailable ? 'bg-slate-600 text-slate-400' :
               sandboxStatus === 'running' ? 'bg-green-600 text-white' :
@@ -2313,7 +2320,7 @@ play();
         {/* 解析容器状态 */}
         <div className="mb-3 p-2 bg-slate-700 rounded">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400">📦 解析容器</span>
+            <span className="text-xs text-slate-400">📦 服务引擎</span>
             <span className={`text-xs px-1.5 py-0.5 rounded ${
               parserContainerAvailable
                 ? 'bg-green-600 text-white'
@@ -2322,11 +2329,11 @@ play();
               {parserContainerAvailable ? '运行中' : '未启动'}
             </span>
           </div>
-          <div className="mt-1 text-xs text-slate-500">
-            {parserContainerAvailable
-              ? '支持 PDF/DOCX/XLSX/图片OCR 解析'
-              : '首次上传文件时自动启动'}
-          </div>
+          {parserContainerAvailable && (
+            <div className="mt-1 text-xs text-slate-500">
+              支持 PDF/DOCX/XLSX/图片OCR 解析
+            </div>
+          )}
         </div>
 
         {/* 导出按钮 */}
@@ -3281,7 +3288,7 @@ play();
                             ) : (
                               <>
                                 <span className="text-2xl mb-1">📤</span>
-                                <span className="text-slate-400">点击或拖拽上传</span>
+                                <span className="text-slate-400">拖拽上传</span>
                                 <span className="text-slate-500 text-[10px] mt-1">
                                   支持 PDF, DOCX, XLSX, TXT, 图片
                                 </span>
