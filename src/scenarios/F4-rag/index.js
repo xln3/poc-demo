@@ -2,3 +2,4 @@
 // 检索增强生成，知识库交互
 
 export { ragSecurity } from './ragSecurity.js';
+export { ragAttackChain } from './ragAttackChain.js';

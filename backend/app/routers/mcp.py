@@ -1,9 +1,12 @@
 """
 MCP 文件解析 API 路由
+
+使用容器化解析服务执行文件解析，支持 PDF、DOCX、XLSX、图片 OCR 等。
 """
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from typing import List, Optional
-from ..services.mcp_parsers import parse_file, get_file_type, PARSERS
+from ..services.mcp_parsers import get_file_type, PARSERS
+from ..services.container_parser import get_container_parser
 
 router = APIRouter(prefix="/mcp", tags=["MCP"])
 
@@ -53,8 +56,9 @@ async def parse_document(
             detail=f"不支持的文件类型: {filename}"
         )
 
-    # 执行解析
-    results = parse_file(file_bytes, filename, parser_ids)
+    # 使用容器化解析
+    parser = get_container_parser()
+    results = parser.parse_file(file_bytes, filename, parser_ids)
 
     return {
         "filename": filename,
@@ -90,7 +94,9 @@ async def parse_document_to_text(
     if not file_type:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: {filename}")
 
-    results = parse_file(file_bytes, filename, parser_ids)
+    # 使用容器化解析
+    parser = get_container_parser()
+    results = parser.parse_file(file_bytes, filename, parser_ids)
 
     # 合并所有文本结果
     combined_text = []
@@ -155,60 +161,32 @@ async def parse_document_to_text(
 
 @router.get("/health")
 async def health_check():
-    """MCP 服务健康检查"""
-    # 检查各解析器是否可用
-    availability = {}
+    """MCP 服务健康检查（容器化解析模式）"""
+    parser = get_container_parser()
+    container_available = parser.is_available()
 
-    # 检查 PyMuPDF
-    try:
-        import fitz
-        availability["pymupdf"] = True
-    except ImportError:
-        availability["pymupdf"] = False
-
-    # 检查 pdfplumber
-    try:
-        import pdfplumber
-        availability["pdfplumber"] = True
-    except ImportError:
-        availability["pdfplumber"] = False
-
-    # 检查 python-docx
-    try:
-        from docx import Document
-        availability["python-docx"] = True
-    except ImportError:
-        availability["python-docx"] = False
-
-    # 检查 mammoth
-    try:
-        import mammoth
-        availability["mammoth"] = True
-    except ImportError:
-        availability["mammoth"] = False
-
-    # 检查 openpyxl
-    try:
-        from openpyxl import load_workbook
-        availability["openpyxl"] = True
-    except ImportError:
-        availability["openpyxl"] = False
-
-    # 检查 pytesseract
-    try:
-        import pytesseract
-        availability["pytesseract"] = True
-    except ImportError:
-        availability["pytesseract"] = False
-
-    # 检查 PIL
-    try:
-        from PIL import Image
-        availability["pillow"] = True
-    except ImportError:
-        availability["pillow"] = False
-
-    return {
-        "status": "healthy",
-        "parsers": availability
-    }
+    # 容器可用时，所有解析器都可用（因为 mcp-tools 镜像已包含所有依赖）
+    if container_available:
+        return {
+            "status": "healthy",
+            "mode": "container",
+            "container_available": True,
+            "parsers": {
+                "pymupdf": True,
+                "pdfplumber": True,
+                "python-docx": True,
+                "mammoth": True,
+                "openpyxl": True,
+                "pytesseract": True,
+                "pillow": True,
+                "exiftool": True
+            }
+        }
+    else:
+        return {
+            "status": "degraded",
+            "mode": "container",
+            "container_available": False,
+            "error": "解析容器不可用，请确保 mcp-tools:latest 镜像已构建并且 Docker 服务正常",
+            "parsers": {}
+        }

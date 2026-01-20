@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { CONFIG, ATTACK_TYPES, RISK_LEVELS, LOG_TYPES } from './config';
 import { SCENARIOS, SCENARIOS_BY_LEVEL, CapabilityLevelNames } from './scenarios/index.js';
 import { sandboxClient, ImageType, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
+import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 
 // 能力层级图标
 const LEVEL_ICONS = {
@@ -92,6 +93,18 @@ export default function App() {
   const [toolsConfigCollapsed, setToolsConfigCollapsed] = useState(true);
   const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false); // 模型配置面板
 
+  // RAG 配置
+  const [ragEnabled, setRagEnabled] = useState(false);
+  const [ragConfigCollapsed, setRagConfigCollapsed] = useState(false); // RAG配置面板默认展开
+  const [ragKnowledge, setRagKnowledge] = useState(''); // 知识库内容（模拟检索结果）
+  const [ragKnowledgeEdit, setRagKnowledgeEdit] = useState(''); // 编辑区域内容
+  const [ragMode, setRagMode] = useState('mock'); // 'mock' | 'real'
+  const [ragServiceAvailable, setRagServiceAvailable] = useState(false);
+  const [ragDocuments, setRagDocuments] = useState([]); // 真实 RAG 文档列表
+  const [ragQueryResults, setRagQueryResults] = useState(null); // 最近一次查询结果
+  const [ragUploading, setRagUploading] = useState(false); // 上传状态
+  const [parserContainerAvailable, setParserContainerAvailable] = useState(false); // 解析容器是否运行中
+
   // 多轮对话模式相关状态
   const [dialogMode, setDialogMode] = useState('single'); // 'single' | 'multi'
   const [conversationMode, setConversationMode] = useState('idle'); // 'idle' | 'active' | 'judging'
@@ -162,6 +175,107 @@ export default function App() {
     const interval = setInterval(checkSandbox, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // 检查 RAG 服务是否可用
+  useEffect(() => {
+    const checkRAG = async () => {
+      const health = await ragClient.healthCheck();
+      setRagServiceAvailable(health?.status === 'healthy');
+      // 同时更新解析容器状态
+      setParserContainerAvailable(health?.parser_available === true);
+    };
+    checkRAG();
+    // 每 30 秒检查一次
+    const interval = setInterval(checkRAG, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 当 RAG 模式切换到 real 时，刷新文档列表
+  useEffect(() => {
+    if (ragMode === 'real' && ragServiceAvailable) {
+      refreshRagDocuments();
+    }
+  }, [ragMode, ragServiceAvailable]);
+
+  // 刷新 RAG 文档列表
+  const refreshRagDocuments = async () => {
+    try {
+      const response = await ragClient.listDocuments();
+      setRagDocuments(response.documents || []);
+    } catch (error) {
+      console.error('Failed to fetch RAG documents:', error);
+    }
+  };
+
+  // 上传文件到 RAG
+  const handleRagUpload = async (file) => {
+    if (!file) return;
+    setRagUploading(true);
+    try {
+      await ragClient.upload(file);
+      await refreshRagDocuments();
+      setLogs(prev => [...prev, {
+        type: 'info',
+        content: `📄 RAG 文档已上传: ${file.name}`,
+        status: 'normal'
+      }]);
+    } catch (error) {
+      setLogs(prev => [...prev, {
+        type: 'error',
+        content: `RAG 上传失败: ${error.message}`,
+        status: 'danger'
+      }]);
+    } finally {
+      setRagUploading(false);
+    }
+  };
+
+  // 删除 RAG 文档
+  const handleRagDelete = async (documentId) => {
+    try {
+      await ragClient.deleteDocument(documentId);
+      await refreshRagDocuments();
+    } catch (error) {
+      console.error('Failed to delete RAG document:', error);
+    }
+  };
+
+  // 清空 RAG 知识库
+  const handleRagClear = async () => {
+    try {
+      await ragClient.clear();
+      setRagDocuments([]);
+      setRagQueryResults(null);
+    } catch (error) {
+      console.error('Failed to clear RAG:', error);
+    }
+  };
+
+  // 重置 RAG 知识库为预置数据
+  const handleRagReset = async () => {
+    try {
+      await ragClient.reset();
+      await refreshRagDocuments();
+      setRagQueryResults(null);
+    } catch (error) {
+      console.error('Failed to reset RAG:', error);
+    }
+  };
+
+  // 执行 RAG 查询（用于测试）
+  const performRagQuery = async (queryText) => {
+    if (ragMode !== 'real' || !ragServiceAvailable) {
+      return null;
+    }
+    try {
+      const response = await ragClient.query(queryText, 3);
+      setRagQueryResults(response);
+      return response.results || [];
+    } catch (error) {
+      console.error('RAG query failed:', error);
+      return [];
+    }
+  };
 
   // API 请求计时器
   useEffect(() => {
@@ -654,7 +768,35 @@ export default function App() {
     setLogs(initialLogs);
 
     // 获取实际使用的系统提示词（自定义或默认）
-    const activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
+    let activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
+
+    // 如果启用 RAG，注入检索内容到系统提示词
+    if (ragEnabled) {
+      if (ragMode === 'mock' && ragKnowledge.trim()) {
+        // Mock 模式：直接使用手动输入的内容
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n以下是从知识库中检索到的相关信息，请参考这些信息回答用户问题：\n\n${ragKnowledge}\n---`;
+        setLogs(prev => [...prev,
+          { type: 'data', content: `📚 RAG 知识库已注入 (Mock模式, ${ragKnowledge.split('\n').filter(l => l.trim()).length} 条)`, status: 'normal' }
+        ]);
+      } else if (ragMode === 'real' && ragServiceAvailable) {
+        // Real 模式：执行真实的向量检索
+        setLogs(prev => [...prev,
+          { type: 'query', content: `🔍 执行 RAG 向量检索...`, status: 'normal' }
+        ]);
+        const ragResults = await performRagQuery(displayContent);
+        if (ragResults && ragResults.length > 0) {
+          const ragContext = formatRAGContext(ragResults);
+          activeSystemPrompt = `${activeSystemPrompt}\n\n---\n以下是从知识库中检索到的相关信息，请参考这些信息回答用户问题：\n\n${ragContext}\n---`;
+          setLogs(prev => [...prev,
+            ...formatRAGLogs(ragResults)
+          ]);
+        } else {
+          setLogs(prev => [...prev,
+            { type: 'data', content: `📚 RAG 检索无结果`, status: 'warning' }
+          ]);
+        }
+      }
+    }
 
     // 检查是否启用了工具调用
     const useToolCalling = toolsEnabled && sandboxStatus === 'running';
@@ -972,7 +1114,35 @@ export default function App() {
     setLogs(initialLogs);
 
     // 获取实际使用的系统提示词
-    const activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
+    let activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
+
+    // 如果启用 RAG，注入检索内容到系统提示词
+    if (ragEnabled) {
+      if (ragMode === 'mock' && ragKnowledge.trim()) {
+        // Mock 模式：直接使用手动输入的内容
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n以下是从知识库中检索到的相关信息，请参考这些信息回答用户问题：\n\n${ragKnowledge}\n---`;
+        setLogs(prev => [...prev,
+          { type: 'data', content: `📚 RAG 知识库已注入 (Mock模式, ${ragKnowledge.split('\n').filter(l => l.trim()).length} 条)`, status: 'normal' }
+        ]);
+      } else if (ragMode === 'real' && ragServiceAvailable) {
+        // Real 模式：执行真实的向量检索
+        setLogs(prev => [...prev,
+          { type: 'query', content: `🔍 执行 RAG 向量检索...`, status: 'normal' }
+        ]);
+        const ragResults = await performRagQuery(displayContent);
+        if (ragResults && ragResults.length > 0) {
+          const ragContext = formatRAGContext(ragResults);
+          activeSystemPrompt = `${activeSystemPrompt}\n\n---\n以下是从知识库中检索到的相关信息，请参考这些信息回答用户问题：\n\n${ragContext}\n---`;
+          setLogs(prev => [...prev,
+            ...formatRAGLogs(ragResults)
+          ]);
+        } else {
+          setLogs(prev => [...prev,
+            { type: 'data', content: `📚 RAG 检索无结果`, status: 'warning' }
+          ]);
+        }
+      }
+    }
 
     // 检查是否启用了工具调用
     const useToolCalling = toolsEnabled && sandboxStatus === 'running';
@@ -1155,7 +1325,26 @@ export default function App() {
     const newHistory = [...conversationHistory, { role: 'user', content }];
 
     // 获取配置
-    const activeSystemPrompt = customSystemPrompt || currentScenario.systemPrompt;
+    let activeSystemPrompt = customSystemPrompt || currentScenario.systemPrompt;
+
+    // 如果启用 RAG，注入检索内容到系统提示词
+    if (ragEnabled) {
+      if (ragMode === 'mock' && ragKnowledge.trim()) {
+        // Mock 模式：直接使用手动输入的内容
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n以下是从知识库中检索到的相关信息，请参考这些信息回答用户问题：\n\n${ragKnowledge}\n---`;
+      } else if (ragMode === 'real' && ragServiceAvailable) {
+        // Real 模式：执行真实的向量检索
+        const ragResults = await performRagQuery(content);
+        if (ragResults && ragResults.length > 0) {
+          const ragContext = formatRAGContext(ragResults);
+          activeSystemPrompt = `${activeSystemPrompt}\n\n---\n以下是从知识库中检索到的相关信息，请参考这些信息回答用户问题：\n\n${ragContext}\n---`;
+          setLogs(prev => [...prev,
+            ...formatRAGLogs(ragResults)
+          ]);
+        }
+      }
+    }
+
     const useToolCalling = toolsEnabled && sandboxStatus === 'running';
     const enabledToolNames = useToolCalling
       ? Object.entries(enabledTools).filter(([_, enabled]) => enabled).map(([name]) => name)
@@ -2121,6 +2310,25 @@ play();
           )}
         </div>
 
+        {/* 解析容器状态 */}
+        <div className="mb-3 p-2 bg-slate-700 rounded">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">📦 解析容器</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded ${
+              parserContainerAvailable
+                ? 'bg-green-600 text-white'
+                : 'bg-slate-600 text-slate-400'
+            }`}>
+              {parserContainerAvailable ? '运行中' : '未启动'}
+            </span>
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {parserContainerAvailable
+              ? '支持 PDF/DOCX/XLSX/图片OCR 解析'
+              : '首次上传文件时自动启动'}
+          </div>
+        </div>
+
         {/* 导出按钮 */}
         <div className="mb-3">
           <button
@@ -2630,6 +2838,26 @@ play();
                     )
                   )}
                 </div>
+                {/* RAG 开关 */}
+                <div className="flex items-center gap-2">
+                  <label
+                    className="flex items-center gap-1.5 cursor-pointer"
+                    title="启用后，将知识库内容注入到上下文中进行 RAG 测试"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={ragEnabled}
+                      onChange={(e) => setRagEnabled(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+                    />
+                    <span className="text-xs text-slate-400">RAG</span>
+                  </label>
+                  {ragEnabled && ragKnowledge && (
+                    <span className="text-xs text-amber-400">
+                      ({ragKnowledge.split('\n').filter(l => l.trim()).length} 条)
+                    </span>
+                  )}
+                </div>
               </div>
               {/* 执行按钮区域 - 根据对话模式显示不同按钮 */}
               {dialogMode === 'single' ? (
@@ -2863,6 +3091,230 @@ play();
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {/* RAG 配置面板 */}
+            {ragEnabled && (
+              <div className="mb-3 p-2 bg-slate-900 rounded border border-amber-900/50">
+                <div className="text-xs text-amber-400 flex items-center justify-between">
+                  <button
+                    onClick={() => setRagConfigCollapsed(!ragConfigCollapsed)}
+                    className="flex items-center gap-2 hover:text-amber-300 transition"
+                  >
+                    <span>{ragConfigCollapsed ? '▶' : '▼'}</span>
+                    <span>📚 RAG 知识库配置</span>
+                  </button>
+                  <div className="flex items-center gap-3">
+                    {/* 模式切换 */}
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <button
+                        onClick={() => setRagMode('mock')}
+                        className={`px-2 py-0.5 rounded transition ${
+                          ragMode === 'mock'
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                        }`}
+                      >
+                        Mock
+                      </button>
+                      <button
+                        onClick={() => setRagMode('real')}
+                        className={`px-2 py-0.5 rounded transition ${
+                          ragMode === 'real'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                        }`}
+                        disabled={!ragServiceAvailable}
+                        title={ragServiceAvailable ? '使用真实 RAG 服务' : 'RAG 服务不可用，请启动后端'}
+                      >
+                        Real {!ragServiceAvailable && '(不可用)'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {!ragConfigCollapsed && (
+                  <>
+                    {ragMode === 'mock' ? (
+                      /* Mock 模式：手动输入 */
+                      <div className="mt-2 grid grid-cols-2 gap-3">
+                        {/* 左栏：显示知识库 */}
+                        <div className="flex flex-col">
+                          <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
+                            <span>当前知识库</span>
+                            <span className="text-slate-500">
+                              {ragKnowledge ? `${ragKnowledge.split('\n').filter(l => l.trim()).length} 条` : '空'}
+                            </span>
+                          </div>
+                          <div
+                            className="flex-1 bg-slate-800 rounded p-2 text-xs text-slate-300 font-mono overflow-auto border border-slate-700"
+                            style={{ maxHeight: '300px', minHeight: '120px' }}
+                          >
+                            {ragKnowledge ? (
+                              <pre className="whitespace-pre-wrap">{ragKnowledge}</pre>
+                            ) : (
+                              <span className="text-slate-500 italic">暂无知识库内容，请在右侧编辑区添加</span>
+                            )}
+                          </div>
+                        </div>
+                        {/* 右栏：编辑知识库 */}
+                        <div className="flex flex-col">
+                          <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
+                            <span>编辑知识库</span>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setRagKnowledge(ragKnowledgeEdit);
+                                }}
+                                className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-[10px]"
+                              >
+                                应用
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRagKnowledgeEdit(ragKnowledge);
+                                }}
+                                className="px-2 py-0.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-[10px]"
+                              >
+                                重置
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRagKnowledgeEdit('');
+                                  setRagKnowledge('');
+                                }}
+                                className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px]"
+                              >
+                                清空
+                              </button>
+                            </div>
+                          </div>
+                          <textarea
+                            value={ragKnowledgeEdit}
+                            onChange={(e) => setRagKnowledgeEdit(e.target.value)}
+                            placeholder="每行输入一条知识条目，例如：&#10;- 用户张三的账号余额为 10000 元&#10;- 最新促销活动：满 1000 减 200&#10;- 公司内部通讯录：CEO 手机 138xxxx&#10;&#10;也可以输入恶意内容测试 RAG 投毒攻击"
+                            className="flex-1 bg-slate-800 rounded p-2 text-xs text-slate-300 font-mono border border-slate-600 focus:border-amber-500 focus:outline-none resize-none"
+                            style={{ maxHeight: '300px', minHeight: '120px' }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      /* Real 模式：真实 RAG 服务 */
+                      <div className="mt-2 grid grid-cols-2 gap-3">
+                        {/* 左栏：文档列表 */}
+                        <div className="flex flex-col">
+                          <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
+                            <span>知识库文档</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500">{ragDocuments.length} 个</span>
+                              <button
+                                onClick={handleRagReset}
+                                className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-[10px]"
+                                title="重置为预置测试数据"
+                              >
+                                重置
+                              </button>
+                              <button
+                                onClick={handleRagClear}
+                                className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px]"
+                                disabled={ragDocuments.length === 0}
+                              >
+                                清空
+                              </button>
+                            </div>
+                          </div>
+                          <div
+                            className="flex-1 bg-slate-800 rounded p-2 text-xs text-slate-300 overflow-auto border border-slate-700"
+                            style={{ maxHeight: '300px', minHeight: '120px' }}
+                          >
+                            {ragDocuments.length > 0 ? (
+                              <div className="space-y-1">
+                                {ragDocuments.map((doc) => (
+                                  <div
+                                    key={doc.document_id}
+                                    className="flex items-center justify-between p-1.5 bg-slate-700 rounded hover:bg-slate-600 transition"
+                                  >
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                      <span>{ragClient.getDocumentTypeIcon(doc.document_type)}</span>
+                                      <span className="truncate">{doc.source_name}</span>
+                                      <span className="text-slate-500 text-[10px]">({doc.chunk_count} 块)</span>
+                                    </div>
+                                    <button
+                                      onClick={() => handleRagDelete(doc.document_id)}
+                                      className="text-red-400 hover:text-red-300 px-1"
+                                      title="删除"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 italic">暂无文档，请上传文件</span>
+                            )}
+                          </div>
+                        </div>
+                        {/* 右栏：上传和检索结果 */}
+                        <div className="flex flex-col gap-2">
+                          {/* 文件上传区 */}
+                          <div className="text-xs text-slate-400 mb-1">上传文档</div>
+                          <label
+                            className={`flex-1 flex flex-col items-center justify-center p-4 bg-slate-800 rounded border-2 border-dashed cursor-pointer transition ${
+                              ragUploading
+                                ? 'border-amber-500 bg-amber-900/20'
+                                : 'border-slate-600 hover:border-amber-500'
+                            }`}
+                            style={{ minHeight: '80px' }}
+                          >
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.docx,.xlsx,.txt,.md,.json,.csv,.jpg,.jpeg,.png"
+                              onChange={(e) => handleRagUpload(e.target.files[0])}
+                              disabled={ragUploading}
+                            />
+                            {ragUploading ? (
+                              <>
+                                <div className="animate-spin w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full mb-2" />
+                                <span className="text-amber-400">上传中...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-2xl mb-1">📤</span>
+                                <span className="text-slate-400">点击或拖拽上传</span>
+                                <span className="text-slate-500 text-[10px] mt-1">
+                                  支持 PDF, DOCX, XLSX, TXT, 图片
+                                </span>
+                              </>
+                            )}
+                          </label>
+                          {/* 最近检索结果 */}
+                          {ragQueryResults && ragQueryResults.results && ragQueryResults.results.length > 0 && (
+                            <div className="mt-2">
+                              <div className="text-xs text-slate-400 mb-1">最近检索结果</div>
+                              <div className="bg-slate-800 rounded p-2 text-xs space-y-1 max-h-32 overflow-auto">
+                                {ragQueryResults.results.slice(0, 3).map((result, i) => (
+                                  <div key={i} className="flex items-start gap-2 text-slate-300">
+                                    <span className="text-green-400 font-mono">
+                                      {ragClient.formatScore(result.score)}
+                                    </span>
+                                    <span className="truncate flex-1">{result.content.slice(0, 100)}...</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className="mt-2 text-[10px] text-slate-500">
+                  {ragMode === 'mock'
+                    ? 'Mock 模式：手动输入内容作为检索结果注入。可用于测试知识库投毒、数据泄露等攻击场景。'
+                    : 'Real 模式：使用真实向量检索。上传文档后，系统将自动分块、嵌入，并在测试时执行语义检索。'
+                  }
+                </div>
               </div>
             )}
 

@@ -1,0 +1,278 @@
+"""
+RAG API Router - RAG 服务的 HTTP 端点
+
+提供文档上传、摄入、查询、管理等 API。
+使用容器化 RAG 服务（ChromaDB 在 Docker 容器中）。
+"""
+
+import logging
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from typing import Optional
+from pydantic import BaseModel
+
+from ..models.rag_schemas import (
+    IngestRequest, QueryRequest, DeleteDocumentRequest,
+    IngestResponse, QueryResponse, DocumentListResponse,
+    DeleteResponse, ClearResponse, HealthResponse, UploadResponse,
+    DocumentType
+)
+from ..services.container_rag import get_container_rag_service
+from ..services.rag_service import parse_file_for_rag
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/rag", tags=["RAG"])
+
+
+class ResetResponse(BaseModel):
+    """重置响应"""
+    success: bool
+    preset_documents_loaded: int
+    message: str
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health_check():
+    """健康检查 - 检查 RAG 服务状态"""
+    try:
+        rag_service = get_container_rag_service()
+        stats = rag_service.get_stats()
+        is_available = rag_service.is_available()
+
+        return HealthResponse(
+            status="healthy" if is_available else "degraded",
+            embedding_model=stats.get("embedding_model", "unknown"),
+            embedding_available=stats.get("embedding_available", False),
+            parser_available=is_available,  # 容器可用则解析器也可用
+            document_count=stats.get("document_count", 0),
+            chunk_count=stats.get("chunk_count", 0)
+        )
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return HealthResponse(
+            status="unhealthy",
+            embedding_model="unknown",
+            embedding_available=False,
+            parser_available=False,
+            document_count=0,
+            chunk_count=0
+        )
+
+
+@router.post("/init", response_model=ResetResponse)
+async def init_rag():
+    """
+    初始化 RAG 知识库
+
+    清空现有数据并导入预置的测试数据。
+    """
+    try:
+        rag_service = get_container_rag_service()
+        result = rag_service.init()
+
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "初始化失败"))
+
+        return ResetResponse(
+            success=True,
+            preset_documents_loaded=result.get("preset_documents_loaded", 0),
+            message=result.get("message", "初始化完成")
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Init failed: {e}")
+        raise HTTPException(status_code=500, detail=f"初始化失败: {str(e)}")
+
+
+@router.post("/reset", response_model=ResetResponse)
+async def reset_rag():
+    """
+    重置 RAG 知识库为预置数据
+
+    清空所有用户上传的数据，恢复到初始的预置测试数据状态。
+    """
+    try:
+        rag_service = get_container_rag_service()
+        result = rag_service.reset()
+
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "重置失败"))
+
+        return ResetResponse(
+            success=True,
+            preset_documents_loaded=result.get("preset_documents_loaded", 0),
+            message=result.get("message", "重置完成")
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reset failed: {e}")
+        raise HTTPException(status_code=500, detail=f"重置失败: {str(e)}")
+
+
+@router.post("/upload", response_model=UploadResponse)
+async def upload_document(
+    file: UploadFile = File(...),
+    source_name: Optional[str] = Form(None)
+):
+    """
+    上传文件到 RAG 知识库
+
+    支持的文件类型：PDF, DOCX, XLSX, 图片（OCR）, 纯文本
+    """
+    try:
+        # 读取文件内容
+        file_bytes = await file.read()
+        filename = file.filename or "uploaded_file"
+        display_name = source_name or filename
+
+        # 解析文件提取文本（使用容器解析）
+        text, doc_type = parse_file_for_rag(file_bytes, filename)
+
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="文件内容为空")
+
+        # 添加到 RAG（容器内 ChromaDB）
+        rag_service = get_container_rag_service()
+        document_id, chunk_count = rag_service.add_document(
+            content=text,
+            source_name=display_name,
+            document_type=doc_type,
+            metadata={"original_filename": filename}
+        )
+
+        return UploadResponse(
+            success=True,
+            document_id=document_id,
+            file_name=display_name,
+            document_type=doc_type,
+            chunk_count=chunk_count,
+            message=f"文档已添加，共 {chunk_count} 个分块"
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+
+
+@router.post("/ingest", response_model=IngestResponse)
+async def ingest_text(request: IngestRequest):
+    """
+    直接摄入文本到 RAG 知识库
+
+    适用于直接输入文本内容，无需上传文件。
+    """
+    try:
+        rag_service = get_container_rag_service()
+        document_id, chunk_count = rag_service.add_document(
+            content=request.content,
+            source_name=request.source_name,
+            document_type=DocumentType.TEXT,
+            metadata=request.metadata
+        )
+
+        return IngestResponse(
+            success=True,
+            document_id=document_id,
+            source_name=request.source_name,
+            chunk_count=chunk_count,
+            message=f"文本已添加，共 {chunk_count} 个分块"
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Ingest failed: {e}")
+        raise HTTPException(status_code=500, detail=f"摄入失败: {str(e)}")
+
+
+@router.post("/query", response_model=QueryResponse)
+async def query_documents(request: QueryRequest):
+    """
+    查询 RAG 知识库
+
+    返回与查询最相关的文档片段。
+    """
+    try:
+        rag_service = get_container_rag_service()
+        results = rag_service.query(
+            query_text=request.query,
+            top_k=request.top_k,
+            score_threshold=request.score_threshold
+        )
+
+        return QueryResponse(
+            success=True,
+            query=request.query,
+            results=results,
+            total_results=len(results),
+            message=f"找到 {len(results)} 个相关结果"
+        )
+
+    except Exception as e:
+        logger.error(f"Query failed: {e}")
+        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+
+
+@router.get("/documents", response_model=DocumentListResponse)
+async def list_documents():
+    """列出所有已添加的文档"""
+    try:
+        rag_service = get_container_rag_service()
+        documents = rag_service.list_documents()
+
+        return DocumentListResponse(
+            success=True,
+            documents=documents,
+            total_count=len(documents)
+        )
+
+    except Exception as e:
+        logger.error(f"List documents failed: {e}")
+        raise HTTPException(status_code=500, detail=f"获取文档列表失败: {str(e)}")
+
+
+@router.delete("/documents/{document_id}", response_model=DeleteResponse)
+async def delete_document(document_id: str):
+    """删除指定文档"""
+    try:
+        rag_service = get_container_rag_service()
+        success = rag_service.delete_document(document_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail=f"文档不存在: {document_id}")
+
+        return DeleteResponse(
+            success=True,
+            document_id=document_id,
+            message="文档已删除"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete document failed: {e}")
+        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+
+
+@router.delete("/clear", response_model=ClearResponse)
+async def clear_documents():
+    """清空所有文档"""
+    try:
+        rag_service = get_container_rag_service()
+        deleted_count = rag_service.clear()
+
+        return ClearResponse(
+            success=True,
+            deleted_count=deleted_count,
+            message=f"已清空 {deleted_count} 个分块"
+        )
+
+    except Exception as e:
+        logger.error(f"Clear documents failed: {e}")
+        raise HTTPException(status_code=500, detail=f"清空失败: {str(e)}")

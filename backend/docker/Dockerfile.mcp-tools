@@ -1,5 +1,6 @@
-# MCP Tools Container - 用于文件解析和工具执行
+# MCP Tools Container - 用于文件解析、RAG 向量存储和工具执行
 # 包含所有MCP解析器依赖，支持PDF、DOCX、XLSX、图片等格式
+# 包含 ChromaDB 向量数据库
 
 FROM python:3.11-slim
 
@@ -16,15 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     # 图片处理依赖
     libimage-exiftool-perl \
+    # 编译依赖（chromadb 需要）
+    build-essential \
     # 常用工具
     curl \
     wget \
     git \
     vim \
     && rm -rf /var/lib/apt/lists/*
-
-# 复制MCP解析器模块
-COPY app/services/mcp_parsers.py /app/mcp_parsers.py
 
 # 安装Python依赖
 RUN pip install --no-cache-dir \
@@ -39,14 +39,31 @@ RUN pip install --no-cache-dir \
     # XLSX解析
     openpyxl>=3.1.0 \
     # 图片处理
-    Pillow>=10.0.0
+    Pillow>=10.0.0 \
+    # RAG 向量数据库
+    chromadb>=0.4.0
+
+# 复制MCP解析器模块和CLI入口
+COPY app/services/mcp_parsers.py /app/mcp_parsers.py
+COPY app/services/mcp_parser_cli.py /app/mcp_parser_cli.py
+
+# 复制RAG CLI
+COPY app/services/rag_cli.py /app/rag_cli.py
+
+# 复制预置数据（从 public/attack-samples/rag/ 目录）
+# 注意：构建时需要从 backend 目录执行，预置数据需要单独复制
+COPY docker/preset-data/ /app/preset-data/
+
+# 创建数据目录
+RUN mkdir -p /data/chromadb
 
 # 验证安装
 RUN tesseract --version && \
-    python3 -c "import fitz; import pdfplumber; import pytesseract; print('✓ All parsers installed')"
+    python3 -c "import fitz; import pdfplumber; import pytesseract; import chromadb; print('✓ All dependencies installed')"
 
-# 暴露工作目录
+# 暴露工作目录和数据目录
 VOLUME /workspace
+VOLUME /data
 
 # 默认命令
 CMD ["/bin/bash"]

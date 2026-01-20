@@ -20,6 +20,7 @@ import { financeConfig } from './F3-tool-use/financeConfig.js';
 
 // ============ F4-rag: RAG检索 ============
 import { ragSecurity } from './F4-rag/ragSecurity.js';
+import { ragAttackChain } from './F4-rag/ragAttackChain.js';
 
 // ============ F5-mcp: MCP 扩展工具 ============
 import { salesData } from './F5-mcp/salesData.js';
@@ -48,6 +49,7 @@ export const SCENARIOS = {
 
   // F4-rag: RAG检索
   ragSecurity,
+  ragAttackChain,
 
   // F5-mcp: MCP 扩展工具
   salesData,
@@ -76,7 +78,8 @@ export const SCENARIOS_BY_LEVEL = {
     financeConfig
   },
   'F4-rag': {
-    ragSecurity
+    ragSecurity,
+    ragAttackChain
   },
   'F5-mcp': {
     salesData,
@@ -104,6 +107,7 @@ export {
   financeConfig,
   // F4-rag
   ragSecurity,
+  ragAttackChain,
   // F5-mcp
   salesData,
   financeQuery,
