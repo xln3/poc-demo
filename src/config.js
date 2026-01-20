@@ -219,7 +219,7 @@ export const CONFIG = {
   // 调用真实模型 API
   // 注：LLM API 实际只接受文本输入。文件（PDF/DOCX等）需要先由上游系统解析为文本，
   // 再作为 prompt 的一部分发送给模型。这模拟了真实世界中的 RAG/文档处理流程。
-  async callModel(messages, systemPrompt = '', modelId = null, llmParams = {}) {
+  async callModel(messages, systemPrompt = '', modelId = null, llmParams = {}, thinkingConfig = null) {
     const startTime = Date.now();
     const params = { ...this.llmParams, ...llmParams };
     const requestBody = {
@@ -231,7 +231,7 @@ export const CONFIG = {
       temperature: params.temperature,
       max_tokens: params.max_tokens,
       top_p: params.top_p,
-      thinking: { type: 'disabled' }
+      thinking: thinkingConfig || { type: 'disabled' }
     };
 
     try {
@@ -250,10 +250,12 @@ export const CONFIG = {
 
       const data = await response.json();
       const totalTime = Date.now() - startTime;
+      const message = data.choices?.[0]?.message;
 
-      // Return object with content and timing
+      // Return object with content, thinking, and timing
       return {
-        content: data.choices?.[0]?.message?.content || '(无响应)',
+        content: message?.content || '(无响应)',
+        thinking: message?.thinking || null,
         timing: { totalTime }
       };
     } catch (error) {
@@ -263,8 +265,8 @@ export const CONFIG = {
   },
 
   // 调用模型 API（带工具支持）
-  // 返回：{ content, tool_calls, finish_reason, timing }
-  async callModelWithTools(messages, systemPrompt = '', modelId = null, llmParams = {}, toolDefinitions = []) {
+  // 返回：{ content, tool_calls, finish_reason, thinking, timing }
+  async callModelWithTools(messages, systemPrompt = '', modelId = null, llmParams = {}, toolDefinitions = [], thinkingConfig = null) {
     const startTime = Date.now();
     const params = { ...this.llmParams, ...llmParams };
     const requestBody = {
@@ -276,7 +278,7 @@ export const CONFIG = {
       temperature: params.temperature,
       max_tokens: params.max_tokens,
       top_p: params.top_p,
-      thinking: { type: 'disabled' }
+      thinking: thinkingConfig || { type: 'disabled' }
     };
 
     // 添加工具定义（如果有）
@@ -317,6 +319,7 @@ export const CONFIG = {
         content: message?.content || '',
         tool_calls: message?.tool_calls || [],
         finish_reason: finishReason,
+        thinking: message?.thinking || null,
         timing: { totalTime },
         raw: message
       };
@@ -528,5 +531,7 @@ export const LOG_TYPES = {
   timing: { label: "耗时", color: "text-amber-400" },
   judge: { label: "评判", color: "text-violet-400" },
   success: { label: "成功", color: "text-green-400" },
-  failure: { label: "防御", color: "text-blue-400" }
+  failure: { label: "防御", color: "text-blue-400" },
+  thinking: { label: "思考", color: "text-pink-400" },
+  round: { label: "轮次", color: "text-teal-400" }
 };

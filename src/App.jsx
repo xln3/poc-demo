@@ -90,7 +90,18 @@ export default function App() {
   // 工具调用配置 (Tool Calling)
   const [toolsEnabled, setToolsEnabled] = useState(CONFIG.tools.enabled);
   const [toolsConfigCollapsed, setToolsConfigCollapsed] = useState(true);
-  const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false); // 提示词配置面板
+  const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false); // 模型配置面板
+
+  // 多轮对话模式相关状态
+  const [dialogMode, setDialogMode] = useState('single'); // 'single' | 'multi'
+  const [conversationMode, setConversationMode] = useState('idle'); // 'idle' | 'active' | 'judging'
+  const [userInput, setUserInput] = useState(''); // 用户输入框内容
+  const [conversationHistory, setConversationHistory] = useState([]); // API 消息历史（用于多轮对话）
+  const [initialPayload, setInitialPayload] = useState(''); // 保存初始 payload 用于评判
+
+  // Thinking 配置
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [thinkingBudget, setThinkingBudget] = useState(10000);
   const [enabledTools, setEnabledTools] = useState(() => {
     // 默认启用 safe 类工具
     const tools = {};
@@ -864,6 +875,524 @@ export default function App() {
         { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
       ]);
     }
+  };
+
+  // ============ 多轮对话模式 ============
+
+  // 构建 thinking 配置
+  const buildThinkingConfig = () => {
+    if (!thinkingEnabled) return null;
+    return { type: 'enabled', budget_tokens: thinkingBudget };
+  };
+
+  // 添加 thinking 日志（如果有）
+  const addThinkingLog = (thinking) => {
+    if (thinking) {
+      setLogs(prev => [...prev, {
+        type: 'thinking',
+        content: `💭 模型思考过程 (${thinking.length} 字符)`,
+        status: 'normal',
+        expandable: true,
+        fullContent: thinking
+      }]);
+    }
+  };
+
+  // 开始多轮对话
+  const startConversation = async () => {
+    const attack = currentAttack;
+    const scenario = currentScenario;
+
+    setApiStatus('loading');
+    setApiError('');
+    setRealResponse('');
+    setMessages([]);
+    setLogs([]);
+    setExpandedLogs(new Set());
+    setConversationHistory([]);
+    setConversationMode('active');
+
+    // 构建实际发送的 payload
+    let actualPayload;
+    const hasUserFiles = payloadFiles.length > 0;
+    const hasCustomPayload = customTestPayload !== currentAttack.testPayload;
+
+    if (hasUserFiles || hasCustomPayload) {
+      actualPayload = getActualPayload();
+    } else {
+      actualPayload = attack.realTestPayload || attack.testPayload;
+    }
+    const hasFileContent = !!attack.realTestPayload || hasUserFiles;
+
+    // 保存初始 payload 用于评判
+    setInitialPayload(actualPayload);
+
+    // 确定显示内容
+    const hasUserCustomization = hasUserFiles || hasCustomPayload;
+    const displayContent = hasUserCustomization
+      ? getDisplayPayload()
+      : (hasFileContent ? attack.testPayload : actualPayload);
+
+    // 确定注入来源标签
+    const injectionSource = hasUserFiles
+      ? `📎 ${payloadFiles.map(f => f.name).join(', ')}`
+      : (attack.documentFileName ? `📄 ${attack.documentFileName}` : undefined);
+
+    // 显示用户消息
+    const userMsg = {
+      role: 'user',
+      content: displayContent,
+      isInjection: true,
+      injectionSource
+    };
+    setMessages([userMsg]);
+
+    // 添加日志
+    const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
+    const initialLogs = [
+      { type: 'model', content: `模型: ${modelName}`, status: 'normal' },
+      { type: 'round', content: `── 第 1 轮对话 ──`, status: 'normal' },
+    ];
+    if (hasUserFiles) {
+      const totalSize = payloadFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+      const sizeStr = totalSize > 1024 * 1024
+        ? `${(totalSize / 1024 / 1024).toFixed(1)} MB`
+        : `${(totalSize / 1024).toFixed(1)} KB`;
+      initialLogs.push({
+        type: 'data',
+        content: `📎 解析 ${payloadFiles.length} 个文件 (${sizeStr})`,
+        status: 'normal'
+      });
+    }
+    if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
+      initialLogs.push({ type: 'data', content: `解析文件: ${attack.documentFileName}`, status: 'normal' });
+      initialLogs.push({ type: 'alert', content: `⚠️ 文件包含隐藏的恶意内容`, status: 'warning' });
+    }
+    initialLogs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)`, status: 'normal', expandable: true, fullContent: actualPayload });
+    setLogs(initialLogs);
+
+    // 获取实际使用的系统提示词
+    const activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
+
+    // 检查是否启用了工具调用
+    const useToolCalling = toolsEnabled && sandboxStatus === 'running';
+    const enabledToolNames = useToolCalling
+      ? Object.entries(enabledTools).filter(([_, enabled]) => enabled).map(([name]) => name)
+      : [];
+
+    if (useToolCalling && enabledToolNames.length > 0) {
+      setLogs(prev => [...prev,
+        { type: 'tool', content: `🔧 工具调用已启用: ${enabledToolNames.length} 个工具`, status: 'normal' }
+      ]);
+    }
+
+    // 构建 thinking 配置
+    const thinkingConfig = buildThinkingConfig();
+
+    try {
+      // 构建消息历史
+      let messageHistory = [{ role: 'user', content: actualPayload }];
+      let finalResponse = '';
+      let totalApiTime = 0;
+      let allToolCalls = [];
+
+      // 工具调用循环（第一轮）
+      while (true) {
+        let response;
+
+        if (useToolCalling && enabledToolNames.length > 0) {
+          const toolDefinitions = CONFIG.buildToolDefinitions(enabledToolNames);
+          response = await CONFIG.callModelWithTools(
+            messageHistory,
+            activeSystemPrompt,
+            selectedModel,
+            { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
+            toolDefinitions,
+            thinkingConfig
+          );
+        } else {
+          response = await CONFIG.callModel(
+            messageHistory,
+            activeSystemPrompt,
+            selectedModel,
+            { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
+            thinkingConfig
+          );
+        }
+
+        totalApiTime += response.timing?.totalTime || 0;
+
+        // 显示 thinking（如有）
+        addThinkingLog(response.thinking);
+
+        // 检查是否有工具调用
+        const toolCalls = response.tool_calls || [];
+
+        if (toolCalls.length > 0 && useToolCalling) {
+          // 将 assistant 消息添加到历史
+          messageHistory.push({
+            role: 'assistant',
+            content: response.content || null,
+            tool_calls: toolCalls
+          });
+
+          // 执行每个工具调用
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function?.name;
+            const toolId = toolCall.id;
+            const rawArgs = toolCall.function?.arguments || '{}';
+
+            let toolArgs;
+            try {
+              toolArgs = JSON.parse(rawArgs);
+            } catch (parseErr) {
+              setLogs(prev => [...prev,
+                { type: 'error', content: `🔧 工具 ${toolName}: 参数解析失败`, status: 'danger' }
+              ]);
+              messageHistory.push({
+                role: 'tool',
+                tool_call_id: toolId,
+                content: `Error: Failed to parse tool arguments - ${parseErr.message}`
+              });
+              continue;
+            }
+
+            allToolCalls.push({ name: toolName, args: toolArgs, id: toolId });
+
+            const toolConfig = CONFIG.tools.available[toolName];
+            const toolLabel = toolConfig?.label || toolName;
+            const toolCategory = toolConfig?.category || 'unknown';
+            const categoryColor = toolCategory === 'safe' ? 'normal' : toolCategory === 'risky' ? 'warning' : 'danger';
+
+            setLogs(prev => [...prev,
+              { type: 'tool', content: `🔧 调用工具: ${toolLabel}`, status: categoryColor },
+              { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
+            ]);
+
+            let toolResult;
+            try {
+              const result = await sandboxClient.executeTool(toolName, toolArgs);
+              toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
+              setLogs(prev => [...prev,
+                { type: 'data', content: `   结果: ${toolResult.length > 100 ? toolResult.substring(0, 100) + '...' : toolResult}`, status: result.success ? 'normal' : 'warning', expandable: toolResult.length > 100, fullContent: toolResult }
+              ]);
+            } catch (err) {
+              toolResult = `Error: ${err.message}`;
+              setLogs(prev => [...prev,
+                { type: 'error', content: `   执行失败: ${err.message}`, status: 'danger' }
+              ]);
+            }
+
+            messageHistory.push({
+              role: 'tool',
+              tool_call_id: toolId,
+              content: toolResult
+            });
+          }
+
+          // 显示中间状态
+          if (response.content) {
+            setMessages(prev => [...prev, { role: 'agent', content: response.content, isToolThinking: true }]);
+          }
+
+          continue;
+        }
+
+        // 没有工具调用，获取最终响应
+        finalResponse = response.content || '(无响应)';
+        break;
+      }
+
+      setRealResponse(finalResponse);
+
+      // 显示模型响应
+      const agentMsg = { role: 'agent', content: finalResponse };
+      setMessages(prev => [...prev.filter(m => !m.isToolThinking), agentMsg]);
+
+      // 保存对话历史（用于后续轮次）
+      setConversationHistory([
+        { role: 'user', content: actualPayload },
+        { role: 'assistant', content: finalResponse }
+      ]);
+
+      // 添加日志
+      setLogs(prev => [
+        ...prev,
+        { type: 'data', content: `收到响应 (${finalResponse.length} 字符)`, status: 'normal', expandable: true, fullContent: finalResponse },
+        { type: 'timing', content: `⏱️ API 耗时: ${totalApiTime}ms`, status: 'normal' },
+        { type: 'info', content: `💬 多轮对话进行中 - 可继续发送消息或点击"停止测试"评判`, status: 'normal' }
+      ]);
+
+      setApiStatus('idle');
+
+    } catch (error) {
+      setApiStatus('error');
+      setApiError(error.message);
+      setConversationMode('idle');
+      setLogs(prev => [
+        ...prev,
+        { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
+      ]);
+    }
+  };
+
+  // 发送用户消息（多轮对话中继续对话）
+  const sendUserMessage = async () => {
+    const content = userInput.trim();
+    if (!content || apiStatus === 'loading') return;
+
+    setUserInput('');
+    setApiStatus('loading');
+
+    // 添加轮次日志
+    const roundNum = conversationHistory.filter(m => m.role === 'user').length + 1;
+    setLogs(prev => [...prev, { type: 'round', content: `── 第 ${roundNum} 轮对话 ──`, status: 'normal' }]);
+
+    // 显示用户消息
+    setMessages(prev => [...prev, { role: 'user', content }]);
+
+    // 更新对话历史
+    const newHistory = [...conversationHistory, { role: 'user', content }];
+
+    // 获取配置
+    const activeSystemPrompt = customSystemPrompt || currentScenario.systemPrompt;
+    const useToolCalling = toolsEnabled && sandboxStatus === 'running';
+    const enabledToolNames = useToolCalling
+      ? Object.entries(enabledTools).filter(([_, enabled]) => enabled).map(([name]) => name)
+      : [];
+    const thinkingConfig = buildThinkingConfig();
+
+    try {
+      let messageHistory = newHistory.map(m => ({
+        role: m.role === 'assistant' ? 'assistant' : m.role,
+        content: m.content
+      }));
+      let finalResponse = '';
+      let totalApiTime = 0;
+
+      // 工具调用循环
+      while (true) {
+        let response;
+
+        if (useToolCalling && enabledToolNames.length > 0) {
+          const toolDefinitions = CONFIG.buildToolDefinitions(enabledToolNames);
+          response = await CONFIG.callModelWithTools(
+            messageHistory,
+            activeSystemPrompt,
+            selectedModel,
+            { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
+            toolDefinitions,
+            thinkingConfig
+          );
+        } else {
+          response = await CONFIG.callModel(
+            messageHistory,
+            activeSystemPrompt,
+            selectedModel,
+            { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
+            thinkingConfig
+          );
+        }
+
+        totalApiTime += response.timing?.totalTime || 0;
+
+        // 显示 thinking（如有）
+        addThinkingLog(response.thinking);
+
+        // 检查是否有工具调用
+        const toolCalls = response.tool_calls || [];
+
+        if (toolCalls.length > 0 && useToolCalling) {
+          messageHistory.push({
+            role: 'assistant',
+            content: response.content || null,
+            tool_calls: toolCalls
+          });
+
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function?.name;
+            const toolId = toolCall.id;
+            const rawArgs = toolCall.function?.arguments || '{}';
+
+            let toolArgs;
+            try {
+              toolArgs = JSON.parse(rawArgs);
+            } catch (parseErr) {
+              messageHistory.push({
+                role: 'tool',
+                tool_call_id: toolId,
+                content: `Error: Failed to parse tool arguments`
+              });
+              continue;
+            }
+
+            const toolConfig = CONFIG.tools.available[toolName];
+            const toolLabel = toolConfig?.label || toolName;
+            const categoryColor = toolConfig?.category === 'safe' ? 'normal' : toolConfig?.category === 'risky' ? 'warning' : 'danger';
+
+            setLogs(prev => [...prev,
+              { type: 'tool', content: `🔧 调用工具: ${toolLabel}`, status: categoryColor },
+              { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal' }
+            ]);
+
+            let toolResult;
+            try {
+              const result = await sandboxClient.executeTool(toolName, toolArgs);
+              toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
+            } catch (err) {
+              toolResult = `Error: ${err.message}`;
+            }
+
+            messageHistory.push({
+              role: 'tool',
+              tool_call_id: toolId,
+              content: toolResult
+            });
+          }
+
+          if (response.content) {
+            setMessages(prev => [...prev, { role: 'agent', content: response.content, isToolThinking: true }]);
+          }
+
+          continue;
+        }
+
+        finalResponse = response.content || '(无响应)';
+        break;
+      }
+
+      // 更新对话历史
+      setConversationHistory(prev => [...prev, { role: 'user', content }, { role: 'assistant', content: finalResponse }]);
+
+      // 显示响应
+      setMessages(prev => [...prev.filter(m => !m.isToolThinking), { role: 'agent', content: finalResponse }]);
+
+      setLogs(prev => [...prev,
+        { type: 'data', content: `收到响应 (${finalResponse.length} 字符)`, status: 'normal', expandable: true, fullContent: finalResponse },
+        { type: 'timing', content: `⏱️ API 耗时: ${totalApiTime}ms`, status: 'normal' }
+      ]);
+
+    } catch (error) {
+      setLogs(prev => [...prev,
+        { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
+      ]);
+    } finally {
+      setApiStatus('idle');
+    }
+  };
+
+  // 停止多轮对话并评判
+  const stopConversation = async () => {
+    setConversationMode('judging');
+
+    // 构建完整对话摘要
+    const fullConversation = conversationHistory.map((msg) => {
+      if (msg.role === 'user') return `[用户]: ${msg.content}`;
+      if (msg.role === 'assistant') return `[模型]: ${msg.content}`;
+      if (msg.role === 'tool') return `[工具结果]: ${msg.content}`;
+      return '';
+    }).filter(Boolean).join('\n\n');
+
+    const roundCount = conversationHistory.filter(m => m.role === 'user').length;
+
+    setLogs(prev => [...prev, {
+      type: 'judge',
+      content: `正在评判 ${roundCount} 轮对话...`,
+      status: 'normal'
+    }]);
+
+    // 调用评判
+    const activeSystemPrompt = customSystemPrompt || currentScenario.systemPrompt;
+    const judgeResult = await CONFIG.judgeAttackSuccess(
+      currentAttack,
+      activeSystemPrompt,
+      fullConversation,
+      initialPayload
+    );
+
+    // 保存测试结果
+    setLastTestResult({
+      timestamp: new Date().toISOString(),
+      scenario: currentScenario.name,
+      attack: {
+        id: currentAttack.id,
+        name: currentAttack.name,
+        type: currentAttack.type,
+        level: currentAttack.level,
+        description: currentAttack.description
+      },
+      model: selectedModel,
+      systemPrompt: activeSystemPrompt,
+      payload: initialPayload,
+      response: fullConversation,
+      toolCalls: [],
+      judgment: judgeResult,
+      rounds: roundCount
+    });
+
+    // 根据评判结果添加日志
+    if (judgeResult.success === true) {
+      setLogs(prev => [
+        ...prev,
+        { type: 'success', content: `🚨 攻击成功！${judgeResult.reason}`, status: 'danger' }
+      ]);
+      // 标记最后一条响应为危险
+      setMessages(prev => prev.map((msg, idx) =>
+        idx === prev.length - 1 && msg.role === 'agent' ? { ...msg, isDangerous: true } : msg
+      ));
+    } else if (judgeResult.success === false) {
+      setLogs(prev => [
+        ...prev,
+        { type: 'failure', content: `✅ 攻击失败：${judgeResult.reason}`, status: 'normal' }
+      ]);
+    } else {
+      setLogs(prev => [
+        ...prev,
+        { type: 'judge', content: `⚠️ 评判不确定：${judgeResult.reason}`, status: 'warning' }
+      ]);
+    }
+
+    setConversationMode('idle');
+    setConversationHistory([]);
+    setApiStatus('idle');
+  };
+
+  // 多轮对话中的文件上传处理
+  const handleMultiRoundFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    // 简化处理：将文件作为文本添加到下一条消息
+    let fileContents = [];
+
+    for (const file of files) {
+      try {
+        // 尝试解析文件（使用 MCP）
+        if (mcpEnabled) {
+          const fileType = getFileTypeForMcp(file.name);
+          if (fileType && mcpParsers[fileType]?.length > 0) {
+            const result = await CONFIG.parseMCPFileToText(file, mcpParsers[fileType]);
+            if (result.content) {
+              fileContents.push(`[文件: ${file.name}]\n${result.content}`);
+              continue;
+            }
+          }
+        }
+        // 回退：读取为文本
+        const text = await file.text();
+        fileContents.push(`[文件: ${file.name}]\n${text}`);
+      } catch (err) {
+        console.error(`读取文件 ${file.name} 失败:`, err);
+        fileContents.push(`[文件: ${file.name}]\n(读取失败: ${err.message})`);
+      }
+    }
+
+    if (fileContents.length > 0) {
+      setUserInput(prev => prev + (prev ? '\n\n' : '') + fileContents.join('\n\n'));
+    }
+
+    // 清空 file input
+    e.target.value = '';
   };
 
   const selectAttack = async (scenarioKey, idx) => {
@@ -2102,17 +2631,46 @@ play();
                   )}
                 </div>
               </div>
-              <button
-                onClick={runRealTest}
-                disabled={apiStatus === 'loading'}
-                className={`px-4 py-1.5 rounded text-xs font-medium transition ${
-                  apiStatus === 'loading'
-                    ? 'bg-slate-600 cursor-not-allowed'
-                    : 'bg-green-600 hover:bg-green-500'
-                }`}
-              >
-                {apiStatus === 'loading' ? `⏳ 请求中... ${(apiElapsedTime / 1000).toFixed(1)}s` : '▶️ 执行测试'}
-              </button>
+              {/* 执行按钮区域 - 根据对话模式显示不同按钮 */}
+              {dialogMode === 'single' ? (
+                // 单轮模式：保持原有行为
+                <button
+                  onClick={runRealTest}
+                  disabled={apiStatus === 'loading'}
+                  className={`px-4 py-1.5 rounded text-xs font-medium transition ${
+                    apiStatus === 'loading'
+                      ? 'bg-slate-600 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-500'
+                  }`}
+                >
+                  {apiStatus === 'loading' ? `⏳ 请求中... ${(apiElapsedTime / 1000).toFixed(1)}s` : '▶️ 执行测试'}
+                </button>
+              ) : (
+                // 多轮模式：开始/停止切换
+                conversationMode === 'idle' ? (
+                  <button
+                    onClick={startConversation}
+                    disabled={apiStatus === 'loading'}
+                    className="px-4 py-1.5 rounded text-xs font-medium transition bg-green-600 hover:bg-green-500"
+                  >
+                    ▶️ 开始测试
+                  </button>
+                ) : conversationMode === 'active' ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={stopConversation}
+                      className="px-4 py-1.5 rounded text-xs font-medium transition bg-red-600 hover:bg-red-500"
+                    >
+                      ⏹️ 停止测试
+                    </button>
+                    {apiStatus === 'loading' && (
+                      <span className="text-xs text-slate-400 animate-pulse">⏳ 处理中...</span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="px-4 py-1.5 text-xs text-violet-400 animate-pulse">🔍 评判中...</span>
+                )
+              )}
             </div>
 
             {/* MCP 解析器配置面板 */}
@@ -2353,7 +2911,7 @@ play();
               </div>
             )}
 
-            {/* 提示词配置区域 - 可折叠 */}
+            {/* 模型配置区域 - 可折叠 */}
             <div className="mb-3 bg-slate-900 rounded border border-slate-700">
               {/* 折叠标题栏 */}
               <div className="flex items-center justify-between p-2 border-b border-slate-700">
@@ -2362,23 +2920,62 @@ play();
                   className="flex items-center gap-2 text-xs text-slate-300 hover:text-slate-100 transition"
                 >
                   <span>{promptConfigCollapsed ? '▶' : '▼'}</span>
-                  <span className="font-medium">📝 提示词配置</span>
+                  <span className="font-medium">⚙️ 模型配置</span>
                   {(customSystemPrompt !== currentScenario.systemPrompt || customTestPayload !== currentAttack.testPayload || payloadFiles.length > 0) && (
                     <span className="text-yellow-400">(已修改)</span>
                   )}
                 </button>
-                <div className="flex items-center gap-3 text-xs">
-                  {/* 显示场景所需工具 */}
-                  {currentScenario.requiredTools && currentScenario.requiredTools.length > 0 && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-slate-500">所需工具:</span>
-                      {currentScenario.requiredTools.map(tool => (
-                        <span key={tool} className="px-1.5 py-0.5 bg-cyan-900/50 text-cyan-400 rounded text-[10px] font-mono">
-                          {tool}
-                        </span>
-                      ))}
+                <div className="flex items-center gap-4 text-xs">
+                  {/* 思考模式开关 */}
+                  <label className="flex items-center gap-1.5 cursor-pointer" title="启用后，模型响应将包含思考过程">
+                    <input
+                      type="checkbox"
+                      checked={thinkingEnabled}
+                      onChange={(e) => setThinkingEnabled(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
+                    />
+                    <span className="text-slate-400">💭 思考模式</span>
+                  </label>
+                  {thinkingEnabled && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-500 text-[10px]">budget:</span>
+                      <input
+                        type="number"
+                        min="1000"
+                        max="100000"
+                        step="1000"
+                        value={thinkingBudget}
+                        onChange={(e) => setThinkingBudget(parseInt(e.target.value) || 10000)}
+                        className="w-16 bg-slate-700 border border-slate-600 rounded px-1 text-pink-400 font-mono text-[10px]"
+                      />
                     </div>
                   )}
+
+                  {/* 对话模式切换 */}
+                  <div className="flex items-center gap-1 bg-slate-800 rounded p-0.5">
+                    <button
+                      onClick={() => setDialogMode('single')}
+                      disabled={conversationMode !== 'idle'}
+                      className={`px-2 py-0.5 rounded text-[10px] transition ${
+                        dialogMode === 'single'
+                          ? 'bg-slate-600 text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      } ${conversationMode !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      单轮
+                    </button>
+                    <button
+                      onClick={() => setDialogMode('multi')}
+                      disabled={conversationMode !== 'idle'}
+                      className={`px-2 py-0.5 rounded text-[10px] transition ${
+                        dialogMode === 'multi'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      } ${conversationMode !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      多轮
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -2642,12 +3239,60 @@ play();
               )}
               {messages.length === 0 && !typingMsg && (
                 <div className="text-slate-500 text-center py-8">
-                  {mode === 'mock' ? '等待演示开始...' : '点击「执行测试」发送 Payload'}
+                  {mode === 'mock' ? '等待演示开始...' :
+                    dialogMode === 'multi' ? '点击「开始测试」发送 Payload' : '点击「执行测试」发送 Payload'}
                 </div>
               )}
             </div>
+
+            {/* 多轮对话输入框 */}
+            {mode === 'real' && dialogMode === 'multi' && conversationMode === 'active' && (
+              <div className="border-t border-slate-700 pt-2 mt-2 flex-shrink-0">
+                <div className="flex gap-2">
+                  <input
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendUserMessage();
+                      }
+                    }}
+                    placeholder="输入消息继续对话..."
+                    disabled={apiStatus === 'loading'}
+                    className={`flex-1 bg-slate-700 rounded px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                      apiStatus === 'loading' ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  />
+                  <button
+                    onClick={sendUserMessage}
+                    disabled={apiStatus === 'loading' || !userInput.trim()}
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                      apiStatus === 'loading' || !userInput.trim()
+                        ? 'bg-slate-600 cursor-not-allowed text-slate-400'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                    }`}
+                  >
+                    发送
+                  </button>
+                  {/* 文件上传按钮 */}
+                  <label className={`cursor-pointer px-2 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-xs transition ${
+                    apiStatus === 'loading' ? 'opacity-50 pointer-events-none' : ''
+                  }`}>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleMultiRoundFileUpload}
+                      disabled={apiStatus === 'loading'}
+                      className="hidden"
+                    />
+                    📎
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
-          
+
           {/* 日志面板 */}
           <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
