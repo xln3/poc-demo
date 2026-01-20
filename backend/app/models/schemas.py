@@ -121,3 +121,118 @@ class PDFInjectionResponse(BaseModel):
     message: str
     file_name: str
     injection_summary: Dict[str, Any]  # Shows where text was injected
+
+
+# ============ Saved Test Cases ============
+
+class SourceScenario(BaseModel):
+    """Information about the source scenario for a saved case."""
+    name: str  # e.g., "车贷审核智能体"
+    attackId: str  # e.g., "1.1"
+    attackName: str  # e.g., "提示注入绕过风控"
+
+
+class TestConfig(BaseModel):
+    """Test configuration when the case was saved."""
+    model: str  # e.g., "glm-4.7"
+
+
+class Judgment(BaseModel):
+    """Attack success judgment result."""
+    success: Optional[bool] = None  # True=attack succeeded, False=failed, None=uncertain
+    reason: str = ""
+
+
+class SaveCaseRequest(BaseModel):
+    """Request model for saving a test case."""
+    name: Optional[str] = None  # Custom name, defaults to attack name
+    sourceScenario: SourceScenario
+    testConfig: TestConfig
+    payload: str  # The attack payload used
+    response: str  # LLM response
+    judgment: Judgment
+    conversations: List[Dict[str, Any]] = []  # Chat messages
+    logs: List[Dict[str, Any]] = []  # System logs
+    toolCalls: Optional[List[Dict[str, Any]]] = None  # Tool calls if any
+    systemPrompt: Optional[str] = None  # System prompt used
+
+
+class UpdateCaseRequest(BaseModel):
+    """Request model for updating a test case."""
+    name: Optional[str] = None
+    tags: Optional[List[str]] = None
+    notes: Optional[str] = None
+
+
+class SavedCaseSummary(BaseModel):
+    """Summary of a saved case for list display."""
+    id: str
+    savedAt: str
+    name: Optional[str] = None
+    sourceScenario: Optional[SourceScenario] = None
+    testConfig: Optional[TestConfig] = None
+    judgment: Optional[Judgment] = None
+
+
+class SavedCaseDetail(BaseModel):
+    """Full detail of a saved case."""
+    id: str
+    savedAt: str
+    name: Optional[str] = None
+    sourceScenario: Optional[SourceScenario] = None
+    testConfig: Optional[TestConfig] = None
+    payload: Optional[str] = None
+    response: Optional[str] = None
+    judgment: Optional[Judgment] = None
+    conversations: List[Dict[str, Any]] = []
+    logs: List[Dict[str, Any]] = []
+    toolCalls: Optional[List[Dict[str, Any]]] = None
+    systemPrompt: Optional[str] = None
+    tags: Optional[List[str]] = None
+    notes: Optional[str] = None
+    updatedAt: Optional[str] = None
+
+
+# ============ MCP Server Models ============
+
+class McpServerType(str, Enum):
+    """Available MCP server types."""
+    FILESYSTEM = "filesystem"
+    EMAIL = "email"
+    PAYMENT = "payment"
+
+
+class McpTestConnectionRequest(BaseModel):
+    """Request model for testing MCP server connection."""
+    server_id: McpServerType
+    config: Dict[str, Any]
+
+
+class McpTestConnectionResponse(BaseModel):
+    """Response model for MCP connection test."""
+    success: bool
+    message: Optional[str] = None
+    error: Optional[str] = None
+
+
+class McpToolRequest(BaseModel):
+    """Request model for executing MCP tool."""
+    server_id: McpServerType
+    tool_name: str
+    params: Dict[str, Any]
+    config: Dict[str, Any]
+
+
+class McpToolResult(BaseModel):
+    """Response model for MCP tool execution."""
+    success: bool
+    result: Optional[Any] = None
+    error: Optional[str] = None
+    execution_time_ms: Optional[int] = None
+
+
+class McpServerStatus(BaseModel):
+    """Status of an MCP server."""
+    status: str  # 'connected', 'disconnected', 'error'
+    message: Optional[str] = None
+    tools: Optional[List[str]] = None

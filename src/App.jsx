@@ -3,6 +3,8 @@ import { CONFIG, ATTACK_TYPES, RISK_LEVELS, LOG_TYPES } from './config';
 import { SCENARIOS, SCENARIOS_BY_LEVEL, CapabilityLevelNames } from './scenarios/index.js';
 import { sandboxClient, ImageType, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
 import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
+import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
+import { mcpClient } from './mcp.js';
 
 // 能力层级图标
 const LEVEL_ICONS = {
@@ -70,6 +72,13 @@ export default function App() {
   const [uploadingSandboxFile, setUploadingSandboxFile] = useState(false);
   const [lastTestResult, setLastTestResult] = useState(null); // 存储最后一次测试结果
 
+  // 已保存用例相关状态
+  const [viewMode, setViewMode] = useState('scenarios'); // 'scenarios' | 'saved'
+  const [savedCases, setSavedCases] = useState([]); // 已保存用例列表
+  const [selectedCase, setSelectedCase] = useState(null); // 当前查看的用例详情
+  const [isSaving, setIsSaving] = useState(false); // 保存中状态
+  const [loadingSavedCases, setLoadingSavedCases] = useState(false); // 加载列表状态
+
   // LLM 参数配置 (所有模式共享)
   const [llmTemperature, setLlmTemperature] = useState(CONFIG.llmParams.temperature);
   const [llmMaxTokens, setLlmMaxTokens] = useState(CONFIG.llmParams.max_tokens);
@@ -104,6 +113,16 @@ export default function App() {
   const [ragQueryResults, setRagQueryResults] = useState(null); // 最近一次查询结果
   const [ragUploading, setRagUploading] = useState(false); // 上传状态
   const [parserContainerAvailable, setParserContainerAvailable] = useState(false); // 解析容器是否运行中
+
+  // MCP Server 配置状态
+  const [mcpServerEnabled, setMcpServerEnabled] = useState(false);
+  const [mcpServerConfigCollapsed, setMcpServerConfigCollapsed] = useState(false);
+  const [selectedMcpServer, setSelectedMcpServer] = useState(null);
+  const [mcpServerConfigs, setMcpServerConfigs] = useState(() => {
+    const saved = localStorage.getItem('mcpServerConfigs');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [mcpServerStatus, setMcpServerStatus] = useState({}); // { serverId: 'connected' | 'error' | 'testing' }
 
   // 多轮对话模式相关状态
   const [dialogMode, setDialogMode] = useState('single'); // 'single' | 'multi'
@@ -2064,6 +2083,90 @@ print('\\n'.join(all_text))
     URL.revokeObjectURL(url);
   };
 
+  // 保存测试结果到服务器
+  const saveToServer = async () => {
+    if (!lastTestResult) {
+      alert('暂无测试结果，请先执行真实测试');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const caseData = {
+        name: lastTestResult.attack.name,
+        sourceScenario: {
+          name: lastTestResult.scenario,
+          attackId: lastTestResult.attack.id,
+          attackName: lastTestResult.attack.name,
+        },
+        testConfig: {
+          model: lastTestResult.model,
+        },
+        payload: lastTestResult.payload,
+        response: lastTestResult.response,
+        judgment: lastTestResult.judgment,
+        conversations: messages,
+        logs: logs,
+        toolCalls: lastTestResult.toolCalls || [],
+        systemPrompt: lastTestResult.systemPrompt,
+      };
+      const saved = await saveCaseToServer(caseData);
+      alert(`保存成功！用例 ID: ${saved.id}`);
+      // 刷新已保存用例列表
+      if (viewMode === 'saved') {
+        loadSavedCases();
+      }
+    } catch (error) {
+      alert(`保存失败: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 加载已保存用例列表
+  const loadSavedCases = async () => {
+    setLoadingSavedCases(true);
+    try {
+      const cases = await listSavedCases();
+      setSavedCases(cases);
+    } catch (error) {
+      console.error('加载已保存用例失败:', error);
+    } finally {
+      setLoadingSavedCases(false);
+    }
+  };
+
+  // 查看用例详情
+  const viewCaseDetail = async (caseId) => {
+    try {
+      const detail = await getCaseDetail(caseId);
+      setSelectedCase(detail);
+    } catch (error) {
+      alert(`获取详情失败: ${error.message}`);
+    }
+  };
+
+  // 删除用例
+  const handleDeleteCase = async (caseId) => {
+    if (!confirm('确定要删除这个用例吗？')) return;
+    try {
+      await deleteCase(caseId);
+      setSavedCases(prev => prev.filter(c => c.id !== caseId));
+      if (selectedCase?.id === caseId) {
+        setSelectedCase(null);
+      }
+    } catch (error) {
+      alert(`删除失败: ${error.message}`);
+    }
+  };
+
+  // 切换到已保存用例视图时加载列表
+  useEffect(() => {
+    if (viewMode === 'saved') {
+      loadSavedCases();
+    }
+  }, [viewMode]);
+
   // 导出 HTML
   const exportHTML = () => {
     const attack = currentAttack;
@@ -2149,9 +2252,28 @@ play();
 
       {/* 左侧导航 */}
       <div className="w-64 bg-slate-800 p-3 overflow-y-auto custom-scroll flex-shrink-0 border-r border-slate-700">
-        <h1 className="font-bold text-base mb-3">🛡️ 攻击场景库</h1>
-        
-        {/* 模式切换 */}
+        {/* 视图切换标签 */}
+        <div className="flex gap-1 mb-3">
+          <button
+            onClick={() => { setViewMode('scenarios'); setSelectedCase(null); }}
+            className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
+              viewMode === 'scenarios' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
+            }`}
+          >
+            🛡️ 攻击场景
+          </button>
+          <button
+            onClick={() => setViewMode('saved')}
+            className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
+              viewMode === 'saved' ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
+            }`}
+          >
+            📁 已保存
+          </button>
+        </div>
+
+        {/* 模式切换 - 仅场景视图显示 */}
+        {viewMode === 'scenarios' && (
         <div className="mb-3 p-2 bg-slate-700 rounded">
           <div className="text-xs text-slate-400 mb-2">测试模式</div>
           <div className="flex gap-1">
@@ -2173,8 +2295,11 @@ play();
             </button>
           </div>
         </div>
+        )}
 
-        {/* 沙箱控制 */}
+        {/* 沙箱控制 - 仅场景视图显示 */}
+        {viewMode === 'scenarios' && (
+        <>
         <div className="mb-3 p-2 bg-slate-700 rounded">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400">🐳 运行沙箱</span>
@@ -2359,10 +2484,17 @@ play();
               >
                 📊 测试结果 (JSON) {lastTestResult ? '✓' : ''}
               </button>
+              <button
+                onClick={saveToServer}
+                disabled={!lastTestResult || isSaving}
+                className={`w-full py-1.5 rounded ${lastTestResult && !isSaving ? 'bg-orange-600 hover:bg-orange-500' : 'bg-slate-600 cursor-not-allowed'}`}
+              >
+                {isSaving ? '⏳ 保存中...' : '💾 保存到服务器'} {lastTestResult && !isSaving ? '' : ''}
+              </button>
             </div>
           )}
         </div>
-        
+
         {/* 层级列表 */}
         {Object.entries(groupedData).map(([typeKey, typeData]) => (
           <div key={typeKey} className="mb-2">
@@ -2419,10 +2551,183 @@ play();
         <div className="mt-4 pt-3 border-t border-slate-700 text-xs text-slate-500">
           共 {Object.values(SCENARIOS).reduce((a, s) => a + s.attacks.length, 0)} 个场景
         </div>
+        </>
+        )}
+
+        {/* 已保存用例列表 - 仅在 saved 视图显示 */}
+        {viewMode === 'saved' && (
+          <div className="flex-1">
+            <div className="mb-3 text-xs text-slate-400">
+              已保存的测试用例 ({savedCases.length})
+            </div>
+            {loadingSavedCases ? (
+              <div className="text-xs text-slate-500 text-center py-4">加载中...</div>
+            ) : savedCases.length === 0 ? (
+              <div className="text-xs text-slate-500 text-center py-4">
+                暂无保存的用例
+                <div className="mt-1 text-slate-600">执行真实测试后可保存</div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {savedCases.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`p-2 rounded cursor-pointer transition ${
+                      selectedCase?.id === item.id ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                    onClick={() => viewCaseDetail(item.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium truncate flex-1">
+                        {item.name || item.sourceScenario?.attackName || '未命名'}
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCase(item.id); }}
+                        className="text-xs text-slate-400 hover:text-red-400 ml-2"
+                        title="删除"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      {item.sourceScenario?.name} · {item.testConfig?.model}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        item.judgment?.success === true ? 'bg-red-600' :
+                        item.judgment?.success === false ? 'bg-green-600' :
+                        'bg-yellow-600'
+                      }`}>
+                        {item.judgment?.success === true ? '攻击成功' :
+                         item.judgment?.success === false ? '攻击失败' : '不确定'}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {item.savedAt ? new Date(item.savedAt).toLocaleString('zh-CN') : ''}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      
+
       {/* 右侧主区域 */}
       <div className="flex-1 p-4 overflow-hidden flex flex-col">
+        {/* 已保存用例详情视图 */}
+        {viewMode === 'saved' && selectedCase ? (
+          <div className="h-full flex flex-col">
+            {/* 标题区 */}
+            <div className="mb-4">
+              <div className="flex items-center gap-3 mb-1">
+                <h2 className="text-lg font-bold">{selectedCase.name || selectedCase.sourceScenario?.attackName}</h2>
+                <span className={`px-2 py-0.5 rounded text-xs ${
+                  selectedCase.judgment?.success === true ? 'bg-red-600' :
+                  selectedCase.judgment?.success === false ? 'bg-green-600' :
+                  'bg-yellow-600'
+                }`}>
+                  {selectedCase.judgment?.success === true ? '攻击成功' :
+                   selectedCase.judgment?.success === false ? '攻击失败' : '不确定'}
+                </span>
+              </div>
+              <div className="text-xs text-slate-400 mt-1">
+                场景: {selectedCase.sourceScenario?.name} · 模型: {selectedCase.testConfig?.model}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                保存时间: {selectedCase.savedAt ? new Date(selectedCase.savedAt).toLocaleString('zh-CN') : '未知'}
+              </div>
+            </div>
+
+            {/* 内容区 - 双栏布局 */}
+            <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
+              {/* 左栏：对话记录 */}
+              <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
+                <div className="text-xs text-slate-400 mb-2 pb-2 border-b border-slate-700">
+                  💬 对话记录
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scroll space-y-2">
+                  {(selectedCase.conversations || []).map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-2 rounded text-xs ${
+                        msg.role === 'user'
+                          ? 'bg-blue-600 ml-4'
+                          : 'bg-slate-700 mr-4'
+                      } ${msg.isInjection ? 'border border-red-500' : ''} ${msg.isDangerous ? 'border border-orange-500' : ''}`}
+                    >
+                      <div className="text-slate-400 mb-1">{msg.role === 'user' ? '用户' : '智能体'}</div>
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 右栏：测试详情 */}
+              <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
+                <div className="text-xs text-slate-400 mb-2 pb-2 border-b border-slate-700">
+                  📋 测试详情
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scroll space-y-3 text-xs">
+                  {/* 判定理由 */}
+                  <div>
+                    <div className="text-slate-400 mb-1">判定理由</div>
+                    <div className="p-2 bg-slate-700 rounded">{selectedCase.judgment?.reason || '无'}</div>
+                  </div>
+
+                  {/* 测试载荷 */}
+                  <div>
+                    <div className="text-slate-400 mb-1">测试载荷</div>
+                    <div className="p-2 bg-slate-700 rounded whitespace-pre-wrap max-h-32 overflow-y-auto custom-scroll">
+                      {selectedCase.payload || '无'}
+                    </div>
+                  </div>
+
+                  {/* LLM 响应 */}
+                  <div>
+                    <div className="text-slate-400 mb-1">LLM 响应</div>
+                    <div className="p-2 bg-slate-700 rounded whitespace-pre-wrap max-h-40 overflow-y-auto custom-scroll">
+                      {selectedCase.response || '无'}
+                    </div>
+                  </div>
+
+                  {/* 系统日志 */}
+                  {selectedCase.logs && selectedCase.logs.length > 0 && (
+                    <div>
+                      <div className="text-slate-400 mb-1">系统日志 ({selectedCase.logs.length})</div>
+                      <div className="space-y-1">
+                        {selectedCase.logs.slice(0, 10).map((log, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-1.5 rounded text-xs ${
+                              log.status === 'danger' ? 'bg-red-900/30 border-l-2 border-red-500' :
+                              log.status === 'warning' ? 'bg-yellow-900/30 border-l-2 border-yellow-500' :
+                              log.status === 'success' ? 'bg-green-900/30 border-l-2 border-green-500' :
+                              'bg-slate-700'
+                            }`}
+                          >
+                            {log.content}
+                          </div>
+                        ))}
+                        {selectedCase.logs.length > 10 && (
+                          <div className="text-slate-500">...还有 {selectedCase.logs.length - 10} 条日志</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : viewMode === 'saved' ? (
+          <div className="flex-1 flex items-center justify-center text-slate-500">
+            <div className="text-center">
+              <div className="text-4xl mb-4">📁</div>
+              <div>选择左侧的用例查看详情</div>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* 标题区 */}
         <div className="mb-4">
           <div className="flex items-center gap-3 mb-1">
@@ -2862,6 +3167,26 @@ play();
                   {ragEnabled && ragKnowledge && (
                     <span className="text-xs text-amber-400">
                       ({ragKnowledge.split('\n').filter(l => l.trim()).length} 条)
+                    </span>
+                  )}
+                </div>
+                {/* MCP Server 开关 */}
+                <div className="flex items-center gap-2">
+                  <label
+                    className="flex items-center gap-1.5 cursor-pointer"
+                    title="启用后，可配置 MCP 服务器进行工具调用测试"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={mcpServerEnabled}
+                      onChange={(e) => setMcpServerEnabled(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                    />
+                    <span className="text-xs text-slate-400">MCP</span>
+                  </label>
+                  {mcpServerEnabled && (
+                    <span className="text-xs text-emerald-400">
+                      ({Object.values(mcpServerConfigs).filter(c => c?.enabled).length} 已连接)
                     </span>
                   )}
                 </div>
@@ -3321,6 +3646,202 @@ play();
                     ? 'Mock 模式：手动输入内容作为检索结果注入。可用于测试知识库投毒、数据泄露等攻击场景。'
                     : 'Real 模式：使用真实向量检索。上传文档后，系统将自动分块、嵌入，并在测试时执行语义检索。'
                   }
+                </div>
+              </div>
+            )}
+
+            {/* MCP Server 配置面板 */}
+            {mcpServerEnabled && (
+              <div className="mb-3 p-2 bg-slate-900 rounded border border-emerald-900/50">
+                <div className="text-xs text-emerald-400 flex items-center justify-between">
+                  <button
+                    onClick={() => setMcpServerConfigCollapsed(!mcpServerConfigCollapsed)}
+                    className="flex items-center gap-2 hover:text-emerald-300 transition"
+                  >
+                    <span>{mcpServerConfigCollapsed ? '▶' : '▼'}</span>
+                    <span>🔌 MCP Server 配置</span>
+                  </button>
+                  <span className="text-slate-500 text-[10px]">
+                    选择并配置外部服务
+                  </span>
+                </div>
+                {!mcpServerConfigCollapsed && (
+                  <div className="mt-2 grid grid-cols-3 gap-3" style={{ minHeight: '200px' }}>
+                    {/* 左栏：MCP 服务列表 */}
+                    <div className="flex flex-col">
+                      <div className="text-xs text-slate-400 mb-1">可用服务</div>
+                      <div className="flex-1 bg-slate-800 rounded p-2 space-y-1">
+                        {Object.values(CONFIG.mcpServers.available).map((server) => {
+                          const config = mcpServerConfigs[server.id];
+                          const isEnabled = config?.enabled;
+                          const status = mcpServerStatus[server.id];
+                          return (
+                            <button
+                              key={server.id}
+                              onClick={() => setSelectedMcpServer(server.id)}
+                              className={`w-full text-left px-2 py-1.5 rounded text-xs transition flex items-center justify-between ${
+                                selectedMcpServer === server.id
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{server.icon}</span>
+                                <span>{server.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {status === 'testing' && (
+                                  <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="测试中" />
+                                )}
+                                {status === 'connected' && (
+                                  <span className="w-2 h-2 rounded-full bg-green-400" title="已连接" />
+                                )}
+                                {status === 'error' && (
+                                  <span className="w-2 h-2 rounded-full bg-red-400" title="连接失败" />
+                                )}
+                                {isEnabled && !status && (
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400" title="已启用" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {/* 右栏：配置表单 */}
+                    <div className="col-span-2 flex flex-col">
+                      {selectedMcpServer ? (
+                        (() => {
+                          const server = CONFIG.mcpServers.available[selectedMcpServer];
+                          const config = mcpServerConfigs[selectedMcpServer] || {};
+                          const status = mcpServerStatus[selectedMcpServer];
+                          return (
+                            <>
+                              <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
+                                <span>{server.icon} {server.name} 配置</span>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={async () => {
+                                      console.log('[MCP] Testing connection for:', selectedMcpServer, config);
+                                      setMcpServerStatus(prev => ({ ...prev, [selectedMcpServer]: 'testing' }));
+                                      try {
+                                        const result = await mcpClient.testConnection(selectedMcpServer, config);
+                                        console.log('[MCP] Test result:', result);
+                                        setMcpServerStatus(prev => ({
+                                          ...prev,
+                                          [selectedMcpServer]: result.success ? 'connected' : 'error'
+                                        }));
+                                        if (!result.success) {
+                                          alert(`连接失败: ${result.error || '未知错误'}`);
+                                        }
+                                      } catch (e) {
+                                        console.error('[MCP] Test connection error:', e);
+                                        setMcpServerStatus(prev => ({ ...prev, [selectedMcpServer]: 'error' }));
+                                        alert(`连接测试失败: ${e.message}`);
+                                      }
+                                    }}
+                                    disabled={status === 'testing'}
+                                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-[10px] disabled:opacity-50"
+                                  >
+                                    {status === 'testing' ? '测试中...' : '测试连接'}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      console.log('[MCP] Toggle enabled for:', selectedMcpServer, 'current:', config.enabled);
+                                      const updated = {
+                                        ...mcpServerConfigs,
+                                        [selectedMcpServer]: { ...config, enabled: !config.enabled }
+                                      };
+                                      setMcpServerConfigs(updated);
+                                      localStorage.setItem('mcpServerConfigs', JSON.stringify(updated));
+                                      console.log('[MCP] Updated configs:', updated);
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-white text-[10px] ${
+                                      config.enabled
+                                        ? 'bg-red-600 hover:bg-red-500'
+                                        : 'bg-emerald-600 hover:bg-emerald-500'
+                                    }`}
+                                  >
+                                    {config.enabled ? '禁用' : '启用'}
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="text-xs text-slate-500 mb-2">{server.description}</div>
+                              <div className="flex-1 bg-slate-800 rounded p-2 overflow-auto">
+                                <div className="space-y-2">
+                                  {server.fields.map((field) => (
+                                    <div key={field.key} className="flex flex-col gap-1">
+                                      <label className="text-xs text-slate-400 flex items-center gap-1">
+                                        {field.label}
+                                        {field.required && <span className="text-red-400">*</span>}
+                                      </label>
+                                      {field.type === 'checkbox' ? (
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={config[field.key] ?? field.default ?? false}
+                                            onChange={(e) => {
+                                              const updated = {
+                                                ...mcpServerConfigs,
+                                                [selectedMcpServer]: { ...config, [field.key]: e.target.checked }
+                                              };
+                                              setMcpServerConfigs(updated);
+                                              localStorage.setItem('mcpServerConfigs', JSON.stringify(updated));
+                                            }}
+                                            className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-emerald-500"
+                                          />
+                                          <span className="text-xs text-slate-300">
+                                            {config[field.key] ? '是' : '否'}
+                                          </span>
+                                        </label>
+                                      ) : (
+                                        <input
+                                          type={field.type}
+                                          value={config[field.key] ?? field.default ?? ''}
+                                          placeholder={field.placeholder}
+                                          onChange={(e) => {
+                                            const value = field.type === 'number' ? Number(e.target.value) : e.target.value;
+                                            const updated = {
+                                              ...mcpServerConfigs,
+                                              [selectedMcpServer]: { ...config, [field.key]: value }
+                                            };
+                                            setMcpServerConfigs(updated);
+                                            localStorage.setItem('mcpServerConfigs', JSON.stringify(updated));
+                                          }}
+                                          className="w-full px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded text-slate-200 focus:border-emerald-500 focus:outline-none"
+                                        />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                                {/* 可用工具列表 */}
+                                <div className="mt-3 pt-2 border-t border-slate-700">
+                                  <div className="text-xs text-slate-400 mb-1">提供的工具</div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {server.tools.map((tool) => (
+                                      <span
+                                        key={tool}
+                                        className="px-1.5 py-0.5 bg-slate-700 rounded text-[10px] text-slate-300"
+                                      >
+                                        {tool}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center text-xs text-slate-500">
+                          ← 选择一个 MCP 服务进行配置
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="mt-2 text-[10px] text-slate-500">
+                  MCP (Model Context Protocol) 服务提供外部工具能力。配置后可在攻击测试中调用这些工具。
                 </div>
               </div>
             )}
@@ -3871,6 +4392,8 @@ play();
             </div>
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

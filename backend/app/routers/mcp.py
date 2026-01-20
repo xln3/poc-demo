@@ -2,11 +2,25 @@
 MCP 文件解析 API 路由
 
 使用容器化解析服务执行文件解析，支持 PDF、DOCX、XLSX、图片 OCR 等。
+同时提供 MCP Server 工具调用功能。
 """
+import time
+import logging
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from typing import List, Optional
 from ..services.mcp_parsers import get_file_type, PARSERS
 from ..services.container_parser import get_container_parser
+from ..models.schemas import (
+    McpServerType,
+    McpTestConnectionRequest,
+    McpTestConnectionResponse,
+    McpToolRequest,
+    McpToolResult,
+    McpServerStatus,
+)
+from ..services.mcp import mcp_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/mcp", tags=["MCP"])
 
@@ -190,3 +204,105 @@ async def health_check():
             "error": "解析容器不可用，请确保 mcp-tools:latest 镜像已构建并且 Docker 服务正常",
             "parsers": {}
         }
+
+
+# ============ MCP Server Endpoints ============
+
+@router.get("/servers")
+async def list_mcp_servers():
+    """List available MCP servers and their tools."""
+    return {
+        "servers": [
+            {
+                "id": "filesystem",
+                "name": "Filesystem",
+                "tools": ["fs_read_file", "fs_write_file", "fs_list_dir", "fs_search"],
+            },
+            {
+                "id": "email",
+                "name": "Email",
+                "tools": ["email_send", "email_send_with_attachment"],
+            },
+            {
+                "id": "payment",
+                "name": "Payment",
+                "tools": ["payment_create_order", "payment_query_status", "payment_refund"],
+            },
+        ]
+    }
+
+
+@router.post("/test", response_model=McpTestConnectionResponse)
+async def test_mcp_connection(request: McpTestConnectionRequest):
+    """Test MCP server connection with provided configuration."""
+    server_id = request.server_id
+    config = request.config
+
+    try:
+        if server_id == McpServerType.FILESYSTEM:
+            result = await mcp_service.test_filesystem_connection(config)
+        elif server_id == McpServerType.EMAIL:
+            result = await mcp_service.test_email_connection(config)
+        elif server_id == McpServerType.PAYMENT:
+            result = await mcp_service.test_payment_connection(config)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown server type: {server_id}")
+
+        return McpTestConnectionResponse(**result)
+    except Exception as e:
+        logger.error(f"Connection test failed for {server_id}: {e}")
+        return McpTestConnectionResponse(success=False, error=str(e))
+
+
+@router.post("/tool", response_model=McpToolResult)
+async def execute_mcp_tool(request: McpToolRequest):
+    """Execute an MCP tool with provided parameters."""
+    server_id = request.server_id
+    tool_name = request.tool_name
+    params = request.params
+    config = request.config
+
+    start_time = time.time()
+
+    try:
+        if server_id == McpServerType.FILESYSTEM:
+            result = await mcp_service.execute_filesystem_tool(tool_name, params, config)
+        elif server_id == McpServerType.EMAIL:
+            result = await mcp_service.execute_email_tool(tool_name, params, config)
+        elif server_id == McpServerType.PAYMENT:
+            result = await mcp_service.execute_payment_tool(tool_name, params, config)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown server type: {server_id}")
+
+        execution_time_ms = int((time.time() - start_time) * 1000)
+
+        return McpToolResult(
+            success=result.get("success", False),
+            result=result.get("result"),
+            error=result.get("error"),
+            execution_time_ms=execution_time_ms,
+        )
+    except Exception as e:
+        logger.error(f"Tool execution failed for {server_id}/{tool_name}: {e}")
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        return McpToolResult(
+            success=False,
+            error=str(e),
+            execution_time_ms=execution_time_ms,
+        )
+
+
+@router.get("/status/{server_id}", response_model=McpServerStatus)
+async def get_mcp_server_status(server_id: McpServerType):
+    """Get status of a specific MCP server."""
+    tools_map = {
+        McpServerType.FILESYSTEM: ["fs_read_file", "fs_write_file", "fs_list_dir", "fs_search"],
+        McpServerType.EMAIL: ["email_send", "email_send_with_attachment"],
+        McpServerType.PAYMENT: ["payment_create_order", "payment_query_status", "payment_refund"],
+    }
+
+    return McpServerStatus(
+        status="available",
+        message=f"Server {server_id.value} is available",
+        tools=tools_map.get(server_id, []),
+    )

@@ -200,6 +200,50 @@ export const CONFIG = {
     }
   },
 
+  // MCP Server 配置
+  mcpServers: {
+    enabled: false,
+    apiUrl: 'http://localhost:8000/mcp',
+    available: {
+      filesystem: {
+        id: 'filesystem',
+        name: 'Filesystem',
+        icon: '📁',
+        description: '本地文件系统读写访问',
+        fields: [
+          { key: 'basePath', label: '根目录路径', type: 'text', required: true, placeholder: '/path/to/workspace' },
+          { key: 'allowWrite', label: '允许写入', type: 'checkbox', required: false, default: false }
+        ],
+        tools: ['fs_read_file', 'fs_write_file', 'fs_list_dir', 'fs_search']
+      },
+      email: {
+        id: 'email',
+        name: 'Email',
+        icon: '📧',
+        description: 'SMTP 邮件发送服务',
+        fields: [
+          { key: 'smtpHost', label: 'SMTP 主机', type: 'text', required: true, placeholder: 'smtp.example.com' },
+          { key: 'smtpPort', label: 'SMTP 端口', type: 'number', required: true, default: 587 },
+          { key: 'username', label: '用户名', type: 'text', required: true },
+          { key: 'password', label: '密码', type: 'password', required: true },
+          { key: 'fromAddress', label: '发件人地址', type: 'text', required: true, placeholder: 'bot@example.com' }
+        ],
+        tools: ['email_send', 'email_send_with_attachment']
+      },
+      payment: {
+        id: 'payment',
+        name: 'Payment (Stripe)',
+        icon: '💳',
+        description: 'Stripe 支付网关集成（sk_test_ 为测试模式，sk_live_ 为生产模式）',
+        fields: [
+          { key: 'apiKey', label: 'Stripe Secret Key', type: 'password', required: true, placeholder: 'sk_test_xxx 或 sk_live_xxx' },
+          { key: 'merchantId', label: '商户标识', type: 'text', required: true, placeholder: '用于订单备注' }
+        ],
+        tools: ['payment_create_order', 'payment_query_status', 'payment_refund']
+      }
+    }
+  },
+
   // 可用模型列表（被测模型）
   models: [
     { id: 'doubao-seed-1-8-251228', name: 'Doubao Seed 1.8' },

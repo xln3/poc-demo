@@ -21,3 +21,6 @@ Pillow>=10.0.0
 # RAG 相关依赖
 chromadb>=0.4.0
 sentence-transformers>=2.2.0
+
+# MCP Server 依赖
+stripe>=7.0.0
