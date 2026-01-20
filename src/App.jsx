@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CONFIG, ATTACK_TYPES, RISK_LEVELS, LOG_TYPES } from './config';
 import { SCENARIOS, SCENARIOS_BY_LEVEL, CapabilityLevelNames } from './scenarios/index.js';
-import { sandboxClient, ImageType, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
+import { sandboxClient, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
 import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
 import { mcpClient } from './mcp.js';
+import { exportReport, exportTestResult, exportHTML } from './utils/index.js';
+import { useSandbox, ImageType, useRAG, useCases, useMCP, useConversation, useLLMConfig } from './hooks/index.js';
 
 // 能力层级图标
 const LEVEL_ICONS = {
@@ -58,111 +60,81 @@ export default function App() {
   const [customTestPayload, setCustomTestPayload] = useState('');
   const [isEditingPayload, setIsEditingPayload] = useState(false);
   const [payloadFiles, setPayloadFiles] = useState([]);
-
-  // Sandbox states
-  const [sandboxEnabled, setSandboxEnabled] = useState(false);
-  const [sandboxStatus, setSandboxStatus] = useState('disconnected'); // 'disconnected' | 'connecting' | 'running' | 'error'
-  const [sandboxImage, setSandboxImage] = useState(ImageType.PYTHON);
-  const [containerInfo, setContainerInfo] = useState(null);
-  const [sandboxAvailable, setSandboxAvailable] = useState(false);
-  const [toolCommand, setToolCommand] = useState('');
-  const [toolResult, setToolResult] = useState(null);
-  const [showSandboxPanel, setShowSandboxPanel] = useState(true);
-  const [sandboxFiles, setSandboxFiles] = useState([]); // [{name, path, size, preset?}]
-  const [uploadingSandboxFile, setUploadingSandboxFile] = useState(false);
   const [lastTestResult, setLastTestResult] = useState(null); // 存储最后一次测试结果
 
-  // 已保存用例相关状态
-  const [viewMode, setViewMode] = useState('scenarios'); // 'scenarios' | 'saved'
-  const [savedCases, setSavedCases] = useState([]); // 已保存用例列表
-  const [selectedCase, setSelectedCase] = useState(null); // 当前查看的用例详情
-  const [isSaving, setIsSaving] = useState(false); // 保存中状态
-  const [loadingSavedCases, setLoadingSavedCases] = useState(false); // 加载列表状态
+  // Log helper for hooks
+  const addLog = useCallback((log) => {
+    setLogs(prev => [...prev, log]);
+  }, []);
 
-  // LLM 参数配置 (所有模式共享)
-  const [llmTemperature, setLlmTemperature] = useState(CONFIG.llmParams.temperature);
-  const [llmMaxTokens, setLlmMaxTokens] = useState(CONFIG.llmParams.max_tokens);
-  const [llmTopP, setLlmTopP] = useState(CONFIG.llmParams.top_p);
+  // Sandbox hook
+  const sandbox = useSandbox({ addLog });
+  const {
+    sandboxEnabled, setSandboxEnabled, sandboxStatus, setSandboxStatus,
+    sandboxImage, setSandboxImage, containerInfo, setContainerInfo,
+    sandboxAvailable, toolCommand, setToolCommand, toolResult, setToolResult,
+    sandboxFiles, setSandboxFiles, uploadingSandboxFile,
+    startContainer, stopContainer, handleUploadToSandbox, handleRemoveSandboxFile,
+    presetSandboxFiles, refreshSandboxFiles, handleDownloadSandboxFile, executeCommand,
+    handleSandboxLog, isSandboxAvailable, isMcpToolsContainerReady
+  } = sandbox;
 
-  // MCP 文件解析配置
-  const [mcpEnabled, setMcpEnabled] = useState(CONFIG.mcp.enabled);
-  const [mcpConfigCollapsed, setMcpConfigCollapsed] = useState(true); // MCP配置面板默认收起
-  const [mcpParsers, setMcpParsers] = useState(() => {
-    // 初始化解析器选择状态：每个类型的选中工具列表（按优先级排序）
-    const parsers = {};
-    Object.entries(CONFIG.mcp.parsers).forEach(([type, config]) => {
-      // 默认只选第一个解析器（最快）
-      parsers[type] = [config.tools[0].id];
-    });
-    return parsers;
-  });
+  // RAG hook
+  const rag = useRAG({ addLog });
+  const {
+    ragEnabled, setRagEnabled, ragConfigCollapsed, setRagConfigCollapsed,
+    ragKnowledge, setRagKnowledge, ragKnowledgeEdit, setRagKnowledgeEdit,
+    ragMode, setRagMode, ragServiceAvailable, ragDocuments, setRagDocuments,
+    ragQueryResults, setRagQueryResults, ragUploading, parserContainerAvailable,
+    setParserContainerAvailable, refreshRagDocuments, handleRagUpload,
+    handleRagDelete, handleRagClear, handleRagReset, performRagQuery
+  } = rag;
 
-  // 工具调用配置 (Tool Calling)
+  // Cases hook
+  const cases = useCases({ lastTestResult, messages, logs });
+  const {
+    viewMode, setViewMode, savedCases, setSavedCases, selectedCase, setSelectedCase,
+    isSaving, loadingSavedCases, saveToServer, loadSavedCases, viewCaseDetail, handleDeleteCase
+  } = cases;
+
+  // MCP hook
+  const mcp = useMCP();
+  const {
+    mcpEnabled, setMcpEnabled, mcpConfigCollapsed, setMcpConfigCollapsed,
+    mcpParsers, setMcpParsers, isParsingFile, setIsParsingFile,
+    parsingProgress, setParsingProgress, parsingAbortController, setParsingAbortController,
+    mcpServerEnabled, setMcpServerEnabled, mcpServerConfigCollapsed, setMcpServerConfigCollapsed,
+    selectedMcpServer, setSelectedMcpServer, mcpServerConfigs, setMcpServerConfigs,
+    mcpServerStatus, setMcpServerStatus, getFileType, requiresDockerParsers, estimateParsingTime
+  } = mcp;
+
+  // Conversation hook
+  const conversation = useConversation();
+  const {
+    dialogMode, setDialogMode, conversationMode, setConversationMode,
+    userInput, setUserInput, conversationHistory, setConversationHistory,
+    initialPayload, setInitialPayload, resetConversation, addToHistory, clearHistory
+  } = conversation;
+
+  // LLM Config hook
+  const llmConfig = useLLMConfig();
+  const {
+    selectedModel: llmSelectedModel, setSelectedModel: setLlmSelectedModel,
+    llmTemperature, setLlmTemperature, llmMaxTokens, setLlmMaxTokens,
+    llmTopP, setLlmTopP, thinkingEnabled, setThinkingEnabled,
+    thinkingBudget, setThinkingBudget, enabledTools, setEnabledTools,
+    maxToolCalls, setMaxToolCalls, toolCallHistory, setToolCallHistory,
+    resetLLMConfig, enableAllTools, enableSafeToolsOnly, disableAllTools
+  } = llmConfig;
+
+  // Tool calling UI config
   const [toolsEnabled, setToolsEnabled] = useState(CONFIG.tools.enabled);
   const [toolsConfigCollapsed, setToolsConfigCollapsed] = useState(true);
-  const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false); // 模型配置面板
-
-  // RAG 配置
-  const [ragEnabled, setRagEnabled] = useState(false);
-  const [ragConfigCollapsed, setRagConfigCollapsed] = useState(false); // RAG配置面板默认展开
-  const [ragKnowledge, setRagKnowledge] = useState(''); // 知识库内容（模拟检索结果）
-  const [ragKnowledgeEdit, setRagKnowledgeEdit] = useState(''); // 编辑区域内容
-  const [ragMode, setRagMode] = useState('mock'); // 'mock' | 'real'
-  const [ragServiceAvailable, setRagServiceAvailable] = useState(false);
-  const [ragDocuments, setRagDocuments] = useState([]); // 真实 RAG 文档列表
-  const [ragQueryResults, setRagQueryResults] = useState(null); // 最近一次查询结果
-  const [ragUploading, setRagUploading] = useState(false); // 上传状态
-  const [parserContainerAvailable, setParserContainerAvailable] = useState(false); // 解析容器是否运行中
-
-  // MCP Server 配置状态
-  const [mcpServerEnabled, setMcpServerEnabled] = useState(false);
-  const [mcpServerConfigCollapsed, setMcpServerConfigCollapsed] = useState(false);
-  const [selectedMcpServer, setSelectedMcpServer] = useState(null);
-  const [mcpServerConfigs, setMcpServerConfigs] = useState(() => {
-    const saved = localStorage.getItem('mcpServerConfigs');
-    return saved ? JSON.parse(saved) : {};
-  });
-  const [mcpServerStatus, setMcpServerStatus] = useState({}); // { serverId: 'connected' | 'error' | 'testing' }
-
-  // 多轮对话模式相关状态
-  const [dialogMode, setDialogMode] = useState('single'); // 'single' | 'multi'
-  const [conversationMode, setConversationMode] = useState('idle'); // 'idle' | 'active' | 'judging'
-  const [userInput, setUserInput] = useState(''); // 用户输入框内容
-  const [conversationHistory, setConversationHistory] = useState([]); // API 消息历史（用于多轮对话）
-  const [initialPayload, setInitialPayload] = useState(''); // 保存初始 payload 用于评判
-
-  // Thinking 配置
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
-  const [thinkingBudget, setThinkingBudget] = useState(10000);
-  const [enabledTools, setEnabledTools] = useState(() => {
-    // 默认启用 safe 类工具
-    const tools = {};
-    Object.entries(CONFIG.tools.available).forEach(([name, tool]) => {
-      tools[name] = tool.category === 'safe';
-    });
-    return tools;
-  });
-  const [maxToolCalls, setMaxToolCalls] = useState(CONFIG.tools.maxCalls);
-  const [toolCallHistory, setToolCallHistory] = useState([]);
+  const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false);
 
   // API 请求计时器
   const [apiStartTime, setApiStartTime] = useState(null);
   const [apiElapsedTime, setApiElapsedTime] = useState(0);
-
-  // 文件解析相关状态
-  const [isParsingFile, setIsParsingFile] = useState(false);  // 是否正在解析
-  const [parsingProgress, setParsingProgress] = useState(null);  // 解析进度信息
-  const [parsingAbortController, setParsingAbortController] = useState(null);  // 取消控制器
-
-  // 解析进度信息结构
-  // {
-  //   filename: string,           // 文件名
-  //   parser: string,             // 解析器名称
-  //   startTime: number,          // 开始时间戳
-  //   elapsedTime: number,        // 已用时间（ms）
-  //   estimatedTime: number,      // 预估总时间（ms）
-  //   runLocation: string,        // 'sandbox' | 'backend'
-  // }
 
   const chatRef = useRef(null);
   const logRef = useRef(null);
@@ -182,126 +154,6 @@ export default function App() {
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
   }, [logs]);
-
-  // 检查 sandbox 服务是否可用
-  useEffect(() => {
-    const checkSandbox = async () => {
-      const available = await sandboxClient.healthCheck();
-      setSandboxAvailable(available);
-    };
-    checkSandbox();
-    // 每 30 秒检查一次
-    const interval = setInterval(checkSandbox, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // 检查 RAG 服务是否可用
-  useEffect(() => {
-    const checkRAG = async () => {
-      const health = await ragClient.healthCheck();
-      setRagServiceAvailable(health?.status === 'healthy');
-      // 同时更新解析容器状态
-      setParserContainerAvailable(health?.parser_available === true);
-    };
-    checkRAG();
-    // 每 30 秒检查一次
-    const interval = setInterval(checkRAG, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // 当 RAG 模式切换到 real 时，启动服务引擎并刷新文档列表
-  useEffect(() => {
-    if (ragMode === 'real' && ragServiceAvailable) {
-      // 调用 init 来启动服务引擎（如果未启动）
-      ragClient.init().then(() => {
-        // 刷新解析容器状态
-        ragClient.healthCheck().then(health => {
-          setParserContainerAvailable(health?.parser_available === true);
-        });
-      }).catch(console.error);
-      refreshRagDocuments();
-    }
-  }, [ragMode, ragServiceAvailable]);
-
-  // 刷新 RAG 文档列表
-  const refreshRagDocuments = async () => {
-    try {
-      const response = await ragClient.listDocuments();
-      setRagDocuments(response.documents || []);
-    } catch (error) {
-      console.error('Failed to fetch RAG documents:', error);
-    }
-  };
-
-  // 上传文件到 RAG
-  const handleRagUpload = async (file) => {
-    if (!file) return;
-    setRagUploading(true);
-    try {
-      await ragClient.upload(file);
-      await refreshRagDocuments();
-      setLogs(prev => [...prev, {
-        type: 'info',
-        content: `📄 RAG 文档已上传: ${file.name}`,
-        status: 'normal'
-      }]);
-    } catch (error) {
-      setLogs(prev => [...prev, {
-        type: 'error',
-        content: `RAG 上传失败: ${error.message}`,
-        status: 'danger'
-      }]);
-    } finally {
-      setRagUploading(false);
-    }
-  };
-
-  // 删除 RAG 文档
-  const handleRagDelete = async (documentId) => {
-    try {
-      await ragClient.deleteDocument(documentId);
-      await refreshRagDocuments();
-    } catch (error) {
-      console.error('Failed to delete RAG document:', error);
-    }
-  };
-
-  // 清空 RAG 知识库
-  const handleRagClear = async () => {
-    try {
-      await ragClient.clear();
-      setRagDocuments([]);
-      setRagQueryResults(null);
-    } catch (error) {
-      console.error('Failed to clear RAG:', error);
-    }
-  };
-
-  // 重置 RAG 知识库为预置数据
-  const handleRagReset = async () => {
-    try {
-      await ragClient.reset();
-      await refreshRagDocuments();
-      setRagQueryResults(null);
-    } catch (error) {
-      console.error('Failed to reset RAG:', error);
-    }
-  };
-
-  // 执行 RAG 查询（用于测试）
-  const performRagQuery = async (queryText) => {
-    if (ragMode !== 'real' || !ragServiceAvailable) {
-      return null;
-    }
-    try {
-      const response = await ragClient.query(queryText, 3);
-      setRagQueryResults(response);
-      return response.results || [];
-    } catch (error) {
-      console.error('RAG query failed:', error);
-      return [];
-    }
-  };
 
   // API 请求计时器
   useEffect(() => {
@@ -323,289 +175,6 @@ export default function App() {
       setApiElapsedTime(0);
     }
   }, [apiStatus]);
-
-  // Sandbox WebSocket 日志回调
-  const handleSandboxLog = useCallback((log) => {
-    setLogs(prev => [...prev, {
-      type: log.type,
-      content: log.content,
-      status: log.status,
-      timestamp: log.timestamp,
-      details: log.details,
-    }]);
-  }, []);
-
-  // 启动容器
-  const startContainer = async () => {
-    setSandboxStatus('connecting');
-    try {
-      const info = await sandboxClient.createContainer(sandboxImage);
-      setContainerInfo(info);
-      setSandboxStatus('running');
-
-      // 连接 WebSocket 获取实时日志
-      sandboxClient.connectLogs(handleSandboxLog, (error) => {
-        console.error('Sandbox WebSocket error:', error);
-      });
-
-      setLogs(prev => [...prev, {
-        type: 'container',
-        content: `容器已启动: ${info.container_id} (${info.image})`,
-        status: 'success',
-      }]);
-    } catch (error) {
-      setSandboxStatus('error');
-      setLogs(prev => [...prev, {
-        type: 'error',
-        content: `容器启动失败: ${error.message}`,
-        status: 'danger',
-      }]);
-    }
-  };
-
-  // 停止容器
-  const stopContainer = async () => {
-    sandboxClient.disconnectLogs();
-    try {
-      await sandboxClient.destroyContainer();
-      setContainerInfo(null);
-      setSandboxStatus('disconnected');
-      setSandboxFiles([]); // 清空沙箱文件列表
-      setLogs(prev => [...prev, {
-        type: 'container',
-        content: '容器已停止',
-        status: 'warning',
-      }]);
-    } catch (error) {
-      setLogs(prev => [...prev, {
-        type: 'error',
-        content: `容器停止失败: ${error.message}`,
-        status: 'danger',
-      }]);
-    }
-  };
-
-  // 上传文件到沙箱（不解析，直接写入容器文件系统）
-  const handleUploadToSandbox = async (e) => {
-    const files = e.target.files;
-    if (!files?.length || sandboxStatus !== 'running') return;
-
-    setUploadingSandboxFile(true);
-    try {
-      for (const file of files) {
-        // 读取文件为 ArrayBuffer 再转 base64
-        const bytes = await file.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const path = `/workspace/${safeName}`;
-
-        // 调用 sandbox API 写入（使用 is_base64 参数）
-        const response = await fetch(`${CONFIG.sandbox.baseUrl}/sandbox/tool`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: containerInfo.session_id,
-            tool: 'write_file',
-            params: { path, content: base64, is_base64: true }
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`上传失败: ${response.status}`);
-        }
-
-        // 更新文件列表
-        setSandboxFiles(prev => [...prev, { name: file.name, path, size: file.size }]);
-
-        // 添加日志
-        setLogs(prev => [...prev, {
-          type: 'data',
-          content: `📁 文件已上传到沙箱: ${path}`,
-          status: 'normal'
-        }]);
-      }
-    } catch (error) {
-      setLogs(prev => [...prev, {
-        type: 'error',
-        content: `文件上传失败: ${error.message}`,
-        status: 'danger'
-      }]);
-    } finally {
-      setUploadingSandboxFile(false);
-      e.target.value = ''; // 重置 input
-    }
-  };
-
-  // 从沙箱删除文件
-  const handleRemoveSandboxFile = async (path) => {
-    try {
-      await sandboxClient.runCommand(`rm -f "${path}"`);
-      setSandboxFiles(prev => prev.filter(f => f.path !== path));
-      setLogs(prev => [...prev, {
-        type: 'data',
-        content: `🗑️ 文件已删除: ${path}`,
-        status: 'normal'
-      }]);
-    } catch (error) {
-      setLogs(prev => [...prev, {
-        type: 'error',
-        content: `删除失败: ${error.message}`,
-        status: 'danger'
-      }]);
-    }
-  };
-
-  // 预置场景文件到沙箱
-  const presetSandboxFiles = async (filesMap) => {
-    if (!filesMap || sandboxStatus !== 'running') return;
-
-    for (const [path, content] of Object.entries(filesMap)) {
-      try {
-        await sandboxClient.writeFile(path, content);
-        const fileName = path.split('/').pop();
-        setSandboxFiles(prev => [...prev, {
-          name: fileName,
-          path,
-          size: content.length,
-          preset: true
-        }]);
-        setLogs(prev => [...prev, {
-          type: 'data',
-          content: `📁 预置文件: ${path}`,
-          status: 'normal'
-        }]);
-      } catch (error) {
-        setLogs(prev => [...prev, {
-          type: 'error',
-          content: `预置文件失败 ${path}: ${error.message}`,
-          status: 'danger'
-        }]);
-      }
-    }
-  };
-
-  // 刷新沙箱文件列表（从 /workspace/ 目录读取）
-  const refreshSandboxFiles = async () => {
-    if (sandboxStatus !== 'running') return;
-
-    try {
-      const result = await sandboxClient.runCommand('ls -la /workspace/ 2>/dev/null || echo "empty"');
-      if (!result.success) return;
-
-      const output = result.result?.output || '';
-      if (output.trim() === 'empty' || !output.trim()) {
-        setSandboxFiles([]);
-        return;
-      }
-
-      // 解析 ls -la 输出
-      const lines = output.split('\n').filter(line => line.trim() && !line.startsWith('total'));
-      const files = [];
-      for (const line of lines) {
-        const parts = line.split(/\s+/);
-        if (parts.length >= 9) {
-          const perms = parts[0];
-          const size = parseInt(parts[4]) || 0;
-          const name = parts.slice(8).join(' ');
-          // 跳过 . 和 .. 目录
-          if (name === '.' || name === '..') continue;
-          // 判断是否是目录
-          const isDir = perms.startsWith('d');
-          files.push({
-            name: isDir ? `📁 ${name}` : name,
-            path: `/workspace/${name}`,
-            size,
-            isDir
-          });
-        }
-      }
-      setSandboxFiles(files);
-    } catch (error) {
-      console.error('刷新文件列表失败:', error);
-    }
-  };
-
-  // 从沙箱下载文件
-  const handleDownloadSandboxFile = async (filePath, fileName) => {
-    if (sandboxStatus !== 'running') return;
-
-    try {
-      // 读取文件内容
-      const result = await sandboxClient.readFile(filePath);
-      if (!result.success) {
-        throw new Error(result.error || '读取失败');
-      }
-
-      const content = result.result;
-      // 创建 Blob 并下载
-      const blob = new Blob([content], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName || filePath.split('/').pop();
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      setLogs(prev => [...prev, {
-        type: 'data',
-        content: `📥 已下载: ${fileName}`,
-        status: 'normal'
-      }]);
-    } catch (error) {
-      setLogs(prev => [...prev, {
-        type: 'error',
-        content: `下载失败: ${error.message}`,
-        status: 'danger'
-      }]);
-    }
-  };
-
-  // 执行 shell 命令
-  const executeCommand = async () => {
-    if (!toolCommand.trim() || sandboxStatus !== 'running') return;
-
-    setToolResult(null);
-    setLogs(prev => [...prev, {
-      type: 'tool',
-      content: `执行命令: ${toolCommand}`,
-      status: 'normal',
-    }]);
-
-    try {
-      const result = await sandboxClient.runCommand(toolCommand);
-      setToolResult(result);
-
-      if (result.success) {
-        const output = result.result;
-        setLogs(prev => [...prev, {
-          type: 'tool',
-          content: `命令完成 (exit: ${output.exit_code})`,
-          status: output.exit_code === 0 ? 'success' : 'warning',
-        }]);
-      } else {
-        setLogs(prev => [...prev, {
-          type: 'error',
-          content: `命令失败: ${result.error}`,
-          status: 'danger',
-        }]);
-      }
-    } catch (error) {
-      setLogs(prev => [...prev, {
-        type: 'error',
-        content: `执行错误: ${error.message}`,
-        status: 'danger',
-      }]);
-    }
-  };
-
-  // 清理：组件卸载时断开 WebSocket
-  useEffect(() => {
-    return () => {
-      sandboxClient.disconnectLogs();
-    };
-  }, []);
 
   // 加载恶意文档说明文件
   useEffect(() => {
@@ -1652,47 +1221,6 @@ export default function App() {
     return typeMap[ext] || null;
   };
 
-  // 检测沙箱是否可用
-  const isSandboxAvailable = () => {
-    return sandboxEnabled && sandboxStatus === 'running' && containerInfo !== null;
-  };
-
-  // 检测是否选中了需要Docker的解析器
-  const requiresDockerParsers = () => {
-    const selected = [];
-    Object.entries(mcpParsers).forEach(([fileType, parserIds]) => {
-      const config = CONFIG.mcp.parsers[fileType];
-      if (!config) return;
-
-      parserIds.forEach(parserId => {
-        const tool = config.tools.find(t => t.id === parserId);
-        if (tool && tool.requiresDocker) {
-          selected.push({ fileType, parserId, toolName: tool.name });
-        }
-      });
-    });
-    return selected;
-  };
-
-  // 检测MCP-tools容器是否可用
-  const isMcpToolsContainerReady = () => {
-    return isSandboxAvailable() && containerInfo?.image === 'mcp-tools:latest';
-  };
-
-  // 根据文件大小和类型预估解析时间（ms）
-  const estimateParsingTime = (fileSize, fileType) => {
-    // 经验值：PDF OCR较慢，其他格式较快
-    const ratesPerMB = {
-      pdf: 8000,    // 8秒/MB（OCR慢）
-      docx: 500,    // 0.5秒/MB
-      xlsx: 300,    // 0.3秒/MB
-      image: 2000   // 2秒/MB（OCR）
-    };
-    const rate = ratesPerMB[fileType] || 1000;
-    const sizeMB = fileSize / (1024 * 1024);
-    return Math.max(1000, Math.ceil(sizeMB * rate));  // 最少1秒
-  };
-
   // 通过MCP后端服务解析文件
   const parseViaMcpBackend = async (file, parsers, abortController) => {
     console.log('🌐 调用MCP后端:', CONFIG.mcp.serverUrl, '解析器:', parsers);
@@ -2037,214 +1565,6 @@ print('\\n'.join(all_text))
     return `${fileContents}\n\n${customTestPayload}`;
   };
 
-  // 导出报告
-  const exportReport = () => {
-    const report = {
-      title: "LLM Agent 安全攻击场景测试报告",
-      generatedAt: new Date().toISOString(),
-      model: CONFIG.api.model,
-      scenarios: Object.entries(SCENARIOS).map(([key, s]) => ({
-        name: s.name,
-        attacks: s.attacks.map(a => ({
-          id: a.id, name: a.name,
-          type: ATTACK_TYPES[a.type].label,
-          level: RISK_LEVELS[a.level].label,
-          description: a.description,
-          testPayload: a.testPayload
-        }))
-      })),
-      totalAttacks: Object.values(SCENARIOS).reduce((a, s) => a + s.attacks.length, 0)
-    };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'attack-report.json'; a.click();
-  };
-
-  // 导出测试结果（包含 LLM 响应和评判）
-  const exportTestResult = () => {
-    if (!lastTestResult) {
-      alert('暂无测试结果，请先执行真实测试');
-      return;
-    }
-
-    const result = {
-      ...lastTestResult,
-      exportedAt: new Date().toISOString(),
-      logs: logs  // 包含完整日志
-    };
-
-    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `test-result-${lastTestResult.attack.id}-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // 保存测试结果到服务器
-  const saveToServer = async () => {
-    if (!lastTestResult) {
-      alert('暂无测试结果，请先执行真实测试');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const caseData = {
-        name: lastTestResult.attack.name,
-        sourceScenario: {
-          name: lastTestResult.scenario,
-          attackId: lastTestResult.attack.id,
-          attackName: lastTestResult.attack.name,
-        },
-        testConfig: {
-          model: lastTestResult.model,
-        },
-        payload: lastTestResult.payload,
-        response: lastTestResult.response,
-        judgment: lastTestResult.judgment,
-        conversations: messages,
-        logs: logs,
-        toolCalls: lastTestResult.toolCalls || [],
-        systemPrompt: lastTestResult.systemPrompt,
-      };
-      const saved = await saveCaseToServer(caseData);
-      alert(`保存成功！用例 ID: ${saved.id}`);
-      // 刷新已保存用例列表
-      if (viewMode === 'saved') {
-        loadSavedCases();
-      }
-    } catch (error) {
-      alert(`保存失败: ${error.message}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // 加载已保存用例列表
-  const loadSavedCases = async () => {
-    setLoadingSavedCases(true);
-    try {
-      const cases = await listSavedCases();
-      setSavedCases(cases);
-    } catch (error) {
-      console.error('加载已保存用例失败:', error);
-    } finally {
-      setLoadingSavedCases(false);
-    }
-  };
-
-  // 查看用例详情
-  const viewCaseDetail = async (caseId) => {
-    try {
-      const detail = await getCaseDetail(caseId);
-      setSelectedCase(detail);
-    } catch (error) {
-      alert(`获取详情失败: ${error.message}`);
-    }
-  };
-
-  // 删除用例
-  const handleDeleteCase = async (caseId) => {
-    if (!confirm('确定要删除这个用例吗？')) return;
-    try {
-      await deleteCase(caseId);
-      setSavedCases(prev => prev.filter(c => c.id !== caseId));
-      if (selectedCase?.id === caseId) {
-        setSelectedCase(null);
-      }
-    } catch (error) {
-      alert(`删除失败: ${error.message}`);
-    }
-  };
-
-  // 切换到已保存用例视图时加载列表
-  useEffect(() => {
-    if (viewMode === 'saved') {
-      loadSavedCases();
-    }
-  }, [viewMode]);
-
-  // 导出 HTML
-  const exportHTML = () => {
-    const attack = currentAttack;
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>${attack.name}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#0f172a;color:#fff;font-family:system-ui;padding:20px}
-.title{font-size:20px;font-weight:bold;margin-bottom:10px}
-.desc{color:#94a3b8;font-size:14px;margin-bottom:15px}
-.tags{display:flex;gap:8px;margin-bottom:20px}
-.tag{padding:4px 10px;border-radius:4px;font-size:12px}
-.tag-type{background:#7c3aed;color:#fff}
-.tag-level{background:#dc2626;color:#fff}
-.container{display:grid;grid-template-columns:1fr 1fr;gap:15px}
-.panel{background:#1e293b;border-radius:8px;padding:15px}
-.panel-title{font-size:14px;color:#94a3b8;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #334155}
-.chat{min-height:300px}
-.msg{max-width:85%;padding:10px 14px;border-radius:12px;margin-bottom:8px;font-size:13px;white-space:pre-wrap;opacity:0;animation:fadeIn 0.3s forwards}
-.msg-user{background:#2563eb;margin-left:auto;border-bottom-right-radius:4px}
-.msg-agent{background:#334155;border-bottom-left-radius:4px}
-.msg-injection{background:rgba(127,29,29,0.5);border:1px solid rgba(239,68,68,0.5)}
-.msg-danger{background:rgba(124,58,0,0.5);border:1px solid rgba(249,115,22,0.5)}
-.log{padding:8px;border-radius:4px;margin-bottom:4px;font-size:12px;font-family:monospace;border-left:2px solid;opacity:0;animation:fadeIn 0.3s forwards}
-.log-normal{background:rgba(51,65,85,0.5);border-color:#64748b}
-.log-warning{background:rgba(113,63,18,0.3);border-color:#eab308}
-.log-bypassed{background:rgba(124,45,18,0.3);border-color:#f97316}
-.log-danger{background:rgba(127,29,29,0.3);border-color:#ef4444}
-.log-label{display:inline-block;width:50px}
-@keyframes fadeIn{to{opacity:1}}
-</style></head><body>
-<div class="title">${attack.name}—${currentScenario.name}</div>
-<div class="desc">${attack.description}</div>
-<div class="tags"><span class="tag tag-type">${attackType.icon} ${attackType.label}</span><span class="tag tag-level">危害等级：${riskLevel.label}</span></div>
-<div class="container">
-<div class="panel"><div class="panel-title">🤖 被测模型：${CONFIG.api.model}</div><div class="chat" id="chat"></div></div>
-<div class="panel"><div class="panel-title">🖥️ 系统后台日志</div><div id="logs"></div></div>
-</div>
-<script>
-const msgs=${JSON.stringify(attack.conversations)};
-const logs=${JSON.stringify(attack.logs)};
-const chat=document.getElementById('chat');
-const logsEl=document.getElementById('logs');
-let msgIdx=0,logIdx=0;
-const logsPerMsg=Math.ceil(logs.length/msgs.length);
-async function play(){
-  for(const m of msgs){
-    const div=document.createElement('div');
-    div.className='msg msg-'+(m.role==='user'?'user':'agent')+(m.isInjection?' msg-injection':'')+(m.isDangerous?' msg-danger':'');
-    chat.appendChild(div);
-    for(let i=0;i<=m.content.length;i++){div.textContent=m.content.slice(0,i);await new Promise(r=>setTimeout(r,18));}
-    for(let i=0;i<logsPerMsg&&logIdx<logs.length;i++,logIdx++){
-      await new Promise(r=>setTimeout(r,350));
-      const l=logs[logIdx];
-      const ld=document.createElement('div');
-      ld.className='log log-'+l.status;
-      ld.innerHTML='<span class="log-label">['+{query:'查询',rule:'规则',tool:'工具',data:'数据',alert:'告警'}[l.type]+']</span>'+l.content;
-      logsEl.appendChild(ld);
-    }
-    await new Promise(r=>setTimeout(r,600));
-    msgIdx++;
-  }
-  while(logIdx<logs.length){
-    await new Promise(r=>setTimeout(r,350));
-    const l=logs[logIdx++];
-    const ld=document.createElement('div');
-    ld.className='log log-'+l.status;
-    ld.innerHTML='<span class="log-label">['+{query:'查询',rule:'规则',tool:'工具',data:'数据',alert:'告警'}[l.type]+']</span>'+l.content;
-    logsEl.appendChild(ld);
-  }
-}
-play();
-</script></body></html>`;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${attack.id}-${attack.name}.html`; a.click();
-  };
 
   return (
     <div className="h-screen bg-slate-900 text-white flex text-sm overflow-hidden">
@@ -2474,11 +1794,11 @@ play();
               <button onClick={exportReport} className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 rounded">
                 📄 场景列表 (JSON)
               </button>
-              <button onClick={exportHTML} className="w-full py-1.5 bg-green-600 hover:bg-green-500 rounded">
+              <button onClick={() => exportHTML({ attack: currentAttack, scenario: currentScenario, attackType, riskLevel })} className="w-full py-1.5 bg-green-600 hover:bg-green-500 rounded">
                 🎬 当前演示 (HTML)
               </button>
               <button
-                onClick={exportTestResult}
+                onClick={() => exportTestResult(lastTestResult, logs)}
                 disabled={!lastTestResult}
                 className={`w-full py-1.5 rounded ${lastTestResult ? 'bg-purple-600 hover:bg-purple-500' : 'bg-slate-600 cursor-not-allowed'}`}
               >
