@@ -115,6 +115,18 @@ export class AttackBuilder {
     return this;
   }
 
+  // 声明场景所需工具
+  requiredTools(tools) {
+    this._attack.requiredTools = tools;
+    return this;
+  }
+
+  // 声明环境预置（文件、数据库等）
+  toolSetup(setup) {
+    this._attack.toolSetup = setup;
+    return this;
+  }
+
   build() {
     return this._attack;
   }

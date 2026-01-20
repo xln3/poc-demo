@@ -65,6 +65,9 @@ export default function App() {
   const [toolCommand, setToolCommand] = useState('');
   const [toolResult, setToolResult] = useState(null);
   const [showSandboxPanel, setShowSandboxPanel] = useState(true);
+  const [sandboxFiles, setSandboxFiles] = useState([]); // [{name, path, size, preset?}]
+  const [uploadingSandboxFile, setUploadingSandboxFile] = useState(false);
+  const [lastTestResult, setLastTestResult] = useState(null); // 存储最后一次测试结果
 
   // LLM 参数配置 (所有模式共享)
   const [llmTemperature, setLlmTemperature] = useState(CONFIG.llmParams.temperature);
@@ -83,6 +86,21 @@ export default function App() {
     });
     return parsers;
   });
+
+  // 工具调用配置 (Tool Calling)
+  const [toolsEnabled, setToolsEnabled] = useState(CONFIG.tools.enabled);
+  const [toolsConfigCollapsed, setToolsConfigCollapsed] = useState(true);
+  const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false); // 提示词配置面板
+  const [enabledTools, setEnabledTools] = useState(() => {
+    // 默认启用 safe 类工具
+    const tools = {};
+    Object.entries(CONFIG.tools.available).forEach(([name, tool]) => {
+      tools[name] = tool.category === 'safe';
+    });
+    return tools;
+  });
+  const [maxToolCalls, setMaxToolCalls] = useState(CONFIG.tools.maxCalls);
+  const [toolCallHistory, setToolCallHistory] = useState([]);
 
   // API 请求计时器
   const [apiStartTime, setApiStartTime] = useState(null);
@@ -201,6 +219,7 @@ export default function App() {
       await sandboxClient.destroyContainer();
       setContainerInfo(null);
       setSandboxStatus('disconnected');
+      setSandboxFiles([]); // 清空沙箱文件列表
       setLogs(prev => [...prev, {
         type: 'container',
         content: '容器已停止',
@@ -211,6 +230,183 @@ export default function App() {
         type: 'error',
         content: `容器停止失败: ${error.message}`,
         status: 'danger',
+      }]);
+    }
+  };
+
+  // 上传文件到沙箱（不解析，直接写入容器文件系统）
+  const handleUploadToSandbox = async (e) => {
+    const files = e.target.files;
+    if (!files?.length || sandboxStatus !== 'running') return;
+
+    setUploadingSandboxFile(true);
+    try {
+      for (const file of files) {
+        // 读取文件为 ArrayBuffer 再转 base64
+        const bytes = await file.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `/workspace/${safeName}`;
+
+        // 调用 sandbox API 写入（使用 is_base64 参数）
+        const response = await fetch(`${CONFIG.sandbox.baseUrl}/sandbox/tool`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: containerInfo.session_id,
+            tool: 'write_file',
+            params: { path, content: base64, is_base64: true }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`上传失败: ${response.status}`);
+        }
+
+        // 更新文件列表
+        setSandboxFiles(prev => [...prev, { name: file.name, path, size: file.size }]);
+
+        // 添加日志
+        setLogs(prev => [...prev, {
+          type: 'data',
+          content: `📁 文件已上传到沙箱: ${path}`,
+          status: 'normal'
+        }]);
+      }
+    } catch (error) {
+      setLogs(prev => [...prev, {
+        type: 'error',
+        content: `文件上传失败: ${error.message}`,
+        status: 'danger'
+      }]);
+    } finally {
+      setUploadingSandboxFile(false);
+      e.target.value = ''; // 重置 input
+    }
+  };
+
+  // 从沙箱删除文件
+  const handleRemoveSandboxFile = async (path) => {
+    try {
+      await sandboxClient.runCommand(`rm -f "${path}"`);
+      setSandboxFiles(prev => prev.filter(f => f.path !== path));
+      setLogs(prev => [...prev, {
+        type: 'data',
+        content: `🗑️ 文件已删除: ${path}`,
+        status: 'normal'
+      }]);
+    } catch (error) {
+      setLogs(prev => [...prev, {
+        type: 'error',
+        content: `删除失败: ${error.message}`,
+        status: 'danger'
+      }]);
+    }
+  };
+
+  // 预置场景文件到沙箱
+  const presetSandboxFiles = async (filesMap) => {
+    if (!filesMap || sandboxStatus !== 'running') return;
+
+    for (const [path, content] of Object.entries(filesMap)) {
+      try {
+        await sandboxClient.writeFile(path, content);
+        const fileName = path.split('/').pop();
+        setSandboxFiles(prev => [...prev, {
+          name: fileName,
+          path,
+          size: content.length,
+          preset: true
+        }]);
+        setLogs(prev => [...prev, {
+          type: 'data',
+          content: `📁 预置文件: ${path}`,
+          status: 'normal'
+        }]);
+      } catch (error) {
+        setLogs(prev => [...prev, {
+          type: 'error',
+          content: `预置文件失败 ${path}: ${error.message}`,
+          status: 'danger'
+        }]);
+      }
+    }
+  };
+
+  // 刷新沙箱文件列表（从 /workspace/ 目录读取）
+  const refreshSandboxFiles = async () => {
+    if (sandboxStatus !== 'running') return;
+
+    try {
+      const result = await sandboxClient.runCommand('ls -la /workspace/ 2>/dev/null || echo "empty"');
+      if (!result.success) return;
+
+      const output = result.result?.output || '';
+      if (output.trim() === 'empty' || !output.trim()) {
+        setSandboxFiles([]);
+        return;
+      }
+
+      // 解析 ls -la 输出
+      const lines = output.split('\n').filter(line => line.trim() && !line.startsWith('total'));
+      const files = [];
+      for (const line of lines) {
+        const parts = line.split(/\s+/);
+        if (parts.length >= 9) {
+          const perms = parts[0];
+          const size = parseInt(parts[4]) || 0;
+          const name = parts.slice(8).join(' ');
+          // 跳过 . 和 .. 目录
+          if (name === '.' || name === '..') continue;
+          // 判断是否是目录
+          const isDir = perms.startsWith('d');
+          files.push({
+            name: isDir ? `📁 ${name}` : name,
+            path: `/workspace/${name}`,
+            size,
+            isDir
+          });
+        }
+      }
+      setSandboxFiles(files);
+    } catch (error) {
+      console.error('刷新文件列表失败:', error);
+    }
+  };
+
+  // 从沙箱下载文件
+  const handleDownloadSandboxFile = async (filePath, fileName) => {
+    if (sandboxStatus !== 'running') return;
+
+    try {
+      // 读取文件内容
+      const result = await sandboxClient.readFile(filePath);
+      if (!result.success) {
+        throw new Error(result.error || '读取失败');
+      }
+
+      const content = result.result;
+      // 创建 Blob 并下载
+      const blob = new Blob([content], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || filePath.split('/').pop();
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setLogs(prev => [...prev, {
+        type: 'data',
+        content: `📥 已下载: ${fileName}`,
+        status: 'normal'
+      }]);
+    } catch (error) {
+      setLogs(prev => [...prev, {
+        type: 'error',
+        content: `下载失败: ${error.message}`,
+        status: 'danger'
       }]);
     }
   };
@@ -291,6 +487,17 @@ export default function App() {
     setIsEditingPayload(false);
     // 重置添加的文件
     setPayloadFiles([]);
+
+    // 场景切换时自动启用所需工具
+    if (currentScenario.requiredTools && currentScenario.requiredTools.length > 0) {
+      const newEnabledTools = { ...enabledTools };
+      currentScenario.requiredTools.forEach(toolName => {
+        if (CONFIG.tools.available[toolName]) {
+          newEnabledTools[toolName] = true;
+        }
+      });
+      setEnabledTools(newEnabledTools);
+    }
 
     if (mode === 'mock') {
       const timer = setTimeout(() => {
@@ -438,36 +645,194 @@ export default function App() {
     // 获取实际使用的系统提示词（自定义或默认）
     const activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
 
+    // 检查是否启用了工具调用
+    const useToolCalling = toolsEnabled && sandboxStatus === 'running';
+    const enabledToolNames = useToolCalling
+      ? Object.entries(enabledTools).filter(([_, enabled]) => enabled).map(([name]) => name)
+      : [];
+
+    if (useToolCalling && enabledToolNames.length > 0) {
+      setLogs(prev => [...prev,
+        { type: 'tool', content: `🔧 工具调用已启用: ${enabledToolNames.length} 个工具`, status: 'normal' }
+      ]);
+    }
+
     try {
-      const response = await CONFIG.callModel(
-        [{ role: 'user', content: actualPayload }],
-        activeSystemPrompt,
-        selectedModel,
-        { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP }
-      );
+      // 构建消息历史
+      let messageHistory = [{ role: 'user', content: actualPayload }];
+      let finalResponse = '';
+      let totalApiTime = 0;
+      let toolCallCount = 0;
+      let allToolCalls = [];
 
-      // Extract content from response object (handles both old string format and new object format)
-      const responseContent = typeof response === 'object' ? response.content : response;
-      const apiTime = typeof response === 'object' ? response.timing.totalTime : null;
+      // 工具调用循环
+      while (true) {
+        let response;
 
-      setRealResponse(responseContent);
+        if (useToolCalling && enabledToolNames.length > 0) {
+          // 使用带工具的 API 调用
+          const toolDefinitions = CONFIG.buildToolDefinitions(enabledToolNames);
+          response = await CONFIG.callModelWithTools(
+            messageHistory,
+            activeSystemPrompt,
+            selectedModel,
+            { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
+            toolDefinitions
+          );
+        } else {
+          // 普通 API 调用
+          response = await CONFIG.callModel(
+            messageHistory,
+            activeSystemPrompt,
+            selectedModel,
+            { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP }
+          );
+        }
+
+        totalApiTime += response.timing?.totalTime || 0;
+
+        // 检查是否有工具调用
+        const toolCalls = response.tool_calls || [];
+
+        if (toolCalls.length > 0 && useToolCalling) {
+          // 有工具调用
+          toolCallCount++;
+
+          // 检查是否超过最大调用次数
+          if (toolCallCount > maxToolCalls) {
+            setLogs(prev => [...prev,
+              { type: 'alert', content: `⚠️ 达到最大工具调用次数 (${maxToolCalls})`, status: 'warning' }
+            ]);
+            finalResponse = response.content || '(工具调用被中断)';
+            break;
+          }
+
+          // 将 assistant 消息添加到历史
+          messageHistory.push({
+            role: 'assistant',
+            content: response.content || null,
+            tool_calls: toolCalls
+          });
+
+          // 执行每个工具调用
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function?.name;
+            const toolId = toolCall.id;
+            const rawArgs = toolCall.function?.arguments || '{}';
+
+            // 解析工具参数（带错误处理）
+            let toolArgs;
+            try {
+              toolArgs = JSON.parse(rawArgs);
+            } catch (parseErr) {
+              console.error('工具参数 JSON 解析失败:', parseErr, 'Raw:', rawArgs);
+              setLogs(prev => [...prev,
+                { type: 'error', content: `🔧 工具 ${toolName}: 参数解析失败`, status: 'danger' },
+                { type: 'data', content: `   原始参数: ${rawArgs.substring(0, 200)}...`, status: 'warning', expandable: true, fullContent: rawArgs }
+              ]);
+              // 将解析错误作为工具结果返回给 LLM
+              messageHistory.push({
+                role: 'tool',
+                tool_call_id: toolId,
+                content: `Error: Failed to parse tool arguments - ${parseErr.message}`
+              });
+              continue;
+            }
+
+            // 记录工具调用
+            allToolCalls.push({ name: toolName, args: toolArgs, id: toolId });
+
+            // 添加日志
+            const toolConfig = CONFIG.tools.available[toolName];
+            const toolLabel = toolConfig?.label || toolName;
+            const toolCategory = toolConfig?.category || 'unknown';
+            const categoryColor = toolCategory === 'safe' ? 'normal' : toolCategory === 'risky' ? 'warning' : 'danger';
+
+            setLogs(prev => [...prev,
+              { type: 'tool', content: `🔧 调用工具: ${toolLabel}`, status: categoryColor },
+              { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
+            ]);
+
+            // 在沙箱中执行工具
+            let toolResult;
+            try {
+              const result = await sandboxClient.executeTool(toolName, toolArgs);
+              toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
+
+              setLogs(prev => [...prev,
+                { type: 'data', content: `   结果: ${toolResult.length > 100 ? toolResult.substring(0, 100) + '...' : toolResult}`, status: result.success ? 'normal' : 'warning', expandable: toolResult.length > 100, fullContent: toolResult }
+              ]);
+            } catch (err) {
+              toolResult = `Error: ${err.message}`;
+              setLogs(prev => [...prev,
+                { type: 'error', content: `   执行失败: ${err.message}`, status: 'danger' }
+              ]);
+            }
+
+            // 将工具结果添加到消息历史
+            messageHistory.push({
+              role: 'tool',
+              tool_call_id: toolId,
+              content: toolResult
+            });
+          }
+
+          // 显示中间状态
+          if (response.content) {
+            setMessages(prev => [...prev, { role: 'agent', content: response.content, isToolThinking: true }]);
+          }
+
+          // 继续下一轮
+          continue;
+        }
+
+        // 没有工具调用，获取最终响应
+        finalResponse = response.content || '(无响应)';
+        break;
+      }
+
+      setRealResponse(finalResponse);
 
       // 显示模型响应
-      const agentMsg = { role: 'agent', content: responseContent };
-      setMessages(prev => [...prev, agentMsg]);
+      const agentMsg = { role: 'agent', content: finalResponse };
+      setMessages(prev => [...prev.filter(m => !m.isToolThinking), agentMsg]);
 
       // 添加日志：收到响应 + timing
+      const toolCallSummary = toolCallCount > 0 ? ` (${toolCallCount} 次工具调用)` : '';
       setLogs(prev => [
         ...prev,
-        { type: 'data', content: `收到响应 (${responseContent.length} 字符)`, status: 'normal', expandable: true, fullContent: responseContent },
-        ...(apiTime ? [{ type: 'timing', content: `⏱️ API 耗时: ${apiTime}ms`, status: 'normal' }] : []),
+        { type: 'data', content: `收到最终响应 (${finalResponse.length} 字符)${toolCallSummary}`, status: 'normal', expandable: true, fullContent: finalResponse },
+        { type: 'timing', content: `⏱️ 总 API 耗时: ${totalApiTime}ms`, status: 'normal' },
         { type: 'judge', content: `正在使用 ${CONFIG.judgeModel} 评判攻击结果...`, status: 'normal' }
       ]);
 
-      // 调用评判模型（传入实际发送的 payload）
-      const judgeResult = await CONFIG.judgeAttackSuccess(attack, activeSystemPrompt, responseContent, actualPayload);
+      // 调用评判模型（传入实际发送的 payload 和工具调用历史）
+      const judgeContext = toolCallCount > 0
+        ? `${actualPayload}\n\n[工具调用记录]\n${allToolCalls.map(tc => `- ${tc.name}: ${JSON.stringify(tc.args)}`).join('\n')}`
+        : actualPayload;
+      const judgeResult = await CONFIG.judgeAttackSuccess(attack, activeSystemPrompt, finalResponse, judgeContext);
 
       setApiStatus('success');
+
+      // 保存测试结果
+      setLastTestResult({
+        timestamp: new Date().toISOString(),
+        scenario: currentScenario.name,
+        attack: {
+          id: attack.id,
+          name: attack.name,
+          type: attack.type,
+          level: attack.level,
+          description: attack.description
+        },
+        model: selectedModel,
+        systemPrompt: activeSystemPrompt,
+        payload: actualPayload,
+        response: finalResponse,
+        toolCalls: allToolCalls,
+        judgment: judgeResult,
+        apiTime: totalApiTime
+      });
 
       // 根据评判结果添加日志
       if (judgeResult.success === true) {
@@ -501,7 +866,7 @@ export default function App() {
     }
   };
 
-  const selectAttack = (scenarioKey, idx) => {
+  const selectAttack = async (scenarioKey, idx) => {
     const scenario = SCENARIOS[scenarioKey];
     const attack = scenario.attacks[idx];
     // 找到该场景所属的能力层级
@@ -510,6 +875,19 @@ export default function App() {
     )?.[0] || 'F1-conversation';
     setExpanded({ type: level, scenario: scenarioKey });
     setSelectedAttack({ scenario: scenarioKey, index: scenario.attacks.findIndex(a => a.id === attack.id) });
+
+    // 如果场景有预置文件且沙箱运行中，自动预置文件
+    if (scenario.sandboxFiles && sandboxStatus === 'running') {
+      // 先清除现有预置文件
+      const existingPresetPaths = sandboxFiles.filter(f => f.preset).map(f => f.path);
+      for (const path of existingPresetPaths) {
+        await sandboxClient.runCommand(`rm -f "${path}"`);
+      }
+      setSandboxFiles(prev => prev.filter(f => !f.preset));
+
+      // 预置新场景的文件
+      await presetSandboxFiles(scenario.sandboxFiles);
+    }
   };
 
   const toggleType = (type) => setExpanded(prev => ({ ...prev, type: prev.type === type ? null : type }));
@@ -939,6 +1317,28 @@ print('\\n'.join(all_text))
     a.href = url; a.download = 'attack-report.json'; a.click();
   };
 
+  // 导出测试结果（包含 LLM 响应和评判）
+  const exportTestResult = () => {
+    if (!lastTestResult) {
+      alert('暂无测试结果，请先执行真实测试');
+      return;
+    }
+
+    const result = {
+      ...lastTestResult,
+      exportedAt: new Date().toISOString(),
+      logs: logs  // 包含完整日志
+    };
+
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `test-result-${lastTestResult.attack.id}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // 导出 HTML
   const exportHTML = () => {
     const attack = currentAttack;
@@ -1019,9 +1419,9 @@ play();
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex text-sm">
+    <div className="h-screen bg-slate-900 text-white flex text-sm overflow-hidden">
       {/* 滚动条样式已移至 index.css */}
-      
+
       {/* 左侧导航 */}
       <div className="w-64 bg-slate-800 p-3 overflow-y-auto custom-scroll flex-shrink-0 border-r border-slate-700">
         <h1 className="font-bold text-base mb-3">🛡️ 攻击场景库</h1>
@@ -1109,10 +1509,79 @@ play();
               </div>
 
               {containerInfo && sandboxStatus === 'running' && (
-                <div className="mt-2 text-xs text-slate-400 font-mono">
-                  <div>ID: {containerInfo.container_id}</div>
-                  <div>Session: {containerInfo.session_id}</div>
-                </div>
+                <>
+                  <div className="mt-2 text-xs text-slate-400 font-mono">
+                    <div>ID: {containerInfo.container_id}</div>
+                    <div>Session: {containerInfo.session_id}</div>
+                  </div>
+
+                  {/* 上传文件到沙箱 */}
+                  <div className="mt-3 pt-2 border-t border-slate-600">
+                    <input
+                      type="file"
+                      id="sandbox-file-input"
+                      className="hidden"
+                      multiple
+                      onChange={handleUploadToSandbox}
+                    />
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => document.getElementById('sandbox-file-input').click()}
+                        disabled={uploadingSandboxFile}
+                        className="flex-1 py-1.5 rounded text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 transition"
+                        title="上传文件到沙箱容器的 /workspace 目录"
+                      >
+                        {uploadingSandboxFile ? '⏳ 上传中...' : '📤 上传'}
+                      </button>
+                      <button
+                        onClick={refreshSandboxFiles}
+                        className="px-3 py-1.5 rounded text-xs bg-slate-600 hover:bg-slate-500 transition"
+                        title="刷新文件列表"
+                      >
+                        🔄
+                      </button>
+                    </div>
+
+                    {/* 沙箱文件列表 */}
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>沙箱文件 ({sandboxFiles.length})</span>
+                      </div>
+                      {sandboxFiles.length === 0 ? (
+                        <div className="text-xs text-slate-600 text-center py-2">
+                          点击 🔄 刷新文件列表
+                        </div>
+                      ) : (
+                        sandboxFiles.map(f => (
+                          <div key={f.path} className="flex items-center text-xs bg-slate-700 px-2 py-1 rounded group">
+                            <span className="truncate flex-1" title={f.path}>
+                              {f.preset && <span className="text-emerald-400 mr-1">⚙️</span>}
+                              {f.isDir ? f.name : f.name}
+                            </span>
+                            <div className="flex gap-1 ml-1 flex-shrink-0">
+                              {!f.isDir && (
+                                <button
+                                  onClick={() => handleDownloadSandboxFile(f.path, f.name.replace('📁 ', ''))}
+                                  className="text-blue-400 hover:text-blue-300 opacity-60 group-hover:opacity-100"
+                                  title="下载文件"
+                                >
+                                  📥
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleRemoveSandboxFile(f.path)}
+                                className="text-red-400 hover:text-red-300 opacity-60 group-hover:opacity-100"
+                                title="删除文件"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
             </>
           ) : (
@@ -1134,10 +1603,17 @@ play();
           {showExport && (
             <div className="mt-2 p-2 bg-slate-700 rounded text-xs space-y-2">
               <button onClick={exportReport} className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 rounded">
-                📄 测试报告 (JSON)
+                📄 场景列表 (JSON)
               </button>
               <button onClick={exportHTML} className="w-full py-1.5 bg-green-600 hover:bg-green-500 rounded">
                 🎬 当前演示 (HTML)
+              </button>
+              <button
+                onClick={exportTestResult}
+                disabled={!lastTestResult}
+                className={`w-full py-1.5 rounded ${lastTestResult ? 'bg-purple-600 hover:bg-purple-500' : 'bg-slate-600 cursor-not-allowed'}`}
+              >
+                📊 测试结果 (JSON) {lastTestResult ? '✓' : ''}
               </button>
             </div>
           )}
@@ -1581,7 +2057,10 @@ play();
                 </div>
                 {/* MCP 开关 */}
                 <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
+                  <label
+                    className="flex items-center gap-1.5 cursor-pointer"
+                    title="启用后，上传的文件将被解析提取文本内容"
+                  >
                     <input
                       type="checkbox"
                       checked={mcpEnabled}
@@ -1594,6 +2073,32 @@ play();
                     <span className="text-xs text-purple-400">
                       ({Object.values(mcpParsers).flat().length} 工具)
                     </span>
+                  )}
+                </div>
+                {/* 工具调用开关 */}
+                <div className="flex items-center gap-2">
+                  <label
+                    className="flex items-center gap-1.5 cursor-pointer"
+                    title="启用后，LLM 可调用沙箱中的工具执行操作"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={toolsEnabled}
+                      onChange={(e) => setToolsEnabled(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
+                    />
+                    <span className="text-xs text-slate-400">工具调用</span>
+                  </label>
+                  {toolsEnabled && (
+                    sandboxStatus === 'running' ? (
+                      <span className="text-xs text-cyan-400">
+                        ({Object.values(enabledTools).filter(Boolean).length} 个)
+                      </span>
+                    ) : (
+                      <span className="text-xs text-yellow-400 animate-pulse">
+                        ⚠️ 需启动沙箱
+                      </span>
+                    )
                   )}
                 </div>
               </div>
@@ -1689,6 +2194,120 @@ play();
               </div>
             )}
 
+            {/* 工具调用配置面板 */}
+            {toolsEnabled && (
+              <div className="mb-3 p-2 bg-slate-900 rounded border border-cyan-900/50">
+                <div className="text-xs text-cyan-400 flex items-center justify-between">
+                  <button
+                    onClick={() => setToolsConfigCollapsed(!toolsConfigCollapsed)}
+                    className="flex items-center gap-2 hover:text-cyan-300 transition"
+                  >
+                    <span>{toolsConfigCollapsed ? '▶' : '▼'}</span>
+                    <span>🔧 工具调用配置</span>
+                  </button>
+                  <span className="text-slate-500 text-[10px]">
+                    已启用 {Object.values(enabledTools).filter(Boolean).length} / {Object.keys(enabledTools).length} 个工具
+                  </span>
+                </div>
+                {!toolsConfigCollapsed && (
+                  <>
+                    <div className="mt-2 mb-2 flex items-center gap-4 text-xs">
+                      <span className="text-slate-400">最大调用次数:</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="500"
+                        value={maxToolCalls}
+                        onChange={(e) => setMaxToolCalls(parseInt(e.target.value) || 10)}
+                        className="w-16 bg-slate-800 border border-slate-600 rounded px-1 text-cyan-400 font-mono text-xs"
+                      />
+                      <div className="flex gap-2 ml-auto">
+                        <button
+                          onClick={() => {
+                            const newTools = {};
+                            Object.keys(enabledTools).forEach(name => { newTools[name] = true; });
+                            setEnabledTools(newTools);
+                          }}
+                          className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-slate-300"
+                        >
+                          全选
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newTools = {};
+                            Object.entries(CONFIG.tools.available).forEach(([name, tool]) => {
+                              newTools[name] = tool.category === 'safe';
+                            });
+                            setEnabledTools(newTools);
+                          }}
+                          className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-slate-300"
+                        >
+                          仅安全
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newTools = {};
+                            Object.keys(enabledTools).forEach(name => { newTools[name] = false; });
+                            setEnabledTools(newTools);
+                          }}
+                          className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-slate-300"
+                        >
+                          全不选
+                        </button>
+                      </div>
+                    </div>
+                    {/* 按类别显示工具 */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {Object.entries(CONFIG.tools.categories).map(([category, catConfig]) => (
+                        <div key={category} className={`bg-slate-800 rounded p-2 border-l-2 ${
+                          category === 'safe' ? 'border-green-500' :
+                          category === 'risky' ? 'border-orange-500' : 'border-red-500'
+                        }`}>
+                          <div className={`text-xs font-medium mb-1.5 ${
+                            category === 'safe' ? 'text-green-400' :
+                            category === 'risky' ? 'text-orange-400' : 'text-red-400'
+                          }`}>
+                            {catConfig.label}
+                          </div>
+                          <div className="space-y-1">
+                            {Object.entries(CONFIG.tools.available)
+                              .filter(([_, tool]) => tool.category === category)
+                              .map(([name, tool]) => (
+                                <label
+                                  key={name}
+                                  className={`flex items-center gap-1.5 text-xs cursor-pointer p-1 rounded transition ${
+                                    enabledTools[name] ? 'bg-slate-700/50' : 'hover:bg-slate-700/30'
+                                  }`}
+                                  title={tool.description}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={enabledTools[name] || false}
+                                    onChange={(e) => {
+                                      setEnabledTools(prev => ({
+                                        ...prev,
+                                        [name]: e.target.checked
+                                      }));
+                                    }}
+                                    className="w-3 h-3 rounded border-slate-500 bg-slate-700 text-cyan-500"
+                                  />
+                                  <span className={enabledTools[name] ? 'text-slate-200' : 'text-slate-400'}>
+                                    {tool.label}
+                                  </span>
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[10px] text-slate-500">
+                      启用工具后，LLM 可在测试中调用这些工具。工具将在沙箱中执行。
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* 解析进度指示器 */}
             {isParsingFile && parsingProgress && (
               <div className="mb-2 p-3 bg-slate-800 rounded border border-blue-500">
@@ -1734,211 +2353,248 @@ play();
               </div>
             )}
 
-            {/* LLM 配置和测试 Payload 并排显示 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {/* LLM 配置模块 */}
-              <div className="bg-slate-900 rounded border border-slate-700 flex flex-col">
-                {/* 标题栏 - 参数显示在标题行 */}
-                <div className="flex items-center justify-between p-2 border-b border-slate-700">
-                  <div className="flex items-center gap-3 flex-wrap text-xs">
-                    <span className="text-slate-400 font-medium">LLM 配置</span>
-                    {/* 参数内联显示/编辑 */}
-                    <span className="text-slate-500">Temperature</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="2"
-                      step="0.1"
-                      value={llmTemperature}
-                      onChange={(e) => setLlmTemperature(parseFloat(e.target.value) || 0)}
-                      disabled={!isEditingLlmConfig}
-                      className={`w-12 bg-slate-800 border rounded px-1 text-cyan-400 font-mono text-xs ${
-                        isEditingLlmConfig ? 'border-blue-500' : 'border-slate-600'
-                      }`}
-                    />
-                    <span className="text-slate-500">Max Tokens</span>
-                    <input
-                      type="number"
-                      min="256"
-                      max="131072"
-                      step="1024"
-                      value={llmMaxTokens}
-                      onChange={(e) => setLlmMaxTokens(parseInt(e.target.value) || 256)}
-                      disabled={!isEditingLlmConfig}
-                      className={`w-16 bg-slate-800 border rounded px-1 text-cyan-400 font-mono text-xs ${
-                        isEditingLlmConfig ? 'border-blue-500' : 'border-slate-600'
-                      }`}
-                    />
-                    <span className="text-slate-500">Top P</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={llmTopP}
-                      onChange={(e) => setLlmTopP(parseFloat(e.target.value) || 0)}
-                      disabled={!isEditingLlmConfig}
-                      className={`w-12 bg-slate-800 border rounded px-1 text-cyan-400 font-mono text-xs ${
-                        isEditingLlmConfig ? 'border-blue-500' : 'border-slate-600'
-                      }`}
-                    />
-                    {customSystemPrompt !== currentScenario.systemPrompt && (
-                      <span className="text-yellow-400">(已修改)</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {isEditingLlmConfig ? (
-                      <>
-                        <button
-                          onClick={() => setIsEditingLlmConfig(false)}
-                          className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
-                        >
-                          ✓ 保存
-                        </button>
-                        <button
-                          onClick={() => {
-                            setCustomSystemPrompt(currentScenario.systemPrompt || '');
-                            setLlmTemperature(CONFIG.llmParams.temperature);
-                            setLlmMaxTokens(CONFIG.llmParams.max_tokens);
-                            setLlmTopP(CONFIG.llmParams.top_p);
-                            setIsEditingLlmConfig(false);
-                          }}
-                          className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
-                        >
-                          ✕ 重置
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setIsEditingLlmConfig(true)}
-                          className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
-                        >
-                          ✏️ 修改
-                        </button>
-                        <button
-                          onClick={() => {
-                            setCustomSystemPrompt(currentScenario.systemPrompt || '');
-                            setLlmTemperature(CONFIG.llmParams.temperature);
-                            setLlmMaxTokens(CONFIG.llmParams.max_tokens);
-                            setLlmTopP(CONFIG.llmParams.top_p);
-                          }}
-                          className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
-                        >
-                          🔄 重置
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {/* 内容区 - 系统提示词 */}
-                <div className="p-2 flex-1">
-                  {isEditingLlmConfig ? (
-                    <textarea
-                      value={customSystemPrompt}
-                      onChange={(e) => setCustomSystemPrompt(e.target.value)}
-                      className="w-full h-full min-h-[10.5rem] max-h-[10.5rem] text-xs bg-slate-800 p-2 rounded border border-blue-500 text-cyan-300 font-mono resize-none focus:outline-none custom-scroll"
-                      placeholder="输入系统提示词..."
-                    />
-                  ) : (
-                    <pre className="text-xs bg-slate-800 p-2 rounded overflow-auto max-h-[10.5rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
-                      {customSystemPrompt || '(无系统提示词)'}
-                    </pre>
+            {/* 提示词配置区域 - 可折叠 */}
+            <div className="mb-3 bg-slate-900 rounded border border-slate-700">
+              {/* 折叠标题栏 */}
+              <div className="flex items-center justify-between p-2 border-b border-slate-700">
+                <button
+                  onClick={() => setPromptConfigCollapsed(!promptConfigCollapsed)}
+                  className="flex items-center gap-2 text-xs text-slate-300 hover:text-slate-100 transition"
+                >
+                  <span>{promptConfigCollapsed ? '▶' : '▼'}</span>
+                  <span className="font-medium">📝 提示词配置</span>
+                  {(customSystemPrompt !== currentScenario.systemPrompt || customTestPayload !== currentAttack.testPayload || payloadFiles.length > 0) && (
+                    <span className="text-yellow-400">(已修改)</span>
+                  )}
+                </button>
+                <div className="flex items-center gap-3 text-xs">
+                  {/* 显示场景所需工具 */}
+                  {currentScenario.requiredTools && currentScenario.requiredTools.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500">所需工具:</span>
+                      {currentScenario.requiredTools.map(tool => (
+                        <span key={tool} className="px-1.5 py-0.5 bg-cyan-900/50 text-cyan-400 rounded text-[10px] font-mono">
+                          {tool}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* 测试 Payload 模块 */}
-              <div className="bg-slate-900 rounded border border-slate-700 flex flex-col">
-                {/* 标题栏 */}
-                <div className="flex items-center justify-between p-2 border-b border-slate-700">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-slate-400 font-medium">🎯 测试 Payload</span>
-                    {(customTestPayload !== currentAttack.testPayload || payloadFiles.length > 0) && (
-                      <span className="text-yellow-400">(已修改)</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {isEditingPayload && (
-                      <label className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded cursor-pointer transition">
-                        + 添加文件
-                        <input type="file" className="hidden" onChange={handleAddFile} multiple />
-                      </label>
-                    )}
-                    {isEditingPayload ? (
-                      <>
-                        <button
-                          onClick={() => setIsEditingPayload(false)}
-                          className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
-                        >
-                          ✓ 保存
-                        </button>
-                        <button
-                          onClick={() => {
-                            setCustomTestPayload(currentAttack.testPayload || '');
-                            setPayloadFiles([]);
-                            setIsEditingPayload(false);
-                          }}
-                          className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
-                        >
-                          ✕ 重置
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setIsEditingPayload(true)}
-                          className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
-                        >
-                          ✏️ 修改
-                        </button>
-                        <button
-                          onClick={() => {
-                            setCustomTestPayload(currentAttack.testPayload || '');
-                            setPayloadFiles([]);
-                          }}
-                          className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
-                        >
-                          🔄 重置
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {/* 文件列表（如果有） */}
-                {payloadFiles.length > 0 && (
-                  <div className="flex flex-wrap gap-1 px-2 pt-2">
-                    {payloadFiles.map((file, i) => (
-                      <span key={i} className="text-xs bg-slate-700 px-2 py-0.5 rounded flex items-center gap-1">
-                        📄 {file.name}
-                        {isEditingPayload && (
-                          <button
-                            onClick={() => removePayloadFile(i)}
-                            className="text-red-400 hover:text-red-300 ml-1"
-                          >
-                            ×
-                          </button>
+              {/* 可折叠内容 */}
+              {!promptConfigCollapsed && (
+                <div className="p-2">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {/* LLM 配置模块 */}
+                    <div className="bg-slate-800 rounded border border-slate-600 flex flex-col">
+                      {/* 标题栏 - 参数显示在标题行 */}
+                      <div className="flex items-center justify-between p-2 border-b border-slate-600">
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                          <span className="text-slate-400 font-medium">系统提示词</span>
+                          {/* LLM 参数内联显示/编辑 */}
+                          <span className="text-slate-500">Temp</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={llmTemperature}
+                            onChange={(e) => setLlmTemperature(parseFloat(e.target.value) || 0)}
+                            disabled={!isEditingLlmConfig}
+                            className={`w-12 bg-slate-700 border rounded px-1 text-cyan-400 font-mono text-xs ${
+                              isEditingLlmConfig ? 'border-blue-500' : 'border-slate-500'
+                            }`}
+                          />
+                          <span className="text-slate-500">MaxTok</span>
+                          <input
+                            type="number"
+                            min="256"
+                            max="131072"
+                            step="1024"
+                            value={llmMaxTokens}
+                            onChange={(e) => setLlmMaxTokens(parseInt(e.target.value) || 256)}
+                            disabled={!isEditingLlmConfig}
+                            className={`w-16 bg-slate-700 border rounded px-1 text-cyan-400 font-mono text-xs ${
+                              isEditingLlmConfig ? 'border-blue-500' : 'border-slate-500'
+                            }`}
+                          />
+                          <span className="text-slate-500">TopP</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={llmTopP}
+                            onChange={(e) => setLlmTopP(parseFloat(e.target.value) || 0)}
+                            disabled={!isEditingLlmConfig}
+                            className={`w-12 bg-slate-700 border rounded px-1 text-cyan-400 font-mono text-xs ${
+                              isEditingLlmConfig ? 'border-blue-500' : 'border-slate-500'
+                            }`}
+                          />
+                          {customSystemPrompt !== currentScenario.systemPrompt && (
+                            <span className="text-yellow-400 text-[10px]">(改)</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {isEditingLlmConfig ? (
+                            <>
+                              <button
+                                onClick={() => setIsEditingLlmConfig(false)}
+                                className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
+                              >
+                                保存
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setCustomSystemPrompt(currentScenario.systemPrompt || '');
+                                  setLlmTemperature(CONFIG.llmParams.temperature);
+                                  setLlmMaxTokens(CONFIG.llmParams.max_tokens);
+                                  setLlmTopP(CONFIG.llmParams.top_p);
+                                  setIsEditingLlmConfig(false);
+                                }}
+                                className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                              >
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setIsEditingLlmConfig(true)}
+                                className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                              >
+                                编辑
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setCustomSystemPrompt(currentScenario.systemPrompt || '');
+                                  setLlmTemperature(CONFIG.llmParams.temperature);
+                                  setLlmMaxTokens(CONFIG.llmParams.max_tokens);
+                                  setLlmTopP(CONFIG.llmParams.top_p);
+                                }}
+                                className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                              >
+                                重置
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {/* 内容区 - 系统提示词 */}
+                      <div className="p-2 flex-1">
+                        {isEditingLlmConfig ? (
+                          <textarea
+                            value={customSystemPrompt}
+                            onChange={(e) => setCustomSystemPrompt(e.target.value)}
+                            className="w-full h-full min-h-[8rem] max-h-[8rem] text-xs bg-slate-700 p-2 rounded border border-blue-500 text-cyan-300 font-mono resize-none focus:outline-none custom-scroll"
+                            placeholder="输入系统提示词..."
+                          />
+                        ) : (
+                          <pre className="text-xs bg-slate-700 p-2 rounded overflow-auto max-h-[8rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
+                            {customSystemPrompt || '(无系统提示词)'}
+                          </pre>
                         )}
-                      </span>
-                    ))}
+                      </div>
+                    </div>
+
+                    {/* 用户提示词模块 */}
+                    <div className="bg-slate-800 rounded border border-slate-600 flex flex-col">
+                      {/* 标题栏 */}
+                      <div className="flex items-center justify-between p-2 border-b border-slate-600">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-slate-400 font-medium">用户提示词</span>
+                          {(customTestPayload !== currentAttack.testPayload || payloadFiles.length > 0) && (
+                            <span className="text-yellow-400 text-[10px]">(改)</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {isEditingPayload && (
+                            <label
+                              className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded cursor-pointer transition"
+                              title="添加文件作为用户输入，文件内容将被解析后注入提示词"
+                            >
+                              添加文件
+                              <input type="file" className="hidden" onChange={handleAddFile} multiple />
+                            </label>
+                          )}
+                          {isEditingPayload ? (
+                            <>
+                              <button
+                                onClick={() => setIsEditingPayload(false)}
+                                className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
+                              >
+                                保存
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setCustomTestPayload(currentAttack.testPayload || '');
+                                  setPayloadFiles([]);
+                                  setIsEditingPayload(false);
+                                }}
+                                className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                              >
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setIsEditingPayload(true)}
+                                className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                              >
+                                编辑
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setCustomTestPayload(currentAttack.testPayload || '');
+                                  setPayloadFiles([]);
+                                }}
+                                className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                              >
+                                重置
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {/* 文件列表（如果有） */}
+                      {payloadFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-1 px-2 pt-2">
+                          {payloadFiles.map((file, i) => (
+                            <span key={i} className="text-xs bg-slate-700 px-2 py-0.5 rounded flex items-center gap-1">
+                              📄 {file.name}
+                              {isEditingPayload && (
+                                <button
+                                  onClick={() => removePayloadFile(i)}
+                                  className="text-red-400 hover:text-red-300 ml-1"
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {/* 内容区 - Payload 文本 */}
+                      <div className="p-2 flex-1">
+                        {isEditingPayload ? (
+                          <textarea
+                            value={customTestPayload}
+                            onChange={(e) => setCustomTestPayload(e.target.value)}
+                            className="w-full h-full min-h-[8rem] max-h-[8rem] text-xs bg-slate-700 p-2 rounded border border-blue-500 text-orange-300 font-mono resize-none focus:outline-none custom-scroll break-all"
+                            placeholder="输入用户提示词..."
+                          />
+                        ) : (
+                          <pre className="text-xs bg-slate-700 p-2 rounded overflow-y-auto overflow-x-hidden max-h-[8rem] custom-scroll text-orange-300 whitespace-pre-wrap break-all">
+                            {getDisplayPayload() || '(无用户提示词)'}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
-                {/* 内容区 - Payload 文本 */}
-                <div className="p-2 flex-1">
-                  {isEditingPayload ? (
-                    <textarea
-                      value={customTestPayload}
-                      onChange={(e) => setCustomTestPayload(e.target.value)}
-                      className="w-full h-full min-h-[10.5rem] max-h-[10.5rem] text-xs bg-slate-800 p-2 rounded border border-blue-500 text-orange-300 font-mono resize-none focus:outline-none custom-scroll break-all"
-                      placeholder="输入测试 Payload..."
-                    />
-                  ) : (
-                    <pre className="text-xs bg-slate-800 p-2 rounded overflow-y-auto overflow-x-hidden max-h-[10.5rem] custom-scroll text-orange-300 whitespace-pre-wrap break-all">
-                      {getDisplayPayload() || '(无 Payload)'}
-                    </pre>
-                  )}
                 </div>
-              </div>
+              )}
             </div>
 
             {apiError && (

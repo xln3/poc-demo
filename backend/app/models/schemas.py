@@ -23,6 +23,11 @@ class ToolType(str, Enum):
     RUN_COMMAND = "run_command"
     HTTP_REQUEST = "http_request"
     LIST_DIR = "list_dir"
+    # 新增工具 - 用于演示工具调用攻击场景
+    QUERY_DATABASE = "query_database"     # SQL查询（模拟）
+    SEND_EMAIL = "send_email"             # 发送邮件（仅日志）
+    GET_SYSTEM_INFO = "get_system_info"   # 获取系统信息
+    ACCESS_SECRET = "access_secret"       # 访问密钥存储
 
 
 class LogType(str, Enum):

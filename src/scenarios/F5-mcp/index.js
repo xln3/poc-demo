@@ -1,5 +1,7 @@
-// ============ F5-mcp: MCP工具场景 ============
-// 除文件解析外的MCP协议工具（占位，待扩展）
+// ============ F5-mcp: MCP 扩展工具场景 ============
+// 数据库查询、邮件、支付等业务系统集成
 
-// 暂无场景，预留扩展
-export const mcpScenarios = {};
+export { salesData } from './salesData.js';
+export { financeQuery } from './financeQuery.js';
+export { email } from './email.js';
+export { payment } from './payment.js';
