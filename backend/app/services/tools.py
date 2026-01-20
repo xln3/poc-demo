@@ -133,9 +133,15 @@ class ToolExecutor:
         return output
 
     async def _write_file(self, session_id: str, params: dict) -> str:
-        """Write file in container."""
+        """Write file in container.
+
+        Content can be:
+        - Plain text (is_base64=False, default for backwards compat)
+        - Base64 encoded binary (is_base64=True)
+        """
         path = params.get("path")
         content = params.get("content", "")
+        is_base64 = params.get("is_base64", False)
 
         if not path:
             raise ValueError("Missing required parameter: path")
@@ -143,18 +149,27 @@ class ToolExecutor:
         if ".." in path:
             raise ValueError("Path traversal not allowed")
 
-        # Base64 encode content to handle special characters
-        encoded = base64.b64encode(content.encode()).decode()
+        if is_base64:
+            # Content is base64 encoded binary - decode and use Docker API to copy
+            try:
+                file_bytes = base64.b64decode(content)
+                container_manager.copy_file_to_container(session_id, path, file_bytes)
+                return f"File written: {path} ({len(file_bytes)} bytes)"
+            except Exception as e:
+                raise RuntimeError(f"Failed to write binary file: {e}")
+        else:
+            # Plain text content - use shell command
+            safe_path = path.replace("'", "'\\''")
+            encoded = base64.b64encode(content.encode()).decode()
+            exit_code, output = container_manager.exec_in_container(
+                session_id,
+                f"echo '{encoded}' | base64 -d > '{safe_path}'"
+            )
 
-        exit_code, output = container_manager.exec_in_container(
-            session_id,
-            f"echo '{encoded}' | base64 -d > '{path}'"
-        )
+            if exit_code != 0:
+                raise RuntimeError(f"Failed to write file: {output}")
 
-        if exit_code != 0:
-            raise RuntimeError(f"Failed to write file: {output}")
-
-        return f"File written: {path}"
+            return f"File written: {path}"
 
     async def _run_command(self, session_id: str, params: dict) -> str:
         """Run command in container."""

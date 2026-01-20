@@ -13,11 +13,30 @@ export const RiskLevel = {
   MEDIUM: 'medium'
 };
 
+// 新增: 能力层级枚举（按复杂度递进）
+export const CapabilityLevel = {
+  CONVERSATION: 'F1-conversation',
+  FILE_INJECTION: 'F2-file-injection',
+  TOOL_USE: 'F3-tool-use',
+  RAG: 'F4-rag',
+  MCP: 'F5-mcp'
+};
+
+// 能力层级中文名（前端显示用）
+export const CapabilityLevelNames = {
+  'F1-conversation': '文本对话',
+  'F2-file-injection': '文件注入',
+  'F3-tool-use': '工具调用',
+  'F4-rag': 'RAG检索',
+  'F5-mcp': 'MCP工具'
+};
+
+// @deprecated 旧枚举，保留向后兼容
 export const ScenarioCategory = {
-  BUSINESS: 'business',
-  SYSTEM: 'system',
-  INDUSTRY: 'industry',
-  INDIRECT: 'indirect'
+  BUSINESS: 'business',      // → F1-conversation
+  SYSTEM: 'system',          // → F3-tool-use
+  INDUSTRY: 'industry',      // → F3/F4
+  INDIRECT: 'indirect'       // → F2-file-injection
 };
 
 export const LogStatus = {

@@ -12,6 +12,7 @@ export const ImageType = {
   PYTHON: 'python:3.11-slim',
   UBUNTU: 'ubuntu:22.04',
   NODE: 'node:20-slim',
+  MCP_TOOLS: 'mcp-tools:latest',  // MCP文件解析工具镜像
 };
 
 // 工具类型

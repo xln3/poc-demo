@@ -1,0 +1,52 @@
+# MCP Tools Container - 用于文件解析和工具执行
+# 包含所有MCP解析器依赖，支持PDF、DOCX、XLSX、图片等格式
+
+FROM python:3.11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Tesseract OCR 引擎
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-eng \
+    # PDF 图像转换依赖
+    poppler-utils \
+    # 图片处理依赖
+    libimage-exiftool-perl \
+    # 常用工具
+    curl \
+    wget \
+    git \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制MCP解析器模块
+COPY app/services/mcp_parsers.py /app/mcp_parsers.py
+
+# 安装Python依赖
+RUN pip install --no-cache-dir \
+    # PDF解析
+    PyMuPDF>=1.24.0 \
+    pdfplumber>=0.10.0 \
+    pdf2image>=1.16.0 \
+    pytesseract>=0.3.10 \
+    # DOCX解析
+    python-docx>=1.1.0 \
+    mammoth>=1.6.0 \
+    # XLSX解析
+    openpyxl>=3.1.0 \
+    # 图片处理
+    Pillow>=10.0.0
+
+# 验证安装
+RUN tesseract --version && \
+    python3 -c "import fitz; import pdfplumber; import pytesseract; print('✓ All parsers installed')"
+
+# 暴露工作目录
+VOLUME /workspace
+
+# 默认命令
+CMD ["/bin/bash"]

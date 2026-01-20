@@ -1,6 +1,9 @@
 from __future__ import annotations
 import docker
 import uuid
+import io
+import tarfile
+import base64
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 from ..models.schemas import ImageType, ContainerStatus, ContainerInfo
@@ -162,6 +165,40 @@ class ContainerManager:
         output = stdout + stderr
 
         return result.exit_code, output.strip()
+
+    def copy_file_to_container(self, session_id: str, path: str, content: bytes) -> bool:
+        """Copy a file to container using Docker's put_archive API.
+
+        Args:
+            session_id: Session ID
+            path: Full path in container (e.g., /tmp/file.pdf)
+            content: File content as bytes
+
+        Returns:
+            True if successful
+        """
+        if session_id not in self._sessions:
+            raise ValueError(f"Session {session_id} not found")
+
+        container_id = self._sessions[session_id]
+        container = self.client.containers.get(container_id)
+
+        # Create a tar archive in memory
+        tar_stream = io.BytesIO()
+        with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+            # Get just the filename from path
+            filename = path.split('/')[-1]
+            tarinfo = tarfile.TarInfo(name=filename)
+            tarinfo.size = len(content)
+            tar.addfile(tarinfo, io.BytesIO(content))
+
+        tar_stream.seek(0)
+
+        # Get the directory path
+        dir_path = '/'.join(path.split('/')[:-1]) or '/'
+
+        # Put the archive to the container
+        return container.put_archive(dir_path, tar_stream)
 
     def list_sessions(self) -> List[ContainerInfo]:
         """List all active sessions."""

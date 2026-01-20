@@ -1,18 +1,32 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CONFIG, ATTACK_TYPES, RISK_LEVELS, LOG_TYPES } from './config';
-import { SCENARIOS } from './scenarios/index.js';
+import { SCENARIOS, SCENARIOS_BY_LEVEL, CapabilityLevelNames } from './scenarios/index.js';
 import { sandboxClient, ImageType, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
 
-// 按攻击类型重组数据
+// 能力层级图标
+const LEVEL_ICONS = {
+  'F1-conversation': '💬',
+  'F2-file-injection': '📎',
+  'F3-tool-use': '🔧',
+  'F4-rag': '🔍',
+  'F5-mcp': '🔌'
+};
+
+// 按能力层级重组数据
 const getGroupedData = () => {
   const grouped = {};
-  Object.entries(ATTACK_TYPES).forEach(([typeKey, typeInfo]) => {
-    grouped[typeKey] = { ...typeInfo, scenarios: {} };
-    Object.entries(SCENARIOS).forEach(([scenarioKey, scenario]) => {
-      const attacks = scenario.attacks.filter(a => a.type === typeKey);
-      if (attacks.length > 0) {
-        grouped[typeKey].scenarios[scenarioKey] = { ...scenario, attacks };
-      }
+  Object.entries(SCENARIOS_BY_LEVEL).forEach(([levelKey, scenarios]) => {
+    const scenarioEntries = Object.entries(scenarios);
+    if (scenarioEntries.length === 0) return; // 跳过空层级（如F5-mcp）
+
+    grouped[levelKey] = {
+      label: CapabilityLevelNames[levelKey],
+      icon: LEVEL_ICONS[levelKey],
+      scenarios: {}
+    };
+
+    scenarioEntries.forEach(([scenarioKey, scenario]) => {
+      grouped[levelKey].scenarios[scenarioKey] = scenario;
     });
   });
   return grouped;
@@ -22,9 +36,10 @@ export default function App() {
   // 状态
   const [mode, setMode] = useState('mock'); // 'mock' | 'real'
   const [selectedAttack, setSelectedAttack] = useState({ scenario: 'loan', index: 0 });
-  const [expanded, setExpanded] = useState({ type: 'integrity', scenario: 'loan' });
+  const [expanded, setExpanded] = useState({ type: 'F1-conversation', scenario: 'loan' });
   const [messages, setMessages] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [expandedLogs, setExpandedLogs] = useState(new Set()); // 跟踪展开的日志索引
   const [isPlaying, setIsPlaying] = useState(false);
   const [typingMsg, setTypingMsg] = useState(null);
   const [showExport, setShowExport] = useState(false);
@@ -34,7 +49,7 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState(CONFIG.models[0].id);
   const [documentReadme, setDocumentReadme] = useState('');
   const [showDocument, setShowDocument] = useState(true);
-  const [docTab, setDocTab] = useState('info'); // 'info' | 'readme'
+  const [docTab, setDocTab] = useState('principle'); // 'principle' | 'hiding' | 'tools' | 'readme' | 'parsing'
   const [customSystemPrompt, setCustomSystemPrompt] = useState('');
   const [isEditingLlmConfig, setIsEditingLlmConfig] = useState(false);
   const [customTestPayload, setCustomTestPayload] = useState('');
@@ -56,9 +71,37 @@ export default function App() {
   const [llmMaxTokens, setLlmMaxTokens] = useState(CONFIG.llmParams.max_tokens);
   const [llmTopP, setLlmTopP] = useState(CONFIG.llmParams.top_p);
 
+  // MCP 文件解析配置
+  const [mcpEnabled, setMcpEnabled] = useState(CONFIG.mcp.enabled);
+  const [mcpConfigCollapsed, setMcpConfigCollapsed] = useState(true); // MCP配置面板默认收起
+  const [mcpParsers, setMcpParsers] = useState(() => {
+    // 初始化解析器选择状态：每个类型的选中工具列表（按优先级排序）
+    const parsers = {};
+    Object.entries(CONFIG.mcp.parsers).forEach(([type, config]) => {
+      // 默认只选第一个解析器（最快）
+      parsers[type] = [config.tools[0].id];
+    });
+    return parsers;
+  });
+
   // API 请求计时器
   const [apiStartTime, setApiStartTime] = useState(null);
   const [apiElapsedTime, setApiElapsedTime] = useState(0);
+
+  // 文件解析相关状态
+  const [isParsingFile, setIsParsingFile] = useState(false);  // 是否正在解析
+  const [parsingProgress, setParsingProgress] = useState(null);  // 解析进度信息
+  const [parsingAbortController, setParsingAbortController] = useState(null);  // 取消控制器
+
+  // 解析进度信息结构
+  // {
+  //   filename: string,           // 文件名
+  //   parser: string,             // 解析器名称
+  //   startTime: number,          // 开始时间戳
+  //   elapsedTime: number,        // 已用时间（ms）
+  //   estimatedTime: number,      // 预估总时间（ms）
+  //   runLocation: string,        // 'sandbox' | 'backend'
+  // }
 
   const chatRef = useRef(null);
   const logRef = useRef(null);
@@ -234,6 +277,7 @@ export default function App() {
     abortRef.current = true;
     setMessages([]);
     setLogs([]);
+    setExpandedLogs(new Set());
     setTypingMsg(null);
     setIsPlaying(false);
     setRealResponse('');
@@ -306,6 +350,7 @@ export default function App() {
     setRealResponse('');
     setMessages([]);
     setLogs([]);
+    setExpandedLogs(new Set());
 
     // 构建实际发送的 payload
     // 优先级：用户添加的文件 + 自定义 payload > 攻击的 realTestPayload > 攻击的 testPayload
@@ -314,7 +359,7 @@ export default function App() {
     const hasCustomPayload = customTestPayload !== currentAttack.testPayload;
 
     if (hasUserFiles || hasCustomPayload) {
-      // 用户有自定义内容，发送实际文件内容
+      // 用户有自定义内容，发送实际文件内容（模拟文档解析后的文本注入）
       actualPayload = getActualPayload();
     } else {
       // 使用攻击原有的 payload
@@ -322,28 +367,72 @@ export default function App() {
     }
     const hasFileContent = !!attack.realTestPayload || hasUserFiles;
 
+    // 判断用户是否有自定义内容
+    const hasUserCustomization = hasUserFiles || hasCustomPayload;
+
+    // 确定显示内容
+    const displayContent = hasUserCustomization
+      ? getDisplayPayload()  // 用户有自定义 → 显示自定义内容
+      : (hasFileContent ? attack.testPayload : actualPayload);
+
+    // 确定注入来源标签
+    const injectionSource = hasUserFiles
+      ? `📎 ${payloadFiles.map(f => f.name).join(', ')}`
+      : (attack.documentFileName ? `📄 ${attack.documentFileName}` : undefined);
+
     // 显示用户消息（显示简化版，但实际发送完整版）
     const userMsg = {
       role: 'user',
-      content: hasFileContent ? attack.testPayload : actualPayload,
+      content: displayContent,
       isInjection: true,
-      injectionSource: attack.documentFileName ? `📄 ${attack.documentFileName}` : undefined
+      injectionSource
     };
     setMessages([userMsg]);
 
     // 添加日志
     const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
     const initialLogs = [
-      { type: 'tool', content: `模型: ${modelName}`, status: 'normal' },
+      { type: 'model', content: `模型: ${modelName}`, status: 'normal' },
     ];
     if (hasUserFiles) {
-      initialLogs.push({ type: 'data', content: `已添加 ${payloadFiles.length} 个文件: ${payloadFiles.map(f => f.name).join(', ')}`, status: 'normal' });
+      // 计算文件总大小
+      const totalSize = payloadFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+      const sizeStr = totalSize > 1024 * 1024
+        ? `${(totalSize / 1024 / 1024).toFixed(1)} MB`
+        : `${(totalSize / 1024).toFixed(1)} KB`;
+
+      // 显示文件列表和总大小
+      initialLogs.push({
+        type: 'data',
+        content: `📎 解析 ${payloadFiles.length} 个文件 (${sizeStr})`,
+        status: 'normal'
+      });
+
+      // 显示每个文件的解析详情
+      payloadFiles.forEach(file => {
+        if (file.parseError) {
+          // 解析失败
+          initialLogs.push({
+            type: 'alert',
+            content: `  ✗ ${file.name}: 解析失败 - ${file.parseError}`,
+            status: 'warning'
+          });
+        } else if (file.parsedWith && file.parsedWith !== 'fallback (原始文本)') {
+          // 解析成功
+          const locationText = file.runLocation === 'sandbox' ? '[沙箱]' : '[后端]';
+          initialLogs.push({
+            type: 'data',
+            content: `  ✓ ${file.name}: 使用 ${file.parsedWith} ${locationText}`,
+            status: 'normal'
+          });
+        }
+      });
     }
     if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
       initialLogs.push({ type: 'data', content: `解析文件: ${attack.documentFileName}`, status: 'normal' });
       initialLogs.push({ type: 'alert', content: `⚠️ 文件包含隐藏的恶意内容`, status: 'warning' });
     }
-    initialLogs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)...`, status: 'normal' });
+    initialLogs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)`, status: 'normal', expandable: true, fullContent: actualPayload });
     setLogs(initialLogs);
 
     // 获取实际使用的系统提示词（自定义或默认）
@@ -370,9 +459,9 @@ export default function App() {
       // 添加日志：收到响应 + timing
       setLogs(prev => [
         ...prev,
-        { type: 'data', content: `收到响应 (${responseContent.length} 字符)`, status: 'normal' },
-        ...(apiTime ? [{ type: 'data', content: `⏱️ API 耗时: ${apiTime}ms`, status: 'normal' }] : []),
-        { type: 'tool', content: `正在使用 ${CONFIG.judgeModel} 评判攻击结果...`, status: 'normal' }
+        { type: 'data', content: `收到响应 (${responseContent.length} 字符)`, status: 'normal', expandable: true, fullContent: responseContent },
+        ...(apiTime ? [{ type: 'timing', content: `⏱️ API 耗时: ${apiTime}ms`, status: 'normal' }] : []),
+        { type: 'judge', content: `正在使用 ${CONFIG.judgeModel} 评判攻击结果...`, status: 'normal' }
       ]);
 
       // 调用评判模型（传入实际发送的 payload）
@@ -384,7 +473,7 @@ export default function App() {
       if (judgeResult.success === true) {
         setLogs(prev => [
           ...prev,
-          { type: 'alert', content: `🚨 攻击成功！${judgeResult.reason}`, status: 'danger' }
+          { type: 'success', content: `🚨 攻击成功！${judgeResult.reason}`, status: 'danger' }
         ]);
         // 标记响应为危险
         setMessages(prev => prev.map((msg, idx) =>
@@ -393,12 +482,12 @@ export default function App() {
       } else if (judgeResult.success === false) {
         setLogs(prev => [
           ...prev,
-          { type: 'rule', content: `✅ 攻击失败：${judgeResult.reason}`, status: 'normal' }
+          { type: 'failure', content: `✅ 攻击失败：${judgeResult.reason}`, status: 'normal' }
         ]);
       } else {
         setLogs(prev => [
           ...prev,
-          { type: 'alert', content: `⚠️ 评判不确定：${judgeResult.reason}`, status: 'warning' }
+          { type: 'judge', content: `⚠️ 评判不确定：${judgeResult.reason}`, status: 'warning' }
         ]);
       }
 
@@ -415,21 +504,396 @@ export default function App() {
   const selectAttack = (scenarioKey, idx) => {
     const scenario = SCENARIOS[scenarioKey];
     const attack = scenario.attacks[idx];
-    setExpanded({ type: attack.type, scenario: scenarioKey });
+    // 找到该场景所属的能力层级
+    const level = Object.entries(SCENARIOS_BY_LEVEL).find(([_, scenarios]) =>
+      Object.keys(scenarios).includes(scenarioKey)
+    )?.[0] || 'F1-conversation';
+    setExpanded({ type: level, scenario: scenarioKey });
     setSelectedAttack({ scenario: scenarioKey, index: scenario.attacks.findIndex(a => a.id === attack.id) });
   };
 
   const toggleType = (type) => setExpanded(prev => ({ ...prev, type: prev.type === type ? null : type }));
   const toggleScenario = (scenario) => setExpanded(prev => ({ ...prev, scenario: prev.scenario === scenario ? null : scenario }));
 
-  // 文件处理函数
+  // ============ 文件解析辅助函数 ============
+
+  // 检测文件类型（用于MCP解析器选择）
+  const getFileTypeForMcp = (filename) => {
+    const ext = filename.toLowerCase().match(/\.([^.]+)$/)?.[1];
+    const typeMap = {
+      'pdf': 'pdf',
+      'doc': 'docx', 'docx': 'docx',
+      'xls': 'xlsx', 'xlsx': 'xlsx',
+      'jpg': 'image', 'jpeg': 'image', 'png': 'image',
+      'gif': 'image', 'bmp': 'image', 'webp': 'image'
+    };
+    return typeMap[ext] || null;
+  };
+
+  // 检测沙箱是否可用
+  const isSandboxAvailable = () => {
+    return sandboxEnabled && sandboxStatus === 'running' && containerInfo !== null;
+  };
+
+  // 检测是否选中了需要Docker的解析器
+  const requiresDockerParsers = () => {
+    const selected = [];
+    Object.entries(mcpParsers).forEach(([fileType, parserIds]) => {
+      const config = CONFIG.mcp.parsers[fileType];
+      if (!config) return;
+
+      parserIds.forEach(parserId => {
+        const tool = config.tools.find(t => t.id === parserId);
+        if (tool && tool.requiresDocker) {
+          selected.push({ fileType, parserId, toolName: tool.name });
+        }
+      });
+    });
+    return selected;
+  };
+
+  // 检测MCP-tools容器是否可用
+  const isMcpToolsContainerReady = () => {
+    return isSandboxAvailable() && containerInfo?.image === 'mcp-tools:latest';
+  };
+
+  // 根据文件大小和类型预估解析时间（ms）
+  const estimateParsingTime = (fileSize, fileType) => {
+    // 经验值：PDF OCR较慢，其他格式较快
+    const ratesPerMB = {
+      pdf: 8000,    // 8秒/MB（OCR慢）
+      docx: 500,    // 0.5秒/MB
+      xlsx: 300,    // 0.3秒/MB
+      image: 2000   // 2秒/MB（OCR）
+    };
+    const rate = ratesPerMB[fileType] || 1000;
+    const sizeMB = fileSize / (1024 * 1024);
+    return Math.max(1000, Math.ceil(sizeMB * rate));  // 最少1秒
+  };
+
+  // 通过MCP后端服务解析文件
+  const parseViaMcpBackend = async (file, parsers, abortController) => {
+    console.log('🌐 调用MCP后端:', CONFIG.mcp.serverUrl, '解析器:', parsers);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('parsers', JSON.stringify(parsers));
+
+    const response = await fetch(`${CONFIG.mcp.serverUrl}/mcp/parse/text`, {
+      method: 'POST',
+      body: formData,
+      signal: abortController?.signal
+    });
+    console.log('📡 MCP响应状态:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`MCP API错误 (${response.status}): ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('📥 MCP返回结果:', {
+      filename: result.filename,
+      textLength: result.text?.length || 0,
+      parsersUsed: result.parsers_used,
+      textPreview: result.text?.substring(0, 200)
+    });
+    return result.text;
+  };
+
+  // 在沙箱容器中解析文件
+  const parseInSandbox = async (file, parsers, abortController, containerInfoOverride = null) => {
+    const activeContainerInfo = containerInfoOverride || containerInfo;
+    if (!activeContainerInfo) {
+      throw new Error('沙箱容器未初始化');
+    }
+
+    // 1. 上传文件到沙箱
+    const fileBytes = await file.arrayBuffer();
+    const fileBase64 = btoa(String.fromCharCode(...new Uint8Array(fileBytes)));
+
+    // 使用安全的文件名（避免特殊字符问题）
+    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `/tmp/${safeFileName}`;
+
+    const uploadResp = await fetch(`${CONFIG.sandbox.baseUrl}/sandbox/tool`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: activeContainerInfo.session_id,
+        tool: 'write_file',
+        params: {
+          path: filePath,
+          content: fileBase64,
+          is_base64: true  // 告诉后端这是base64编码的二进制内容
+        }
+      }),
+      signal: abortController?.signal
+    });
+
+    if (!uploadResp.ok) {
+      const errText = await uploadResp.text();
+      throw new Error(`文件上传失败: ${errText}`);
+    }
+
+    // 2. 调用MCP解析器（在容器内执行）
+    // 注：需要在容器中安装MCP解析工具
+    // 用单引号构造 Python 列表，避免与外层双引号冲突
+    const parsersStr = parsers.map(p => `'${p}'`).join(', ');
+    const parseCommand = `python3 -c "
+import sys
+sys.path.append('/app')
+from mcp_parsers import parse_file
+
+results = parse_file(open('${filePath}', 'rb').read(), '${file.name}', [${parsersStr}])
+
+# 从解析结果中提取文本
+all_text = []
+for r in results:
+    if r.get('success'):
+        # PDF/图片: pages 数组
+        if 'pages' in r:
+            for p in r['pages']:
+                if p.get('text'):
+                    all_text.append(p['text'])
+        # DOCX mammoth: text 字段
+        elif 'text' in r:
+            all_text.append(r['text'])
+        # DOCX python-docx: paragraphs 数组
+        elif 'paragraphs' in r:
+            for p in r['paragraphs']:
+                if p.get('text'):
+                    all_text.append(p['text'])
+        # XLSX: sheets 数组
+        elif 'sheets' in r:
+            for sheet in r['sheets']:
+                for row in sheet.get('rows', []):
+                    all_text.append(' | '.join(str(c) if c else '' for c in row))
+
+print('\\n'.join(all_text))
+"`;
+
+    const response = await fetch(`${CONFIG.sandbox.baseUrl}/sandbox/tool`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: activeContainerInfo.session_id,
+        tool: 'run_command',
+        params: { command: parseCommand }
+      }),
+      signal: abortController?.signal
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`沙箱解析失败: ${errText}`);
+    }
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(`解析命令失败: ${result.error || JSON.stringify(result.result)}`);
+    }
+
+    // run_command 返回 {exit_code, output}，需要提取 output
+    const cmdResult = result.result;
+    if (cmdResult.exit_code !== 0) {
+      throw new Error(`解析命令执行失败 (exit_code=${cmdResult.exit_code}): ${cmdResult.output}`);
+    }
+
+    return String(cmdResult.output || '').trim();
+  };
+
+  /**
+   * 使用MCP解析文件（支持沙箱隔离和进度显示）
+   * @param {File} file - 文件对象
+   * @param {string} fileType - 文件类型 (pdf/docx/xlsx/image)
+   * @param {AbortController} abortController - 取消控制器
+   * @returns {Promise<{content: string, parsedWith: string, runLocation: string}>}
+   */
+  const parseFileWithMcp = async (file, fileType, abortController) => {
+    const startTime = Date.now();
+
+    // 获取用户配置的解析器列表
+    const selectedParsers = mcpParsers[fileType] || [];
+    if (selectedParsers.length === 0) {
+      throw new Error(`未配置${fileType}解析器`);
+    }
+
+    // 检查是否有需要Docker的解析器
+    const config = CONFIG.mcp.parsers[fileType];
+    const requiresDocker = selectedParsers.some(parserId => {
+      const tool = config?.tools.find(t => t.id === parserId);
+      return tool && tool.requiresDocker;
+    });
+
+    // 如果需要Docker，强制使用沙箱且必须是MCP-tools镜像
+    let useSandbox;
+    let runLocation;
+
+    // 用于存储当前使用的容器信息（可能是新启动的）
+    let activeContainerInfo = containerInfo;
+
+    if (requiresDocker) {
+      // 自动启动/切换到 MCP-tools 容器
+      if (!isMcpToolsContainerReady()) {
+        setParsingProgress({
+          filename: file.name,
+          parser: '准备中...',
+          startTime,
+          elapsedTime: 0,
+          estimatedTime: 10000,
+          runLocation: '启动 MCP-tools 容器...'
+        });
+
+        // 如果有其他容器在运行，先停止
+        if (containerInfo) {
+          try {
+            await sandboxClient.destroyContainer();
+          } catch (e) {
+            console.warn('停止旧容器失败:', e);
+          }
+        }
+
+        // 启动 MCP-tools 容器
+        setSandboxImage(ImageType.MCP_TOOLS);
+        setSandboxStatus('connecting');
+        try {
+          const info = await sandboxClient.createContainer(ImageType.MCP_TOOLS);
+          activeContainerInfo = info; // 保存到局部变量，立即可用
+          setContainerInfo(info);
+          setSandboxStatus('running');
+          setSandboxEnabled(true);
+          sandboxClient.connectLogs(handleSandboxLog, (error) => {
+            console.error('Sandbox WebSocket error:', error);
+          });
+          setLogs(prev => [...prev, {
+            type: 'container',
+            content: `MCP-tools 容器已自动启动: ${info.container_id}`,
+            status: 'success',
+          }]);
+        } catch (error) {
+          setSandboxStatus('error');
+          throw new Error(`自动启动 MCP-tools 容器失败: ${error.message}`);
+        }
+      }
+      useSandbox = true;
+      runLocation = 'sandbox';
+    } else {
+      // 普通解析器，优先使用沙箱（如果可用）
+      useSandbox = isSandboxAvailable();
+      runLocation = useSandbox ? 'sandbox' : 'backend';
+    }
+
+    // 更新进度状态
+    setParsingProgress({
+      filename: file.name,
+      parser: selectedParsers.join(', '),
+      startTime,
+      elapsedTime: 0,
+      estimatedTime: estimateParsingTime(file.size, fileType),
+      runLocation
+    });
+
+    // 启动计时器更新已用时间
+    const progressTimer = setInterval(() => {
+      setParsingProgress(prev => prev ? {
+        ...prev,
+        elapsedTime: Date.now() - startTime
+      } : null);
+    }, 100);
+
+    try {
+      let text;
+
+      if (useSandbox) {
+        // 在沙箱中解析（传递容器信息，避免依赖异步状态更新）
+        text = await parseInSandbox(file, selectedParsers, abortController, activeContainerInfo);
+      } else {
+        // 直接调用MCP后端
+        text = await parseViaMcpBackend(file, selectedParsers, abortController);
+      }
+
+      clearInterval(progressTimer);
+      setParsingProgress(null);
+
+      return {
+        content: text,
+        parsedWith: selectedParsers.join(', '),
+        runLocation
+      };
+
+    } catch (error) {
+      clearInterval(progressTimer);
+      setParsingProgress(null);
+      throw error;
+    }
+  };
+
+  // 文件处理函数 - 读取文件内容作为文本
+  // 注：这模拟了真实世界中 LLM 系统处理文件的方式（先解析再发送文本给模型）
   const handleAddFile = async (e) => {
     const files = Array.from(e.target.files);
+
     for (const file of files) {
-      const content = await file.text();
-      setPayloadFiles(prev => [...prev, { name: file.name, content }]);
+      let content;
+      let parsedWith = null;
+      let runLocation = null;
+      let parseError = null;
+
+      // 1. 判断文件类型
+      const fileType = getFileTypeForMcp(file.name);
+      console.log('📁 文件上传:', file.name, '类型:', fileType, 'MCP启用:', mcpEnabled);
+
+      // 2. 尝试使用MCP解析
+      if (mcpEnabled && fileType) {
+        console.log('✅ 进入MCP解析分支');
+        try {
+          // 创建取消控制器
+          const abortController = new AbortController();
+          setParsingAbortController(abortController);
+          setIsParsingFile(true);
+
+          // 解析文件（自动选择沙箱或后端）
+          const result = await parseFileWithMcp(file, fileType, abortController);
+          content = result.content;
+          parsedWith = result.parsedWith;
+          runLocation = result.runLocation;
+
+          console.log(`✓ 使用 ${parsedWith} 在${runLocation === 'sandbox' ? '沙箱' : '后端'}解析 ${file.name}`);
+          console.log(`📝 解析得到的内容长度: ${content?.length || 0} 字符，预览:`, content?.substring(0, 100));
+
+        } catch (error) {
+          // 解析失败，记录错误
+          console.error('❌ MCP解析异常:', error);
+          if (error.name === 'AbortError') {
+            console.log('⛔ 解析被用户取消');
+            return;  // 用户取消，不添加文件
+          }
+
+          parseError = error.message;
+          console.error('⚠️ MCP解析失败，降级到file.text():', error.message);
+          content = await file.text();
+          parsedWith = 'fallback (原始文本)';
+        } finally {
+          setIsParsingFile(false);
+          setParsingAbortController(null);
+        }
+      } else {
+        // MCP未启用或不支持的文件类型
+        content = await file.text();
+      }
+
+      // 3. 添加到文件列表
+      setPayloadFiles(prev => [...prev, {
+        name: file.name,
+        content,
+        size: file.size,
+        parsedWith,
+        runLocation,
+        parseError  // 记录错误信息
+      }]);
     }
-    e.target.value = ''; // 重置 input 以便再次选择同一文件
+
+    e.target.value = '';  // 重置input
   };
 
   const removePayloadFile = (index) => {
@@ -439,11 +903,12 @@ export default function App() {
   // 获取显示的 Payload（文件名 + 用户输入）
   const getDisplayPayload = () => {
     if (payloadFiles.length === 0) return customTestPayload;
-    const fileNames = payloadFiles.map(f => `[文件: ${f.name}]`).join('\n');
+    const fileNames = payloadFiles.map(f => `📎 ${f.name}`).join('\n');
     return `${fileNames}\n\n${customTestPayload}`;
   };
 
   // 获取实际发送的 Payload（文件内容 + 用户输入）
+  // 注：这模拟了真实世界中文档被解析后注入到 prompt 的过程
   const getActualPayload = () => {
     if (payloadFiles.length === 0) return customTestPayload;
     const fileContents = payloadFiles.map(f => `=== ${f.name} ===\n${f.content}`).join('\n\n');
@@ -615,6 +1080,7 @@ play();
                     <option value={ImageType.PYTHON}>🐍 Python 3.11</option>
                     <option value={ImageType.UBUNTU}>🐧 Ubuntu 22.04</option>
                     <option value={ImageType.NODE}>📦 Node 20</option>
+                    <option value={ImageType.MCP_TOOLS}>🔧 MCP Tools (PDF OCR)</option>
                   </select>
                 </div>
               )}
@@ -762,21 +1228,21 @@ play();
           </div>
         </div>
 
-        {/* 恶意文档预览 - 仅间接注入攻击显示 */}
+        {/* 攻击方法详解 - 仅间接注入攻击显示 */}
         {currentAttack.documentFile && (
           <div className="mb-4 p-3 bg-slate-800 rounded-lg border border-slate-700">
             {/* 标题栏：文件名 + 下载按钮 + 折叠按钮 */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-slate-300">
-                  📄 恶意文档示例
+                  🎯 攻击方法详解
                 </span>
                 <a
                   href={currentAttack.documentFile}
                   download={currentAttack.documentFileName}
-                  className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition flex items-center gap-1"
+                  className="px-3 py-1 text-xs bg-red-600 hover:bg-red-500 rounded transition flex items-center gap-1"
                 >
-                  ⬇️ 下载 {currentAttack.documentFileName}
+                  ⬇️ 恶意样本: {currentAttack.documentFileName}
                 </a>
               </div>
               <button
@@ -788,86 +1254,306 @@ play();
             </div>
 
             {showDocument && (
-              <>
+              <div className="space-y-3">
                 {/* Tab 切换 */}
-                <div className="flex gap-1 mb-3">
+                <div className="flex gap-1 mb-3 flex-wrap">
                   <button
-                    onClick={() => setDocTab('info')}
-                    className={`px-3 py-1 text-xs rounded transition ${
-                      docTab === 'info' ? 'bg-orange-600' : 'bg-slate-700 hover:bg-slate-600'
+                    onClick={() => setDocTab('principle')}
+                    className={`px-2 py-1 text-xs rounded transition ${
+                      docTab === 'principle' ? 'bg-orange-600' : 'bg-slate-700 hover:bg-slate-600'
                     }`}
                   >
-                    🔍 攻击说明
+                    ⚠️ 攻击原理
+                  </button>
+                  <button
+                    onClick={() => setDocTab('hiding')}
+                    className={`px-2 py-1 text-xs rounded transition ${
+                      docTab === 'hiding' ? 'bg-red-600' : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                  >
+                    🔧 隐藏技术
+                  </button>
+                  <button
+                    onClick={() => setDocTab('tools')}
+                    className={`px-2 py-1 text-xs rounded transition ${
+                      docTab === 'tools' ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                  >
+                    🛠️ 编辑工具
                   </button>
                   <button
                     onClick={() => setDocTab('readme')}
-                    className={`px-3 py-1 text-xs rounded transition ${
-                      docTab === 'readme' ? 'bg-orange-600' : 'bg-slate-700 hover:bg-slate-600'
+                    className={`px-2 py-1 text-xs rounded transition ${
+                      docTab === 'readme' ? 'bg-green-600' : 'bg-slate-700 hover:bg-slate-600'
                     }`}
                   >
                     📋 攻击详情
                   </button>
+                  <button
+                    onClick={() => setDocTab('parsing')}
+                    className={`px-2 py-1 text-xs rounded transition ${
+                      docTab === 'parsing' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                  >
+                    📎 附件处理
+                  </button>
                 </div>
 
-                {/* 攻击说明 Tab */}
-                {docTab === 'info' && (
-                  <div className="space-y-3">
-                    {/* 攻击原理 */}
-                    <div className="bg-slate-900 p-3 rounded">
-                      <div className="text-xs text-orange-400 font-medium mb-2">⚠️ 攻击原理</div>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                        {currentAttack.riskExplanation}
-                      </p>
-                    </div>
+                {/* 内容区域固定高度 */}
+                <div className="h-72 overflow-y-auto custom-scroll">
+                  {/* 攻击原理 Tab */}
+                  {docTab === 'principle' && (
+                    <div className="space-y-3">
+                      <div className="bg-orange-900/20 p-3 rounded border border-orange-500/30">
+                        <div className="text-xs text-orange-400 font-medium mb-2">⚠️ 此攻击的原理</div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          {currentAttack.riskExplanation || '暂无攻击原理说明'}
+                        </p>
+                      </div>
 
-                    {/* 隐藏技术 */}
-                    <div className="bg-slate-900 p-3 rounded">
-                      <div className="text-xs text-red-400 font-medium mb-2">🔧 文件中的手脚（隐藏技术）</div>
-                      <div className="flex flex-wrap gap-2">
-                        {currentAttack.hidingTechniques?.map((tech, i) => (
-                          <span key={i} className="px-2 py-1 text-xs bg-red-900/50 border border-red-500/30 rounded">
-                            {tech}
-                          </span>
-                        ))}
+                      <div className="bg-slate-900 p-3 rounded">
+                        <div className="text-xs text-slate-400 font-medium mb-2">🎯 间接提示注入攻击流程</div>
+                        <div className="flex items-center gap-2 text-xs flex-wrap">
+                          <span className="px-2 py-1 bg-slate-700 rounded">📄 恶意文件</span>
+                          <span className="text-slate-500">→</span>
+                          <span className="px-2 py-1 bg-orange-900/50 border border-orange-500/30 rounded">🔧 文件解析</span>
+                          <span className="text-slate-500">→</span>
+                          <span className="px-2 py-1 bg-red-900/50 border border-red-500/30 rounded">📝 提取文本</span>
+                          <span className="text-slate-500">→</span>
+                          <span className="px-2 py-1 bg-purple-900/50 border border-purple-500/30 rounded">💬 注入 Prompt</span>
+                          <span className="text-slate-500">→</span>
+                          <span className="px-2 py-1 bg-blue-900/50 border border-blue-500/30 rounded">🤖 LLM 执行</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-red-900/20 p-3 rounded border border-red-500/30">
+                        <div className="text-xs text-red-400 font-medium mb-2">💥 为什么会成功？</div>
+                        <ul className="text-xs text-slate-300 ml-4 list-disc space-y-1">
+                          <li>LLM <strong className="text-red-300">无法区分</strong>用户指令和文件中的伪造指令</li>
+                          <li>文件解析器会提取<strong className="text-orange-300">所有文本</strong>，包括隐藏内容</li>
+                          <li>攻击者可以伪造<strong className="text-blue-300">系统提示词</strong>来覆盖原有指令</li>
+                        </ul>
                       </div>
                     </div>
+                  )}
 
-                    {/* 下载提示 */}
-                    <div className="bg-slate-900/50 p-3 rounded border border-dashed border-slate-600">
-                      <div className="text-xs text-slate-400">
-                        💡 <strong>查看隐藏内容：</strong>下载上方的恶意文件，使用对应工具查看隐藏内容：
+                  {/* 隐藏技术 Tab */}
+                  {docTab === 'hiding' && (
+                    <div className="space-y-3">
+                      <div className="bg-red-900/20 p-3 rounded border border-red-500/30">
+                        <div className="text-xs text-red-400 font-medium mb-2">🔧 此攻击使用的隐藏技术</div>
+                        <div className="flex flex-wrap gap-2">
+                          {currentAttack.hidingTechniques?.length > 0 ? (
+                            currentAttack.hidingTechniques.map((tech, i) => (
+                              <span key={i} className="px-2 py-1 text-xs bg-red-900/50 border border-red-500/30 rounded">
+                                {tech}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-slate-500">此攻击未使用文件隐藏技术</span>
+                          )}
+                        </div>
                       </div>
-                      <ul className="text-xs text-slate-500 mt-2 ml-4 list-disc space-y-1">
-                        <li>PDF：使用文本编辑器或 PDF 调试工具查看隐藏文字层 / 元数据</li>
-                        <li>DOCX：解压后查看 word/document.xml 或使用 VBA 查看隐藏文本</li>
-                        <li>XLSX：使用 VBA 编辑器查看 veryHidden 工作表</li>
-                        <li>图片：使用 exiftool 或十六进制编辑器查看 EXIF/注释段</li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
 
-                {/* 详细文档 Tab */}
-                {docTab === 'readme' && (
-                  <pre className="text-xs bg-slate-900 p-3 rounded overflow-auto max-h-80 custom-scroll whitespace-pre-wrap leading-relaxed">
-                    {documentReadme.split('\n').map((line, i) => {
-                      // 高亮标题行
-                      if (line.startsWith('===') || line.startsWith('【')) {
-                        return <span key={i} className="text-orange-400">{line}{'\n'}</span>;
-                      }
-                      // 高亮危险标记
-                      if (line.includes('🔴') || line.includes('❌') || line.includes('SYSTEM') || line.includes('AI指令') || line.includes('AI-REVIEW')) {
-                        return <span key={i} className="text-red-400">{line}{'\n'}</span>;
-                      }
-                      // 高亮说明性文字
-                      if (line.startsWith('-') || line.startsWith('•')) {
-                        return <span key={i} className="text-slate-400">{line}{'\n'}</span>;
-                      }
-                      return <span key={i} className="text-slate-300">{line}{'\n'}</span>;
-                    })}
-                  </pre>
-                )}
-              </>
+                      <div className="bg-slate-900 p-3 rounded">
+                        <div className="text-xs text-slate-400 font-medium mb-2">📚 常见隐藏技术一览</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                          <div className="bg-slate-800 p-2 rounded">
+                            <div className="text-orange-400 font-medium">PDF</div>
+                            <ul className="text-slate-400 mt-1 space-y-0.5">
+                              <li>• 白色/透明文字层</li>
+                              <li>• 元数据注入 (Author/Title)</li>
+                              <li>• 隐藏注释 (Annotations)</li>
+                              <li>• 超小字体 (0.1pt)</li>
+                            </ul>
+                          </div>
+                          <div className="bg-slate-800 p-2 rounded">
+                            <div className="text-blue-400 font-medium">DOCX</div>
+                            <ul className="text-slate-400 mt-1 space-y-0.5">
+                              <li>• 隐藏文本属性</li>
+                              <li>• 白色字体</li>
+                              <li>• 批注/修订内容</li>
+                              <li>• 文档属性字段</li>
+                            </ul>
+                          </div>
+                          <div className="bg-slate-800 p-2 rounded">
+                            <div className="text-green-400 font-medium">XLSX</div>
+                            <ul className="text-slate-400 mt-1 space-y-0.5">
+                              <li>• veryHidden 工作表</li>
+                              <li>• 白色单元格文字</li>
+                              <li>• 单元格批注</li>
+                              <li>• 命名范围</li>
+                            </ul>
+                          </div>
+                          <div className="bg-slate-800 p-2 rounded">
+                            <div className="text-purple-400 font-medium">图片</div>
+                            <ul className="text-slate-400 mt-1 space-y-0.5">
+                              <li>• EXIF 元数据</li>
+                              <li>• 图片注释段</li>
+                              <li>• 隐写术 (LSB)</li>
+                              <li>• OCR 可识别小字</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 编辑工具 Tab */}
+                  {docTab === 'tools' && (
+                    <div className="space-y-3">
+                      <div className="bg-purple-900/20 p-3 rounded border border-purple-500/30">
+                        <div className="text-xs text-purple-400 font-medium mb-2">🛠️ 制作恶意文件的工具</div>
+                        <p className="text-xs text-slate-400 mb-2">以下工具可用于在文件中嵌入隐藏的恶意指令：</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                        <div className="bg-slate-900 p-3 rounded">
+                          <div className="text-orange-400 font-medium mb-2">📄 PDF 编辑</div>
+                          <ul className="text-slate-400 space-y-1">
+                            <li><code className="text-orange-300">Adobe Acrobat Pro</code> - 添加隐藏文字层</li>
+                            <li><code className="text-orange-300">qpdf</code> - 命令行 PDF 操作</li>
+                            <li><code className="text-orange-300">PyMuPDF</code> - Python 编辑库</li>
+                            <li><code className="text-orange-300">exiftool</code> - 修改元数据</li>
+                          </ul>
+                        </div>
+                        <div className="bg-slate-900 p-3 rounded">
+                          <div className="text-blue-400 font-medium mb-2">📝 DOCX 编辑</div>
+                          <ul className="text-slate-400 space-y-1">
+                            <li><code className="text-blue-300">Microsoft Word</code> - 隐藏文本格式</li>
+                            <li><code className="text-blue-300">python-docx</code> - Python 编辑库</li>
+                            <li><code className="text-blue-300">解压+文本编辑器</code> - 直接改 XML</li>
+                          </ul>
+                        </div>
+                        <div className="bg-slate-900 p-3 rounded">
+                          <div className="text-green-400 font-medium mb-2">📊 XLSX 编辑</div>
+                          <ul className="text-slate-400 space-y-1">
+                            <li><code className="text-green-300">Excel + VBA</code> - 设置 veryHidden</li>
+                            <li><code className="text-green-300">openpyxl</code> - Python 编辑库</li>
+                            <li><code className="text-green-300">解压+文本编辑器</code> - 改 workbook.xml</li>
+                          </ul>
+                        </div>
+                        <div className="bg-slate-900 p-3 rounded">
+                          <div className="text-purple-400 font-medium mb-2">🖼️ 图片编辑</div>
+                          <ul className="text-slate-400 space-y-1">
+                            <li><code className="text-purple-300">exiftool</code> - 修改 EXIF/注释</li>
+                            <li><code className="text-purple-300">Pillow</code> - Python 图片库</li>
+                            <li><code className="text-purple-300">十六进制编辑器</code> - 直接改字节</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/50 p-3 rounded border border-dashed border-slate-600">
+                        <div className="text-xs text-slate-400">
+                          💡 <strong>查看隐藏内容：</strong>下载上方的恶意文件样本，使用以下方式查看：
+                        </div>
+                        <ul className="text-xs text-slate-500 mt-2 ml-4 list-disc space-y-1">
+                          <li>PDF：<code>pdftotext -layout file.pdf -</code> 或用文本编辑器打开</li>
+                          <li>DOCX：解压后查看 <code>word/document.xml</code></li>
+                          <li>XLSX：Excel VBA 编辑器查看工作表属性</li>
+                          <li>图片：<code>exiftool -a image.jpg</code></li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 攻击详情 Tab (readme) */}
+                  {docTab === 'readme' && (
+                    <div className="space-y-3">
+                      <div className="bg-green-900/20 p-3 rounded border border-green-500/30">
+                        <div className="text-xs text-green-400 font-medium mb-1">📋 此攻击样本的具体内容</div>
+                        <p className="text-xs text-slate-500">以下是恶意文件中嵌入的具体恶意指令和手脚：</p>
+                      </div>
+                      <pre className="text-xs bg-slate-900 p-3 rounded overflow-auto max-h-48 custom-scroll whitespace-pre-wrap leading-relaxed">
+                        {documentReadme ? documentReadme.split('\n').map((line, i) => {
+                          if (line.startsWith('===') || line.startsWith('【')) {
+                            return <span key={i} className="text-orange-400">{line}{'\n'}</span>;
+                          }
+                          if (line.includes('🔴') || line.includes('❌') || line.includes('SYSTEM') || line.includes('AI指令') || line.includes('AI-REVIEW')) {
+                            return <span key={i} className="text-red-400">{line}{'\n'}</span>;
+                          }
+                          if (line.startsWith('-') || line.startsWith('•')) {
+                            return <span key={i} className="text-slate-400">{line}{'\n'}</span>;
+                          }
+                          return <span key={i} className="text-slate-300">{line}{'\n'}</span>;
+                        }) : <span className="text-slate-500">暂无详细文档，请下载文件样本查看</span>}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* 附件处理 Tab */}
+                  {docTab === 'parsing' && (
+                    <div className="space-y-3">
+                      <div className="bg-blue-900/20 p-3 rounded border border-blue-500/30">
+                        <div className="text-xs text-blue-400 font-medium mb-2">📎 LLM 如何处理附件？</div>
+                        <p className="text-xs text-slate-300 leading-relaxed mb-2">
+                          大多数 LLM API <strong className="text-blue-300">只接受纯文本输入</strong>。
+                          文件需要先被解析为文本，再发送给模型：
+                        </p>
+                        <ol className="text-xs text-slate-400 ml-4 list-decimal space-y-1">
+                          <li>用户上传文件 → 服务端接收</li>
+                          <li>调用<strong className="text-orange-300">文件解析服务</strong>提取文本</li>
+                          <li>文本被<strong className="text-red-300">注入到 Prompt</strong></li>
+                          <li>LLM 处理纯文本，无法区分来源</li>
+                        </ol>
+                      </div>
+
+                      <div className="bg-slate-900 p-3 rounded">
+                        <div className="text-xs text-slate-400 font-medium mb-2">🔧 常见文件解析工具</div>
+                        <p className="text-xs text-slate-500 mb-2">不同工具对隐藏内容的提取能力不同，影响攻击成功率：</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-700">
+                                <th className="text-left py-1 text-slate-400">文件类型</th>
+                                <th className="text-left py-1 text-slate-400">解析工具</th>
+                                <th className="text-left py-1 text-slate-400">隐藏内容提取</th>
+                              </tr>
+                            </thead>
+                            <tbody className="text-slate-300">
+                              <tr className="border-b border-slate-800">
+                                <td className="py-1">PDF</td>
+                                <td><code className="text-orange-300">PyMuPDF</code>, <code className="text-orange-300">pdfplumber</code></td>
+                                <td className="text-green-400">✓ 提取所有文字层</td>
+                              </tr>
+                              <tr className="border-b border-slate-800">
+                                <td className="py-1">PDF</td>
+                                <td><code className="text-orange-300">pdf2image + OCR</code></td>
+                                <td className="text-yellow-400">△ 仅识别可见内容</td>
+                              </tr>
+                              <tr className="border-b border-slate-800">
+                                <td className="py-1">DOCX</td>
+                                <td><code className="text-blue-300">python-docx</code></td>
+                                <td className="text-green-400">✓ 包含隐藏文本</td>
+                              </tr>
+                              <tr className="border-b border-slate-800">
+                                <td className="py-1">XLSX</td>
+                                <td><code className="text-green-300">openpyxl</code></td>
+                                <td className="text-red-400">✗ 默认不读 veryHidden</td>
+                              </tr>
+                              <tr>
+                                <td className="py-1">图片</td>
+                                <td><code className="text-purple-300">pytesseract</code></td>
+                                <td className="text-yellow-400">△ 取决于字体大小</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/50 p-3 rounded border border-dashed border-slate-600">
+                        <div className="text-xs text-slate-400">
+                          💡 <strong>本平台的测试方式：</strong>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">
+                          本平台模拟文件解析后的文本注入场景。未来可通过 MCP 集成真实解析工具，
+                          测试不同解析器对隐藏内容的处理差异。
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -875,21 +1561,41 @@ play();
         {/* 真实测试模式控制面板 */}
         {mode === 'real' && (
           <div className="mb-4 p-3 bg-slate-800 rounded-lg">
-            {/* 模型选择和执行按钮 */}
+            {/* 模型选择、MCP配置和执行按钮 */}
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">选择模型：</span>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500"
-                >
-                  {CONFIG.models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-4">
+                {/* 模型选择 */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">选择模型：</span>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500"
+                  >
+                    {CONFIG.models.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* MCP 开关 */}
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mcpEnabled}
+                      onChange={(e) => setMcpEnabled(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+                    />
+                    <span className="text-xs text-slate-400">文件解析</span>
+                  </label>
+                  {mcpEnabled && (
+                    <span className="text-xs text-purple-400">
+                      ({Object.values(mcpParsers).flat().length} 工具)
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={runRealTest}
@@ -903,6 +1609,130 @@ play();
                 {apiStatus === 'loading' ? `⏳ 请求中... ${(apiElapsedTime / 1000).toFixed(1)}s` : '▶️ 执行测试'}
               </button>
             </div>
+
+            {/* MCP 解析器配置面板 */}
+            {mcpEnabled && (
+              <div className="mb-3 p-2 bg-slate-900 rounded border border-purple-900/50">
+                <div className="text-xs text-purple-400 flex items-center justify-between">
+                  <button
+                    onClick={() => setMcpConfigCollapsed(!mcpConfigCollapsed)}
+                    className="flex items-center gap-2 hover:text-purple-300 transition"
+                  >
+                    <span>{mcpConfigCollapsed ? '▶' : '▼'}</span>
+                    <span>🔧 文件解析器配置</span>
+                  </button>
+                  <span className="text-slate-500 text-[10px]">
+                    勾选启用，取消勾选禁用
+                    {payloadFiles.length > 0 && <span className="text-yellow-500 ml-2">| 修改后需重新上传文件</span>}
+                  </span>
+                </div>
+                {!mcpConfigCollapsed && (
+                  <>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2">
+                  {Object.entries(CONFIG.mcp.parsers).map(([fileType, config]) => (
+                    <div key={fileType} className="bg-slate-800 rounded p-2">
+                      <div className="text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1">
+                        <span>{fileType === 'pdf' ? '📄' : fileType === 'docx' ? '📝' : fileType === 'xlsx' ? '📊' : '🖼️'}</span>
+                        <span>{config.label}</span>
+                      </div>
+                      <div className="space-y-1">
+                        {config.tools.map((tool, idx) => {
+                          const isSelected = mcpParsers[fileType]?.includes(tool.id);
+                          const priority = mcpParsers[fileType]?.indexOf(tool.id);
+                          return (
+                            <label
+                              key={tool.id}
+                              className={`flex items-center gap-1.5 text-xs cursor-pointer p-1 rounded transition ${
+                                isSelected ? 'bg-purple-900/30' : 'hover:bg-slate-700'
+                              }`}
+                              title={tool.desc}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  setMcpParsers(prev => {
+                                    const updated = { ...prev };
+                                    if (e.target.checked) {
+                                      updated[fileType] = [...(prev[fileType] || []), tool.id];
+                                    } else {
+                                      updated[fileType] = (prev[fileType] || []).filter(id => id !== tool.id);
+                                    }
+                                    return updated;
+                                  });
+                                }}
+                                className="w-3 h-3 rounded border-slate-500 bg-slate-700 text-purple-500"
+                              />
+                              <span className={isSelected ? 'text-slate-200' : 'text-slate-400'}>
+                                {tool.name}
+                              </span>
+                              {isSelected && priority >= 0 && (
+                                <span className="ml-auto text-purple-400 text-[10px]">#{priority + 1}</span>
+                              )}
+                              {tool.hiddenExtract && (
+                                <span className="text-yellow-500 text-[10px]" title="可提取隐藏内容">⚠</span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-[10px] text-slate-500 flex items-center gap-3">
+                  <span>⚠ = 可提取隐藏文本层</span>
+                  <span>数字 = 解析优先级</span>
+                  <span className="text-slate-600">服务端点: {CONFIG.mcp.serverUrl}</span>
+                </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 解析进度指示器 */}
+            {isParsingFile && parsingProgress && (
+              <div className="mb-2 p-3 bg-slate-800 rounded border border-blue-500">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+                    <span className="text-xs text-blue-400 font-medium">
+                      正在使用 {parsingProgress.parser} 解析
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      ({parsingProgress.runLocation === 'sandbox' ? '沙箱隔离' : 'MCP后端'})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (parsingAbortController) {
+                        parsingAbortController.abort();
+                      }
+                    }}
+                    className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded transition"
+                  >
+                    取消
+                  </button>
+                </div>
+
+                <div className="text-xs text-slate-300">
+                  <div>📄 {parsingProgress.filename}</div>
+                  <div className="mt-1 flex gap-4">
+                    <span>已用时间: {(parsingProgress.elapsedTime / 1000).toFixed(1)}s</span>
+                    <span>预估剩余: {Math.max(0, (parsingProgress.estimatedTime - parsingProgress.elapsedTime) / 1000).toFixed(1)}s</span>
+                  </div>
+                </div>
+
+                {/* 进度条 */}
+                <div className="mt-2 w-full h-1 bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-all duration-300"
+                    style={{
+                      width: `${Math.min(100, (parsingProgress.elapsedTime / parsingProgress.estimatedTime) * 100)}%`
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* LLM 配置和测试 Payload 并排显示 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -1170,7 +2000,7 @@ play();
                 <span className="text-xs text-slate-500">({logs.length})</span>
               </div>
               <button
-                onClick={() => setLogs([])}
+                onClick={() => { setLogs([]); setExpandedLogs(new Set()); }}
                 className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded transition"
               >
                 清空
@@ -1226,24 +2056,55 @@ play();
             )}
 
             <div ref={logRef} className="flex-1 overflow-y-auto custom-scroll space-y-1 font-mono text-xs pr-1">
-              {logs.map((log, i) => (
-                <div
-                  key={i}
-                  className={`p-2 rounded border-l-2 ${
-                    log.status === 'normal' ? 'bg-slate-700/50 border-slate-500' :
-                    log.status === 'success' ? 'bg-emerald-900/30 border-emerald-500' :
-                    log.status === 'warning' ? 'bg-yellow-900/30 border-yellow-500' :
-                    log.status === 'bypassed' ? 'bg-orange-900/30 border-orange-500' :
-                    log.status === 'danger' ? 'bg-red-900/30 border-red-500' :
-                    'bg-slate-700/50 border-slate-500'
-                  }`}
-                >
-                  <span className={`inline-block w-12 ${LOG_TYPES[log.type]?.color || 'text-slate-400'}`}>
-                    [{LOG_TYPES[log.type]?.label || log.type}]
-                  </span>
-                  <span className="text-slate-300 break-all">{log.content}</span>
-                </div>
-              ))}
+              {logs.map((log, i) => {
+                const isExpanded = expandedLogs.has(i);
+                const toggleExpand = () => {
+                  setExpandedLogs(prev => {
+                    const next = new Set(prev);
+                    if (next.has(i)) next.delete(i);
+                    else next.add(i);
+                    return next;
+                  });
+                };
+                return (
+                  <div
+                    key={i}
+                    className={`p-2 rounded border-l-2 ${
+                      log.status === 'normal' ? 'bg-slate-700/50 border-slate-500' :
+                      log.status === 'success' ? 'bg-emerald-900/30 border-emerald-500' :
+                      log.status === 'warning' ? 'bg-yellow-900/30 border-yellow-500' :
+                      log.status === 'bypassed' ? 'bg-orange-900/30 border-orange-500' :
+                      log.status === 'danger' ? 'bg-red-900/30 border-red-500' :
+                      'bg-slate-700/50 border-slate-500'
+                    }`}
+                  >
+                    <div className="flex items-start">
+                      <span className={`inline-block w-12 flex-shrink-0 ${LOG_TYPES[log.type]?.color || 'text-slate-400'}`}>
+                        [{LOG_TYPES[log.type]?.label || log.type}]
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        {log.expandable ? (
+                          <span
+                            onClick={toggleExpand}
+                            className="text-slate-300 cursor-pointer hover:text-white transition"
+                          >
+                            <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
+                            {log.content}
+                            <span className="text-slate-500 ml-1">(点击{isExpanded ? '折叠' : '展开'})</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 break-all">{log.content}</span>
+                        )}
+                        {log.expandable && isExpanded && (
+                          <pre className="mt-2 p-2 bg-slate-900/50 rounded text-slate-400 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
+                            {log.fullContent}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
               {logs.length === 0 && (
                 <div className="text-slate-500 text-center py-8">等待日志...</div>
               )}

@@ -1,4 +1,5 @@
 // ============ 配置文件 ============
+// 敏感配置请在 .env 文件中设置，参考 .env.example
 
 export const CONFIG = {
   // 动画配置
@@ -6,10 +7,10 @@ export const CONFIG = {
   logDelay: 350,          // 日志出现间隔(ms)
   stepDelay: 600,         // 步骤间隔(ms)
 
-  // API 配置
+  // API 配置（从环境变量读取，避免密钥泄露）
   api: {
-    baseUrl: 'https://aihubmix.com/v1/chat/completions',
-    apiKey: 'sk-GpXx9JsaFHw4fhQq093c09FaA1124260B0AfD27a0410806f',
+    baseUrl: import.meta.env.VITE_API_BASE_URL || 'https://aihubmix.com/v1/chat/completions',
+    apiKey: import.meta.env.VITE_API_KEY || '',
     model: 'mock',
   },
 
@@ -19,20 +20,58 @@ export const CONFIG = {
     enabled: true,
   },
 
-  // PDF 注入 API 配置
-  pdfInjection: {
+  // Sandbox 配置
+  sandbox: {
     baseUrl: 'http://localhost:8000',
-    enabled: true,
+  },
+
+  // MCP 文件解析配置
+  mcp: {
+    enabled: true,  // 默认启用
+    serverUrl: 'http://localhost:8000',  // 与sandbox同一后端
+    // 可用的解析器，按文件类型分组
+    parsers: {
+      pdf: {
+        label: 'PDF 解析器',
+        tools: [
+          { id: 'pymupdf', name: 'PyMuPDF', desc: '提取所有文字层（包括隐藏）', hiddenExtract: true },
+          { id: 'pdfplumber', name: 'pdfplumber', desc: '结构化文本提取', hiddenExtract: true },
+          { id: 'pdf2image_ocr', name: 'pdf2image + OCR', desc: '仅识别可见内容', hiddenExtract: false, requiresDocker: true },
+        ]
+      },
+      docx: {
+        label: 'DOCX 解析器',
+        tools: [
+          { id: 'python-docx', name: 'python-docx', desc: '包含隐藏文本', hiddenExtract: true },
+          { id: 'mammoth', name: 'mammoth', desc: '转换为 HTML/文本', hiddenExtract: false },
+        ]
+      },
+      xlsx: {
+        label: 'XLSX 解析器',
+        tools: [
+          { id: 'openpyxl', name: 'openpyxl', desc: '默认不读 veryHidden', hiddenExtract: false },
+          { id: 'openpyxl_hidden', name: 'openpyxl (含隐藏)', desc: '读取所有工作表', hiddenExtract: true },
+        ]
+      },
+      image: {
+        label: '图片解析器',
+        tools: [
+          { id: 'exiftool', name: 'exiftool', desc: '提取 EXIF/元数据', hiddenExtract: true },
+          { id: 'pytesseract', name: 'pytesseract (OCR)', desc: '文字识别', hiddenExtract: false },
+          { id: 'pillow_meta', name: 'Pillow 元数据', desc: '读取图片注释', hiddenExtract: true },
+        ]
+      }
+    }
   },
 
   // 可用模型列表（被测模型）
   models: [
     { id: 'doubao-seed-1-8-251228', name: 'Doubao Seed 1.8' },
-    { id: 'deepseek-v3.2-think', name: 'DeepSeek V3.2' },
+    { id: 'baidu-deepseek-v3.2', name: 'DeepSeek V3.2' },
   ],
 
   // 评判模型
-  judgeModel: 'glm-4.7',
+  judgeModel: 'zai-glm-4.7',
 
   // LLM 参数默认值
   llmParams: {
@@ -42,6 +81,8 @@ export const CONFIG = {
   },
 
   // 调用真实模型 API
+  // 注：LLM API 实际只接受文本输入。文件（PDF/DOCX等）需要先由上游系统解析为文本，
+  // 再作为 prompt 的一部分发送给模型。这模拟了真实世界中的 RAG/文档处理流程。
   async callModel(messages, systemPrompt = '', modelId = null, llmParams = {}) {
     const startTime = Date.now();
     const params = { ...this.llmParams, ...llmParams };
@@ -137,109 +178,16 @@ ${modelResponse}
     }
   },
 
-  // ========== RAG API 辅助函数 ==========
+  // ========== MCP 文件解析 API 辅助函数 ==========
 
-  // 上传文档到 RAG 系统
-  async uploadToRAG(file, fileId) {
-    if (!this.ragApi.enabled) {
-      console.warn('RAG API 未启用');
-      return null;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('file_id', fileId);
-
-    try {
-      const response = await fetch(`${this.ragApi.baseUrl}/embed`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error(`RAG API Error: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('RAG 上传失败:', error);
-      throw error;
-    }
-  },
-
-  // 查询 RAG 系统
-  async queryRAG(queryText, fileId, k = 4) {
-    if (!this.ragApi.enabled) {
-      console.warn('RAG API 未启用');
-      return [];
-    }
-
-    try {
-      const response = await fetch(`${this.ragApi.baseUrl}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: queryText,
-          file_id: fileId,
-          k: k
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`RAG API Error: ${response.status}`);
-      }
-
-      const results = await response.json();
-
-      // 格式化检索结果为可读的上下文
-      if (Array.isArray(results) && results.length > 0) {
-        return results.map(([doc, score]) => ({
-          content: doc.page_content,
-          metadata: doc.metadata,
-          score: score
-        }));
-      }
-
-      return [];
-    } catch (error) {
-      console.error('RAG 查询失败:', error);
-      throw error;
-    }
-  },
-
-  // 从 RAG 系统删除文档
-  async deleteFromRAG(fileIds) {
-    if (!this.ragApi.enabled) {
-      console.warn('RAG API 未启用');
-      return null;
-    }
-
-    try {
-      const response = await fetch(`${this.ragApi.baseUrl}/documents`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_ids: fileIds })
-      });
-
-      if (!response.ok) {
-        throw new Error(`RAG API Error: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('RAG 删除失败:', error);
-      throw error;
-    }
-  },
-
-  // 检查 RAG API 健康状态
-  async checkRAGHealth() {
-    if (!this.ragApi.enabled) {
+  // 检查 MCP 服务健康状态
+  async checkMCPHealth() {
+    if (!this.mcp.enabled) {
       return { status: 'DISABLED' };
     }
 
     try {
-      const response = await fetch(`${this.ragApi.baseUrl}/health`);
+      const response = await fetch(`${this.mcp.serverUrl}/mcp/health`);
       if (response.ok) {
         return await response.json();
       }
@@ -249,152 +197,77 @@ ${modelResponse}
     }
   },
 
-  // 获取 RAG 系统中的所有文档 ID
-  async getRAGDocumentIds() {
-    if (!this.ragApi.enabled) {
-      return [];
+  // 获取可用的解析器列表
+  async getMCPParsers() {
+    if (!this.mcp.enabled) {
+      return {};
     }
 
     try {
-      const response = await fetch(`${this.ragApi.baseUrl}/ids`);
+      const response = await fetch(`${this.mcp.serverUrl}/mcp/parsers`);
       if (response.ok) {
         return await response.json();
       }
-      return [];
+      return {};
     } catch (error) {
-      console.error('获取 RAG 文档 ID 失败:', error);
-      return [];
+      console.error('获取 MCP 解析器失败:', error);
+      return {};
     }
   },
 
-  // ========== PDF 注入 API 辅助函数 ==========
-
-  // 上传 PDF 并注入自定义文本
-  async uploadAndInjectPDF(file, text, location = 'end', visibility = 'hidden_white') {
-    if (!this.pdfInjection.enabled) {
-      throw new Error('PDF 注入 API 未启用');
+  // 使用 MCP 解析文件
+  async parseMCPFile(file, parserIds) {
+    if (!this.mcp.enabled) {
+      throw new Error('MCP 服务未启用');
     }
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('text', text);
-    formData.append('location', location);
-    formData.append('visibility', visibility);
-
-    console.log('[Config] API call to:', `${this.pdfInjection.baseUrl}/pdf-injection/upload-and-inject`);
+    formData.append('parsers', JSON.stringify(parserIds));
 
     try {
-      const response = await fetch(`${this.pdfInjection.baseUrl}/pdf-injection/upload-and-inject`, {
-        method: 'POST',
-        body: formData
-      });
-
-      console.log('[Config] Response status:', response.status);
-
-      if (!response.ok) {
-        let errorDetail = `PDF 注入失败: ${response.status}`;
-        try {
-          const error = await response.json();
-          errorDetail = error.detail || errorDetail;
-        } catch (e) {
-          errorDetail = await response.text() || errorDetail;
-        }
-        console.error('[Config] API error:', errorDetail);
-        throw new Error(errorDetail);
-      }
-
-      // 获取文件名
-      const disposition = response.headers.get('Content-Disposition');
-      const filenameMatch = disposition && disposition.match(/filename="(.+)"/);
-      const filename = filenameMatch ? filenameMatch[1] : 'injected.pdf';
-
-      // 获取注入摘要
-      const summary = response.headers.get('X-Injection-Summary');
-      const injectionSummary = summary ? JSON.parse(summary) : {};
-
-      // 返回 Blob 和元数据
-      const blob = await response.blob();
-      console.log('[Config] PDF blob size:', blob.size);
-      return {
-        blob,
-        filename,
-        injectionSummary,
-        url: URL.createObjectURL(blob)
-      };
-    } catch (error) {
-      console.error('[Config] PDF injection error:', error);
-      throw error;
-    }
-  },
-
-  // 验证 PDF 文件
-  async validatePDF(file) {
-    if (!this.pdfInjection.enabled) {
-      throw new Error('PDF 注入 API 未启用');
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await fetch(`${this.pdfInjection.baseUrl}/pdf-injection/validate`, {
+      const response = await fetch(`${this.mcp.serverUrl}/mcp/parse`, {
         method: 'POST',
         body: formData
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || `PDF 验证失败: ${response.status}`);
+        throw new Error(error.detail || `MCP 解析失败: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
-      console.error('PDF 验证失败:', error);
+      console.error('MCP 文件解析失败:', error);
       throw error;
     }
   },
 
-  // 获取注入选项
-  async getInjectionOptions() {
-    if (!this.pdfInjection.enabled) {
-      return {
-        locations: [],
-        visibilities: []
-      };
+  // 使用 MCP 解析文件并返回纯文本
+  async parseMCPFileToText(file, parserIds) {
+    if (!this.mcp.enabled) {
+      throw new Error('MCP 服务未启用');
     }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('parsers', JSON.stringify(parserIds));
 
     try {
-      const response = await fetch(`${this.pdfInjection.baseUrl}/pdf-injection/options`);
-      if (response.ok) {
-        return await response.json();
-      }
-      return {
-        locations: [],
-        visibilities: []
-      };
-    } catch (error) {
-      console.error('获取注入选项失败:', error);
-      return {
-        locations: [],
-        visibilities: []
-      };
-    }
-  },
+      const response = await fetch(`${this.mcp.serverUrl}/mcp/parse/text`, {
+        method: 'POST',
+        body: formData
+      });
 
-  // 检查 PDF 注入 API 健康状态
-  async checkPDFInjectionHealth() {
-    if (!this.pdfInjection.enabled) {
-      return { status: 'DISABLED' };
-    }
-
-    try {
-      const response = await fetch(`${this.pdfInjection.baseUrl}/health`);
-      if (response.ok) {
-        return await response.json();
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || `MCP 解析失败: ${response.status}`);
       }
-      return { status: 'DOWN', error: response.status };
+
+      return await response.json();
     } catch (error) {
-      return { status: 'DOWN', error: error.message };
+      console.error('MCP 文件解析失败:', error);
+      throw error;
     }
   }
 };
@@ -421,5 +294,10 @@ export const LOG_TYPES = {
   alert: { label: "告警", color: "text-red-400" },
   container: { label: "容器", color: "text-emerald-400" },
   info: { label: "信息", color: "text-slate-400" },
-  error: { label: "错误", color: "text-red-500" }
+  error: { label: "错误", color: "text-red-500" },
+  model: { label: "模型", color: "text-indigo-400" },
+  timing: { label: "耗时", color: "text-amber-400" },
+  judge: { label: "评判", color: "text-violet-400" },
+  success: { label: "成功", color: "text-green-400" },
+  failure: { label: "防御", color: "text-blue-400" }
 };

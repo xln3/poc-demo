@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# 环境变量（包含敏感密钥）
+.env
+.env.local
+.env.*.local
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
