@@ -1,42 +1,52 @@
 # LLM Agent 安全攻击演示平台
 
-演示 LLM 智能体面临的安全攻击场景，支持模拟演示和真实 API 测试。
+演示 LLM 智能体在不同能力层级下的安全风险，支持模拟演示和真实 API 测试。
 
-## 功能
+## 攻击场景
 
-- **4 类攻击场景**：完整性、机密性、可用性、越狱攻击
-- **4 个智能体场景**：车贷审核、汽车客服、汽车维修、金融销售
-- **两种测试模式**：
-  - 模拟演示：预设对话动画展示攻击过程
-  - 真实测试：向真实模型发送攻击 Payload
-- **自动评判**：使用 glm-4.7 模型判断攻击是否成功
-- **多模型支持**：可切换被测模型
+按智能体能力层级组织，共 17 个攻击场景：
 
-## 运行
+| 层级 | 能力 | 场景数 | 示例 |
+|------|------|--------|------|
+| F1 | 文本对话 | 5 | 车贷审批绕过、提示词泄露 |
+| F2 | 文件处理 | 8 | 简历/合同/报销单中的隐藏指令 |
+| F3 | 沙箱工具 | 5 | 配置投毒、跳板攻击、持久化后门 |
+| F4 | RAG 检索 | 2 | 知识库污染、攻击链演示 |
+| F5 | MCP 扩展 | 4 | 销售数据窃取、支付劫持 |
+
+## 快速开始
 
 ```bash
-# 安装依赖
-npm install
+# 前端
+npm install && npm run dev    # http://localhost:5173
 
-# 启动开发服务器
-npm run dev
+# 后端（F3-F5 场景需要）
+cd backend && ./run.sh        # http://localhost:8000
 ```
-
-浏览器访问 http://localhost:5173
 
 ## 配置
 
-编辑 `src/config.js` 修改 API 配置：
+复制 `.env.example` 为 `.env`，填入 API 密钥。或编辑 `src/config.js`：
 
 ```javascript
 api: {
-  baseUrl: 'https://aihubmix.com/v1/chat/completions',
+  baseUrl: 'https://your-api-endpoint/v1/chat/completions',
   apiKey: 'your-api-key',
-  model: 'doubao-seed-1-8-251228',
+  model: 'mock',  // 'mock' 为模拟模式，换成真实模型名启用 API 测试
 }
+```
+
+## 项目结构
+
+```
+src/scenarios/     # 攻击场景定义
+backend/           # FastAPI 后端
+  app/services/    # 容器管理、RAG、MCP 服务
+  dockerfiles/     # Docker 镜像构建
+docs/              # 架构文档
 ```
 
 ## 技术栈
 
-- React + Vite
-- Tailwind CSS
+前端：React + Vite + Tailwind CSS
+后端：Python FastAPI + Docker
