@@ -14,7 +14,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional, List
 import logging
 
-import stripe
+# Stripe is optional - only required for payment functionality
+try:
+    import stripe
+    STRIPE_AVAILABLE = True
+except ImportError:
+    STRIPE_AVAILABLE = False
+    stripe = None
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +279,9 @@ class McpService:
         self, tool_name: str, params: Dict[str, Any], config: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Execute payment tools via Stripe API."""
+        if not STRIPE_AVAILABLE:
+            return {"success": False, "error": "Stripe SDK 未安装，请运行: pip install stripe>=7.0.0"}
+
         api_key = config.get("apiKey")
         merchant_id = config.get("merchantId")
 

@@ -1,5 +1,4 @@
 from __future__ import annotations
-import docker
 import uuid
 import io
 import tarfile
@@ -7,6 +6,14 @@ import base64
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 from ..models.schemas import ImageType, ContainerStatus, ContainerInfo
+
+# Docker is optional
+try:
+    import docker
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
+    docker = None
 
 
 class ContainerManager:
@@ -16,10 +23,14 @@ class ContainerManager:
     WORK_DIR = "/workspace"
 
     def __init__(self):
-        self.client = docker.from_env()
+        self.client = docker.from_env() if DOCKER_AVAILABLE else None
         self._sessions: Dict[str, str] = {}  # session_id -> container_id
         self._session_images: Dict[str, str] = {}  # session_id -> image
         self._session_created: Dict[str, str] = {}  # session_id -> created_at
+
+    def is_available(self) -> bool:
+        """Check if Docker is available."""
+        return DOCKER_AVAILABLE and self.client is not None
 
     def get_or_create_container(
         self,
