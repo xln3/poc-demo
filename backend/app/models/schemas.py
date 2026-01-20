@@ -89,40 +89,6 @@ class LogEntry(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
-# PDF Injection models
-class InjectionLocation(str, Enum):
-    """Location options for text injection in PDF."""
-    END = "end"           # Append at end of document
-    FOOTER = "footer"     # Add as footer on each page
-    HEADER = "header"     # Add as header on each page
-    METADATA = "metadata" # Inject into PDF metadata only
-
-
-class InjectionVisibility(str, Enum):
-    """Visibility options for injected text."""
-    VISIBLE = "visible"           # Normal visible text
-    HIDDEN_WHITE = "hidden_white" # White on white background
-    HIDDEN_SMALL = "hidden_small" # Very small font (5-6pt)
-    HIDDEN_ZERO = "hidden_zero"   # Zero font size
-    HIDDEN_NEAR_WHITE = "hidden_near_white" # Light gray text
-
-
-class PDFInjectionRequest(BaseModel):
-    """Request model for PDF text injection."""
-    text: str  # Text to inject (min/max enforced in router)
-    location: InjectionLocation = InjectionLocation.END
-    visibility: InjectionVisibility = InjectionVisibility.HIDDEN_WHITE
-    page: Optional[int] = None  # For future: specific page targeting
-
-
-class PDFInjectionResponse(BaseModel):
-    """Response model for PDF text injection."""
-    success: bool
-    message: str
-    file_name: str
-    injection_summary: Dict[str, Any]  # Shows where text was injected
-
-
 # ============ Saved Test Cases ============
 
 class SourceScenario(BaseModel):

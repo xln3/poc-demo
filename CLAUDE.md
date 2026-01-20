@@ -223,3 +223,84 @@ The frontend sandbox client provides:
 - **Frontend**: React 18 with Vite, Tailwind CSS v4
 - **Backend**: Python FastAPI, Docker SDK
 - **Sandbox**: Docker containers with resource limits
+
+## Developer Documentation
+
+Comprehensive developer documentation is available in the `docs/` directory:
+
+| Document | Description |
+|----------|-------------|
+| [docs/README.md](docs/README.md) | Documentation index and quick start guide |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture overview and data flow |
+| [docs/FRONTEND.md](docs/FRONTEND.md) | Frontend state management and components |
+| [docs/BACKEND.md](docs/BACKEND.md) | Backend services and Docker management |
+| [docs/SCENARIOS.md](docs/SCENARIOS.md) | Attack scenario system and builders |
+| [docs/CONFIG.md](docs/CONFIG.md) | Complete configuration reference |
+| [docs/API-REFERENCE.md](docs/API-REFERENCE.md) | API endpoint documentation |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Change log and documentation guidelines |
+
+### Documentation Maintenance Rules
+
+When making code changes, update the corresponding documentation:
+
+| Change Type | Update Required |
+|-------------|-----------------|
+| New `useState` | FRONTEND.md state table |
+| Modify `config.js` | CONFIG.md |
+| New API endpoint | API-REFERENCE.md, BACKEND.md |
+| New scenario | SCENARIOS.md, CHANGELOG.md |
+| New tool | CONFIG.md, BACKEND.md |
+| Architecture change | ARCHITECTURE.md |
+
+### Project Structure (Updated)
+
+```
+poc-demo/
+├── src/                      # Frontend source
+│   ├── App.jsx              # Main component (4000+ lines)
+│   ├── config.js            # Global configuration
+│   ├── sandbox.js           # Sandbox API client
+│   ├── rag.js               # RAG API client
+│   ├── mcp.js               # MCP API client
+│   ├── caseApi.js           # Case storage API
+│   └── scenarios/           # Attack scenarios
+│       ├── index.js         # Scenario aggregation
+│       ├── types.js         # Type definitions
+│       ├── builders/        # Attack builders
+│       ├── constants/       # Hiding techniques library
+│       ├── F1-conversation/ # Text conversation scenarios
+│       ├── F2-file-injection/ # File injection scenarios
+│       ├── F3-tool-use/     # Tool calling scenarios
+│       ├── F4-rag/          # RAG retrieval scenarios
+│       └── F5-mcp/          # MCP tool scenarios
+├── backend/                  # Backend source
+│   └── app/
+│       ├── main.py          # FastAPI entry
+│       ├── routers/         # API routes (sandbox, rag, mcp, cases)
+│       ├── services/        # Business logic
+│       └── models/          # Data models
+├── public/                   # Static assets
+│   └── attack-samples/      # Malicious file samples
+├── docs/                     # Developer documentation
+│   ├── README.md            # Documentation index
+│   ├── ARCHITECTURE.md      # System architecture
+│   ├── FRONTEND.md          # Frontend details
+│   ├── BACKEND.md           # Backend details
+│   ├── SCENARIOS.md         # Scenario system
+│   ├── CONFIG.md            # Configuration reference
+│   ├── API-REFERENCE.md     # API documentation
+│   └── CHANGELOG.md         # Change log
+└── CLAUDE.md                # This file
+```
+
+### Capability Levels (F1-F5)
+
+The platform organizes attack scenarios by agent capability level:
+
+| Level | Name | Description | Required Services |
+|-------|------|-------------|-------------------|
+| F1 | Conversation | Pure text I/O | LLM API only |
+| F2 | File Injection | File processing | LLM API + MCP Parser |
+| F3 | Tool Use | Sandbox tools | LLM API + Docker Sandbox |
+| F4 | RAG | Vector retrieval | LLM API + ChromaDB |
+| F5 | MCP | External services | LLM API + MCP Servers |
