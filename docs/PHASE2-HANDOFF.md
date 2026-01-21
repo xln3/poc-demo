@@ -7,86 +7,62 @@
 
 ---
 
-## ⚠️ 重要提醒
+## ✅ Phase 1 状态
 
-### Phase 1 改动尚未提交到 Git
+### Phase 1 改动已提交到 Git
 
-**当前状态**: 所有 Phase 1 的改动都在工作区，需要先提交才能开始 Phase 2。
+**提交信息**:
+- **Commit ID**: `cf2c182`
+- **提交时间**: 2026-01-22 01:26
+- **提交文件**: 26 个文件，+7266 行代码
+- **提交消息**: "Phase 1 完成: Docker镜像重构 (6个专用镜像)"
 
-**需要提交的 Phase 1 文件清单**:
-
-#### 新增文件 (必须 git add)
+**查看 Phase 1 改动**:
 ```bash
-# Dockerfiles (6个)
-backend/dockerfiles/Dockerfile.file-parser
-backend/dockerfiles/Dockerfile.terminal-python
-backend/dockerfiles/Dockerfile.terminal-ubuntu
-backend/dockerfiles/Dockerfile.terminal-node
-backend/dockerfiles/Dockerfile.mcp-server
-backend/dockerfiles/Dockerfile.rag-server
+# 查看提交详情
+git show cf2c182
 
-# 构建脚本 (2个)
-backend/dockerfiles/build-all-images.sh
-backend/dockerfiles/build-file-parser.sh
+# 查看文件列表
+git show --stat cf2c182
 
-# RAG服务脚本 (1个)
-backend/app/services/rag_server.py
-
-# 文件解析器 (2个)
-backend/app/services/file_parsers.py
-backend/app/services/file_parser_cli.py
-
-# MCP服务模块 (8个)
-backend/app/services/mcp_calendar.py
-backend/app/services/mcp_database.py
-backend/app/services/mcp_github.py
-backend/app/services/mcp_http.py
-backend/app/services/mcp_memory.py
-backend/app/services/mcp_notion.py
-backend/app/services/mcp_slack.py
-backend/app/services/mcp_storage.py
-
-# 文档 (6个)
-docs/BREAKING-CHANGES.md
-docs/CONTAINER-REFACTOR-PLAN.md
-docs/PHASE1-COMPLETE.md
-docs/PHASE1-STATUS.md
-docs/PHASE1-SUMMARY.md
-docs/PHASE2-HANDOFF.md  # 本文件
-FILE-PARSER.md
+# 查看提交日志
+git log --oneline -3
 ```
 
-#### 提交命令（示例）
+**Phase 1 包含的文件** (26个):
+
+#### Dockerfiles (6个)
+- `backend/dockerfiles/Dockerfile.file-parser`
+- `backend/dockerfiles/Dockerfile.terminal-python`
+- `backend/dockerfiles/Dockerfile.terminal-ubuntu`
+- `backend/dockerfiles/Dockerfile.terminal-node`
+- `backend/dockerfiles/Dockerfile.mcp-server`
+- `backend/dockerfiles/Dockerfile.rag-server`
+
+#### 服务脚本 (11个)
+- `backend/app/services/rag_server.py` (507行)
+- `backend/app/services/file_parsers.py` (346行)
+- `backend/app/services/file_parser_cli.py` (69行)
+- 8个 MCP 模块: `mcp_calendar.py`, `mcp_database.py`, `mcp_github.py`, `mcp_http.py`, `mcp_memory.py`, `mcp_notion.py`, `mcp_slack.py`, `mcp_storage.py`
+
+#### 文档 (7个)
+- `docs/BREAKING-CHANGES.md` (714行)
+- `docs/CONTAINER-REFACTOR-PLAN.md` (560行)
+- `docs/PHASE1-COMPLETE.md` (435行)
+- `docs/PHASE1-STATUS.md` (206行)
+- `docs/PHASE1-SUMMARY.md` (219行)
+- `docs/PHASE2-HANDOFF.md` (本文件)
+- `FILE-PARSER.md` (302行)
+
+#### 构建工具 (2个)
+- `backend/dockerfiles/build-all-images.sh` (161行)
+- `backend/dockerfiles/build-file-parser.sh` (30行)
+
+**获取最新代码**:
 ```bash
-cd /mnt/data1/workspace/xln/2026Jan/poc-demo
-
-# 添加所有 Phase 1 文件
-git add backend/dockerfiles/Dockerfile.* \
-        backend/dockerfiles/build-*.sh \
-        backend/app/services/rag_server.py \
-        backend/app/services/file_parser*.py \
-        backend/app/services/mcp_*.py \
-        docs/BREAKING-CHANGES.md \
-        docs/CONTAINER-REFACTOR-PLAN.md \
-        docs/PHASE1-*.md \
-        docs/PHASE2-HANDOFF.md \
-        FILE-PARSER.md
-
-# 查看暂存状态
-git status
-
-# 提交
-git commit -m "Phase 1 完成: Docker镜像重构 (6个专用镜像)
-
-- 新增 6 个 Dockerfile（file-parser, terminal系列, mcp-server, rag-server）
-- rag-server 新增 /upload 文件上传解析接口
-- 使用多阶段构建预下载嵌入模型
-- 完整文档（设计、变更、完成报告）
-
-总镜像大小: 11.0GB (6个)
-file-parser 优化: -62% (从 1.21GB → 462MB)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+git pull origin master
+# 或
+git checkout cf2c182  # 切换到 Phase 1 提交
 ```
 
 ---
@@ -545,13 +521,16 @@ docs/FRONTEND.md
    - `CONTAINER-REFACTOR-PLAN.md` 第 2、5.1 节 - 了解要做什么
    - `BREAKING-CHANGES.md` 第 1、2、3 节 - 了解怎么改
 
-2. **(10分钟)** 验证环境：
+2. **(10分钟)** 获取代码：
+   ```bash
+   git pull origin master
+   # 或切换到 Phase 1 提交
+   git checkout cf2c182
+   ```
+
+3. **(10分钟)** 验证环境：
    - 运行上面的镜像验证命令
    - 确认所有 6 个镜像都可用
-
-3. **(20分钟)** 提交 Phase 1 改动：
-   - 使用上面的 git add + commit 命令
-   - 确保工作区干净
 
 ### Day 2: 核心重构
 
@@ -629,7 +608,30 @@ docs/FRONTEND.md
 
 ---
 
-**交接完成时间**: 2026-01-22 01:20
+**交接完成时间**: 2026-01-22 01:30
+**Phase 1 提交**: cf2c182 (已提交到 Git)
 **预计 Phase 2 工作量**: 2-3 天
 **风险等级**: 中（破坏性变更，但当前无用户）
 **下一里程碑**: Phase 3 - 前端重构
+
+---
+
+## 📌 快速开始
+
+```bash
+# 1. 获取 Phase 1 代码
+git pull origin master
+
+# 2. 查看 Phase 1 改动
+git show cf2c182
+
+# 3. 阅读核心文档（30分钟）
+cat docs/PHASE1-SUMMARY.md
+cat docs/CONTAINER-REFACTOR-PLAN.md
+cat docs/BREAKING-CHANGES.md
+
+# 4. 验证镜像环境
+docker images | grep -E "(file-parser|terminal|mcp-server|rag-server)"
+
+# 5. 开始 Phase 2 开发
+```
