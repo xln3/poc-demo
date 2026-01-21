@@ -157,8 +157,12 @@ class ContainerManager:
         del self._session_created[session_id]
         return True
 
-    def exec_in_container(self, session_id: str, command: str) -> Tuple[int, str]:
-        """Execute command in container and return (exit_code, output)."""
+    def exec_in_container(self, session_id: str, command: str) -> Tuple[int, str, str]:
+        """Execute command in container and return (exit_code, stdout, stderr).
+
+        Returns stdout and stderr separately so callers can parse JSON from stdout
+        while keeping logs/progress from stderr separate.
+        """
         if session_id not in self._sessions:
             raise ValueError(f"Session {session_id} not found")
 
@@ -173,9 +177,8 @@ class ContainerManager:
 
         stdout = result.output[0].decode() if result.output[0] else ""
         stderr = result.output[1].decode() if result.output[1] else ""
-        output = stdout + stderr
 
-        return result.exit_code, output.strip()
+        return result.exit_code, stdout.strip(), stderr.strip()
 
     def copy_file_to_container(self, session_id: str, path: str, content: bytes) -> bool:
         """Copy a file to container using Docker's put_archive API.

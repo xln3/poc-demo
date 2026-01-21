@@ -73,22 +73,25 @@ class ContainerParserService:
         command = f"python3 /app/mcp_parser_cli.py '{container_path}' '{parsers_json}'"
 
         try:
-            exit_code, output = container_manager.exec_in_container(
+            exit_code, stdout, stderr = container_manager.exec_in_container(
                 PARSER_SESSION_ID,
-                f"/bin/bash -c {json.dumps(command)}"
+                f"/bin/bash -c {json.dumps(command, ensure_ascii=False)}"
             )
 
-            if exit_code != 0:
-                logger.error(f"Container parse failed: exit_code={exit_code}, output={output}")
-                return [{"error": f"容器内解析失败: {output}"}]
+            if stderr:
+                logger.debug(f"Parser stderr: {stderr}")
 
-            # 4. 解析 JSON 输出
+            if exit_code != 0:
+                logger.error(f"Container parse failed: exit_code={exit_code}, stderr={stderr}")
+                return [{"error": f"容器内解析失败: {stderr or stdout}"}]
+
+            # 4. 解析 JSON 输出 - stdout 应该只包含 JSON 数组
             try:
-                results = json.loads(output)
+                results = json.loads(stdout)
                 return results
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse container output: {e}, output={output}")
-                return [{"error": f"解析结果格式错误: {output}"}]
+                logger.error(f"Failed to parse container output: {e}, stdout={stdout}")
+                return [{"error": f"解析结果格式错误: {stdout[:200]}"}]
 
         except Exception as e:
             logger.error(f"Container exec failed: {e}")
@@ -100,11 +103,11 @@ class ContainerParserService:
             self._ensure_container()
 
             # 简单验证：检查 CLI 脚本是否存在
-            exit_code, output = container_manager.exec_in_container(
+            exit_code, stdout, _ = container_manager.exec_in_container(
                 PARSER_SESSION_ID,
                 "test -f /app/mcp_parser_cli.py && echo ok"
             )
-            return exit_code == 0 and "ok" in output
+            return exit_code == 0 and "ok" in stdout
         except Exception as e:
             logger.warning(f"Container parser not available: {e}")
             return False

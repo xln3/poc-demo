@@ -45,20 +45,24 @@ class ContainerRAGService:
         full_cmd = " ".join(cmd_parts)
 
         try:
-            exit_code, output = container_manager.exec_in_container(
+            exit_code, stdout, stderr = container_manager.exec_in_container(
                 PARSER_SESSION_ID,
-                f"/bin/bash -c {json.dumps(full_cmd)}"
+                f"/bin/bash -c {json.dumps(full_cmd, ensure_ascii=False)}"
             )
 
-            if exit_code != 0:
-                logger.error(f"RAG command failed: {command}, exit_code={exit_code}, output={output}")
-                return {"success": False, "error": f"命令执行失败: {output}"}
+            if stderr:
+                logger.debug(f"RAG stderr: {stderr}")
 
+            if exit_code != 0:
+                logger.error(f"RAG command failed: {command}, exit_code={exit_code}, stderr={stderr}")
+                return {"success": False, "error": f"命令执行失败: {stderr or stdout}"}
+
+            # stdout 应该只包含 JSON 输出
             try:
-                return json.loads(output)
+                return json.loads(stdout)
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse RAG output: {e}, output={output}")
-                return {"success": False, "error": f"结果解析失败: {output}"}
+                logger.error(f"Failed to parse RAG JSON: {e}, stdout={stdout}")
+                return {"success": False, "error": f"JSON解析失败: {stdout[:200]}"}
 
         except Exception as e:
             logger.error(f"RAG exec failed: {e}")

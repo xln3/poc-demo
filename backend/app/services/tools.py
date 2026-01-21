@@ -131,15 +131,15 @@ class ToolExecutor:
         if not path.startswith('/'):
             path = f"/workspace/{path}"
 
-        exit_code, output = container_manager.exec_in_container(
+        exit_code, stdout, stderr = container_manager.exec_in_container(
             session_id,
             f"/bin/sh -c \"cat '{path}'\""
         )
 
         if exit_code != 0:
-            raise RuntimeError(f"Failed to read file: {output}")
+            raise RuntimeError(f"Failed to read file: {stderr or stdout}")
 
-        return output
+        return stdout
 
     async def _write_file(self, session_id: str, params: dict) -> str:
         """Write file in container.
@@ -179,13 +179,13 @@ class ToolExecutor:
                 session_id,
                 f"/bin/sh -c 'mkdir -p {dir_path}'"
             )
-            exit_code, output = container_manager.exec_in_container(
+            exit_code, stdout, stderr = container_manager.exec_in_container(
                 session_id,
                 f"/bin/sh -c \"echo '{encoded}' | base64 -d > '{safe_path}'\""
             )
 
             if exit_code != 0:
-                raise RuntimeError(f"Failed to write file: {output}")
+                raise RuntimeError(f"Failed to write file: {stderr or stdout}")
 
             return f"File written: {path}"
 
@@ -205,11 +205,13 @@ class ToolExecutor:
         # 通过 shell 执行命令，确保管道、重定向等功能正常
         # 转义双引号以便在 shell 命令中使用
         escaped_command = command.replace('"', '\\"')
-        exit_code, output = container_manager.exec_in_container(
+        exit_code, stdout, stderr = container_manager.exec_in_container(
             session_id,
             f'/bin/sh -c "{escaped_command}"'
         )
 
+        # 合并 stdout 和 stderr 用于输出
+        output = (stdout + "\n" + stderr).strip() if stderr else stdout
         result = {
             "exit_code": exit_code,
             "output": output
@@ -265,15 +267,15 @@ class ToolExecutor:
         if not path.startswith('/'):
             path = f"/workspace/{path}" if path != "." else "/workspace"
 
-        exit_code, output = container_manager.exec_in_container(
+        exit_code, stdout, stderr = container_manager.exec_in_container(
             session_id,
             f"/bin/sh -c \"ls -la '{path}'\""
         )
 
         if exit_code != 0:
-            raise RuntimeError(f"Failed to list directory: {output}")
+            raise RuntimeError(f"Failed to list directory: {stderr or stdout}")
 
-        return output.split("\n")
+        return stdout.split("\n")
 
     async def _query_database(self, session_id: str, params: dict) -> dict:
         """Simulate SQL query execution. Returns mock data for demonstration."""
@@ -376,33 +378,33 @@ class ToolExecutor:
         info = {}
 
         # 获取主机名
-        exit_code, output = container_manager.exec_in_container(
+        exit_code, stdout, _ = container_manager.exec_in_container(
             session_id,
             "hostname"
         )
-        info["hostname"] = output.strip() if exit_code == 0 else "unknown"
+        info["hostname"] = stdout.strip() if exit_code == 0 else "unknown"
 
         # 获取操作系统信息
-        exit_code, output = container_manager.exec_in_container(
+        exit_code, stdout, _ = container_manager.exec_in_container(
             session_id,
             "cat /etc/os-release 2>/dev/null || echo 'unknown'"
         )
         if exit_code == 0:
             os_info = {}
-            for line in output.strip().split('\n'):
+            for line in stdout.strip().split('\n'):
                 if '=' in line:
                     key, value = line.split('=', 1)
                     os_info[key] = value.strip('"')
-            info["os"] = os_info.get("PRETTY_NAME", output.strip())
+            info["os"] = os_info.get("PRETTY_NAME", stdout.strip())
 
         # 获取环境变量（过滤敏感信息用于演示）
-        exit_code, output = container_manager.exec_in_container(
+        exit_code, stdout, _ = container_manager.exec_in_container(
             session_id,
             "env | head -20"
         )
         if exit_code == 0:
             env_vars = {}
-            for line in output.strip().split('\n'):
+            for line in stdout.strip().split('\n'):
                 if '=' in line:
                     key, value = line.split('=', 1)
                     # 模拟敏感信息泄露
@@ -410,11 +412,11 @@ class ToolExecutor:
             info["env_vars"] = env_vars
 
         # 获取网络信息
-        exit_code, output = container_manager.exec_in_container(
+        exit_code, stdout, _ = container_manager.exec_in_container(
             session_id,
             "cat /etc/hosts 2>/dev/null | head -10"
         )
-        info["hosts"] = output.strip() if exit_code == 0 else ""
+        info["hosts"] = stdout.strip() if exit_code == 0 else ""
 
         return info
 
