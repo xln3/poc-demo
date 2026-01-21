@@ -1,0 +1,68 @@
+# File Parser Container - 专用于文件解析
+#
+# 职责:
+#   - 解析不同格式文件（PDF、DOCX、XLSX、图片等）
+#   - 支持OCR文本识别（Tesseract）
+#   - 返回解析后的文本内容
+#   - 可选：调用外部API进行解析
+#
+# 不包含:
+#   - ❌ ChromaDB（向量存储已移至 rag-server）
+#   - ❌ 数据库客户端（已移至 mcp-server）
+#   - ❌ 重型构建工具（轻量化）
+#
+# 资源限制: 内存 1GB, CPU 50%
+# 生命周期: 自动管理，固定 session_id="file-parser"
+#
+# 构建命令: bash dockerfiles/build-file-parser.sh
+
+FROM python:3.11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装系统依赖（仅文件解析相关）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Tesseract OCR 引擎和语言包
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-eng \
+    # PDF 图像转换依赖
+    poppler-utils \
+    # 图片元数据提取
+    libimage-exiftool-perl \
+    # 常用工具
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装Python文件解析依赖（无chromadb）
+RUN pip install --no-cache-dir \
+    # PDF解析
+    PyMuPDF>=1.24.0 \
+    pdfplumber>=0.10.0 \
+    pdf2image>=1.16.0 \
+    pytesseract>=0.3.10 \
+    # DOCX解析
+    python-docx>=1.1.0 \
+    mammoth>=1.6.0 \
+    # XLSX解析
+    openpyxl>=3.1.0 \
+    # 图片处理
+    Pillow>=10.0.0
+
+# 复制文件解析器模块和CLI入口
+COPY app/services/file_parsers.py /app/file_parsers.py
+COPY app/services/file_parser_cli.py /app/file_parser_cli.py
+
+# 创建临时上传目录
+RUN mkdir -p /tmp/upload
+
+# 验证安装
+RUN tesseract --version && \
+    python3 -c "import fitz; import pdfplumber; import pytesseract; print('✓ All file parsers installed')"
+
+# 暴露临时上传目录
+VOLUME /tmp/upload
+
+# 默认命令
+CMD ["/bin/bash"]

@@ -1,0 +1,142 @@
+# RAG Server Container - 完整的RAG服务（多阶段构建优化）
+#
+# 职责:
+#   - 接收文件（PDF、DOCX、XLSX、图片等）
+#   - 内部解析文件提取文本（包含OCR能力）
+#   - 向量化文本内容（嵌入模型）
+#   - 存储到向量数据库（ChromaDB）
+#   - 提供检索查询服务（HTTP接口，端口8080）
+#
+# 完整功能:
+#   ✅ 文件解析器（PyMuPDF, pdfplumber, python-docx, openpyxl）
+#   ✅ OCR文本识别（Tesseract）
+#   ✅ 向量数据库（ChromaDB）
+#   ✅ 嵌入模型（sentence-transformers/all-MiniLM-L6-v2，预下载到镜像）
+#   ✅ HTTP服务（Python http.server）
+#   ✅ 文件上传解析接口（/upload）
+#
+# 与 file-parser 的区别:
+#   - file-parser: 解析文件 → 返回文本 → 完成
+#   - rag-server: 接收文件 → 解析 → 向量化 → 存储 → 提供检索
+#
+# 资源限制: 内存 2GB, CPU 50%
+# 生命周期: 自动管理，固定 session_id="rag-server"
+# HTTP服务: 容器内监听 127.0.0.1:8080
+#
+# 构建命令: docker build -f dockerfiles/Dockerfile.rag-server -t rag-server:latest .
+
+# ============================================================
+# Stage 1: 模型下载阶段（利用缓存层）
+# ============================================================
+FROM python:3.11-slim AS model-downloader
+
+# 配置 pip 使用清华镜像源（加速下载）
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 配置 HuggingFace 使用国内镜像站
+ENV HF_ENDPOINT=https://hf-mirror.com
+
+# 只安装模型下载需要的最小依赖
+RUN pip install --no-cache-dir sentence-transformers>=2.2.0
+
+# 预下载嵌入模型到 /models
+RUN mkdir -p /models && \
+    python3 -c "\
+from sentence_transformers import SentenceTransformer; \
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', cache_folder='/models'); \
+print('✓ Model downloaded to /models')" && \
+    ls -lh /models/
+
+# ============================================================
+# Stage 2: 最终运行镜像
+# ============================================================
+FROM python:3.11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 设置环境变量，指定模型缓存目录
+ENV SENTENCE_TRANSFORMERS_HOME=/models
+ENV TRANSFORMERS_CACHE=/models
+
+# 配置 pip 使用清华镜像源（加速下载）
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 换国内 apt 源（加速下载）
+# 支持新版 Debian (sources.list.d/debian.sources) 和旧版 (sources.list)
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
+        sed -i 's|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list && \
+        sed -i 's|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
+    fi
+
+# 安装系统依赖（文件解析 + ChromaDB编译）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # === 文件解析依赖 ===
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-eng \
+    poppler-utils \
+    libimage-exiftool-perl \
+    # === ChromaDB 编译依赖 ===
+    build-essential \
+    gcc \
+    g++ \
+    # === 常用工具 ===
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装Python依赖（完整RAG栈）+ 清理pip缓存
+RUN pip install --no-cache-dir \
+    # === 文件解析库 ===
+    PyMuPDF>=1.24.0 \
+    pdfplumber>=0.10.0 \
+    pdf2image>=1.16.0 \
+    pytesseract>=0.3.10 \
+    python-docx>=1.1.0 \
+    mammoth>=1.6.0 \
+    openpyxl>=3.1.0 \
+    Pillow>=10.0.0 \
+    # === RAG核心组件 ===
+    chromadb>=0.4.0 \
+    sentence-transformers>=2.2.0 \
+    # === HTTP服务 ===
+    flask>=3.0.0 \
+    # === 实用工具 ===
+    python-dotenv>=1.0.0 \
+    # 清理pip缓存
+    && rm -rf /root/.cache/pip
+
+# 从 Stage 1 复制预下载的模型
+COPY --from=model-downloader /models /models
+
+# 复制文件解析器模块（用于内部解析）
+COPY app/services/file_parsers.py /app/file_parsers.py
+COPY app/services/file_parser_cli.py /app/file_parser_cli.py
+
+# 复制RAG服务脚本
+COPY app/services/rag_server.py /app/rag_server.py
+COPY app/services/rag_cli.py /app/rag_cli.py
+
+# 创建数据目录
+RUN mkdir -p /data/chromadb /tmp/upload
+
+ENV HF_ENDPOINT=https://hf-mirror.com
+# 验证安装（不重新下载模型，使用已复制的）
+RUN tesseract --version && \
+    python3 -c "import fitz; import pdfplumber; import pytesseract; import chromadb; print('✓ File parsers OK')" && \
+    python3 -c "from sentence_transformers import SentenceTransformer; model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); print('✓ Embedding model loaded from /models')" && \
+    echo "✓ RAG server with full parsing capabilities installed"
+
+# 暴露数据目录和临时上传目录
+VOLUME /data/chromadb
+VOLUME /tmp/upload
+
+# 暴露HTTP服务端口（容器内访问）
+EXPOSE 8080
+
+# 默认命令（不自动启动服务，由后端按需启动）
+CMD ["/bin/bash"]

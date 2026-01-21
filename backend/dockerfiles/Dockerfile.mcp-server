@@ -1,0 +1,77 @@
+# MCP Server Container - 专用于MCP协议和数据库操作
+#
+# 职责:
+#   - 提供MCP（Model Context Protocol）环境依赖
+#   - 支持传统数据库操作（PostgreSQL/MySQL，用于SQL注入演示）
+#   - 提供Mock服务（Notion, GitHub, Slack等）
+#   - 执行MCP工具调用
+#
+# 不包含:
+#   - ❌ OCR工具
+#   - ❌ ChromaDB（向量存储在rag-server）
+#   - ❌ 文件解析器
+#
+# 资源限制: 内存 2GB, CPU 50%
+# 生命周期: 自动管理，固定 session_id="mcp-server"
+#
+# 构建命令: docker build -f dockerfiles/Dockerfile.mcp-server -t mcp-server:latest .
+
+FROM python:3.11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装系统依赖（数据库客户端和工具）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # PostgreSQL客户端
+    postgresql-client \
+    # MySQL客户端
+    default-mysql-client \
+    # SQLite工具
+    sqlite3 \
+    # 网络工具
+    curl \
+    wget \
+    # 版本控制（用于GitHub Mock）
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装Python MCP相关库
+RUN pip install --no-cache-dir \
+    # 数据库驱动
+    psycopg2-binary>=2.9.0 \
+    pymysql>=1.1.0 \
+    # HTTP客户端
+    requests>=2.31.0 \
+    # 环境变量
+    python-dotenv>=1.0.0 \
+    # JSON处理
+    pydantic>=2.5.0 \
+    # 日期时间
+    python-dateutil>=2.8.0
+
+# 复制MCP服务模块（8个文件）
+COPY app/services/mcp_calendar.py \
+     app/services/mcp_database.py \
+     app/services/mcp_github.py \
+     app/services/mcp_http.py \
+     app/services/mcp_memory.py \
+     app/services/mcp_notion.py \
+     app/services/mcp_slack.py \
+     app/services/mcp_storage.py \
+     /app/
+
+# 创建数据目录
+RUN mkdir -p /data/mcp
+
+# 验证安装
+RUN python3 --version && \
+    psql --version && \
+    mysql --version && \
+    echo "✓ MCP server environment ready"
+
+# 暴露数据目录
+VOLUME /data/mcp
+
+# 默认命令
+CMD ["/bin/bash"]
