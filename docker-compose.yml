@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5175:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    volumes:
+      # 挂载 Docker socket，让后端能操作主机的 Docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 持久化案例数据
+      - poc-demo-cases:/app/data/saved-cases
+    environment:
+      - PYTHONUNBUFFERED=1
+    # 不对外暴露端口，只通过 nginx 访问
+    expose:
+      - "8000"
+    restart: unless-stopped
+    # 需要 Docker socket 权限
+    group_add:
+      - ${DOCKER_GID:-999}
+
+networks:
+  default:
+    name: poc-demo-network
+
+volumes:
+  poc-demo-cases:
+    name: poc-demo-cases
