@@ -1,80 +1,159 @@
 """
 容器化 RAG 服务
 
-使用 mcp-tools:latest 镜像在 Docker 容器内执行 RAG 操作，
+使用 rag-server:latest 镜像在 Docker 容器内执行 RAG 操作，
 包括向量存储、检索、文档管理等。
+
+性能优化：使用容器内 HTTP 服务，避免每次请求都重新加载嵌入模型。
 """
 
 import json
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any, Optional, Tuple
 
 from .container import container_manager
-from .container_parser import get_container_parser, PARSER_SESSION_ID
-from ..models.schemas import ImageType
+from ..models.schemas import ContainerType, MEMORY_LIMITS
 from ..models.rag_schemas import DocumentType, DocumentInfo, QueryResult
+
+# RAG 容器配置
+RAG_SESSION_ID = "rag-server"
+RAG_IMAGE = "rag-server:latest"
 
 logger = logging.getLogger(__name__)
 
+# RAG HTTP 服务端口
+RAG_SERVER_PORT = 8080
+
+# 线程池用于执行同步的 Docker 操作
+_executor = ThreadPoolExecutor(max_workers=4)
+
 
 class ContainerRAGService:
-    """容器化 RAG 服务 - 在 Docker 容器内执行 RAG 操作"""
+    """容器化 RAG 服务 - 通过 HTTP 调用容器内服务"""
 
     def __init__(self):
-        self._initialized = False
+        self._server_started = False
+        self._container_ip = None
+        self._starting = False  # 防止并发启动
 
     def _ensure_container(self):
-        """确保解析容器存在并运行（复用 parser 容器）"""
+        """确保 RAG 容器存在并运行"""
+        mem_limit = MEMORY_LIMITS[ContainerType.RAG_SERVER]
         info = container_manager.get_or_create_container(
-            image=ImageType.MCP_TOOLS,
-            session_id=PARSER_SESSION_ID
+            image=RAG_IMAGE,
+            session_id=RAG_SESSION_ID,
+            mem_limit=mem_limit
         )
         return info
 
-    def _exec_rag_command(self, command: str, *args) -> Dict[str, Any]:
-        """执行 RAG CLI 命令"""
-        self._ensure_container()
+    def _sync_ensure_server_running(self):
+        """同步版本：确保 RAG HTTP 服务正在运行（在线程池中执行）"""
+        import time
 
-        # 构建命令
-        cmd_parts = ["python3", "/app/rag_cli.py", command]
-        for arg in args:
-            # 转义参数中的单引号
-            escaped_arg = str(arg).replace("'", "'\"'\"'")
-            cmd_parts.append(f"'{escaped_arg}'")
+        if self._server_started:
+            return
 
-        full_cmd = " ".join(cmd_parts)
+        if self._starting:
+            # 另一个线程正在启动，等待完成
+            for _ in range(60):
+                time.sleep(0.5)
+                if self._server_started:
+                    return
+            raise RuntimeError("Timeout waiting for RAG server to start")
 
+        self._starting = True
         try:
-            exit_code, stdout, stderr = container_manager.exec_in_container(
-                PARSER_SESSION_ID,
-                f"/bin/bash -c {json.dumps(full_cmd, ensure_ascii=False)}"
+            self._ensure_container()
+
+            # 检查服务是否已在运行
+            exit_code, stdout, _ = container_manager.exec_in_container(
+                RAG_SESSION_ID,
+                f"curl -s --connect-timeout 2 http://127.0.0.1:{RAG_SERVER_PORT}/health 2>/dev/null || echo 'not_running'"
             )
 
-            if stderr:
-                logger.debug(f"RAG stderr: {stderr}")
+            if exit_code == 0 and 'healthy' in stdout:
+                logger.info("RAG server already running")
+                self._server_started = True
+                return
 
-            if exit_code != 0:
-                logger.error(f"RAG command failed: {command}, exit_code={exit_code}, stderr={stderr}")
-                return {"success": False, "error": f"命令执行失败: {stderr or stdout}"}
+            # 启动服务
+            logger.info("Starting RAG HTTP server in container...")
 
-            # stdout 应该只包含 JSON 输出
-            try:
-                return json.loads(stdout)
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse RAG JSON: {e}, stdout={stdout}")
-                return {"success": False, "error": f"JSON解析失败: {stdout[:200]}"}
+            # 复制服务器脚本
+            import os
+            script_path = os.path.join(os.path.dirname(__file__), 'rag_server.py')
+            with open(script_path, 'rb') as f:
+                script_content = f.read()
+            container_manager.copy_file_to_container(
+                RAG_SESSION_ID, '/app/rag_server.py', script_content
+            )
 
-        except Exception as e:
-            logger.error(f"RAG exec failed: {e}")
-            return {"success": False, "error": str(e)}
+            # 启动服务
+            container_manager.exec_in_container(
+                RAG_SESSION_ID,
+                f"nohup python3 /app/rag_server.py {RAG_SERVER_PORT} > /tmp/rag_server.log 2>&1 &"
+            )
+
+            # 等待服务启动
+            for i in range(30):
+                time.sleep(1)
+                exit_code, stdout, _ = container_manager.exec_in_container(
+                    RAG_SESSION_ID,
+                    f"curl -s --connect-timeout 2 http://127.0.0.1:{RAG_SERVER_PORT}/health 2>/dev/null || echo 'not_ready'"
+                )
+                if exit_code == 0 and 'healthy' in stdout:
+                    logger.info(f"RAG server started (waited {i+1}s)")
+                    self._server_started = True
+                    return
+
+            # 启动失败
+            _, log_output, _ = container_manager.exec_in_container(
+                RAG_SESSION_ID, "cat /tmp/rag_server.log 2>/dev/null | tail -50"
+            )
+            logger.error(f"RAG server failed to start. Log: {log_output}")
+            raise RuntimeError("RAG server failed to start")
+        finally:
+            self._starting = False
+
+    def _sync_call_http(self, method: str, endpoint: str, data: dict = None) -> Dict[str, Any]:
+        """同步版本：通过容器内 curl 调用 RAG 服务（在线程池中执行）"""
+        self._sync_ensure_server_running()
+
+        if method == 'GET':
+            cmd = f"curl -s --connect-timeout 5 --max-time 60 http://127.0.0.1:{RAG_SERVER_PORT}{endpoint}"
+        else:
+            json_data = json.dumps(data or {}, ensure_ascii=False)
+            escaped_json = json_data.replace("'", "'\"'\"'")
+            cmd = f"curl -s --connect-timeout 5 --max-time 60 -X {method} -H 'Content-Type: application/json' -d '{escaped_json}' http://127.0.0.1:{RAG_SERVER_PORT}{endpoint}"
+
+        exit_code, stdout, stderr = container_manager.exec_in_container(
+            RAG_SESSION_ID,
+            f"/bin/bash -c {json.dumps(cmd, ensure_ascii=False)}"
+        )
+
+        if exit_code != 0:
+            logger.error(f"HTTP call failed: {stderr}")
+            return {"success": False, "error": f"HTTP 调用失败: {stderr}"}
+
+        try:
+            return json.loads(stdout)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse response: {e}, stdout={stdout}")
+            return {"success": False, "error": f"响应解析失败: {stdout[:200]}"}
+
+    def _call_http(self, method: str, endpoint: str, data: dict = None) -> Dict[str, Any]:
+        """通过 HTTP 调用容器内 RAG 服务（同步包装，用于非异步上下文）"""
+        return self._sync_call_http(method, endpoint, data)
 
     def init(self) -> Dict[str, Any]:
         """初始化 RAG 并导入预置数据"""
-        return self._exec_rag_command("init")
+        return self._call_http("POST", "/init")
 
     def reset(self) -> Dict[str, Any]:
         """重置为预置数据"""
-        return self._exec_rag_command("reset")
+        return self._call_http("POST", "/reset")
 
     def add_document(
         self,
@@ -84,7 +163,11 @@ class ContainerRAGService:
         metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, int]:
         """添加文档到知识库"""
-        result = self._exec_rag_command("add", source_name, content)
+        result = self._call_http("POST", "/add", {
+            "source_name": source_name,
+            "content": content,
+            "document_type": document_type.value if hasattr(document_type, 'value') else str(document_type)
+        })
 
         if not result.get("success"):
             raise ValueError(result.get("error", "添加文档失败"))
@@ -98,7 +181,11 @@ class ContainerRAGService:
         score_threshold: Optional[float] = None
     ) -> List[QueryResult]:
         """检索相关文档"""
-        result = self._exec_rag_command("query", query_text, str(top_k))
+        result = self._call_http("POST", "/query", {
+            "query": query_text,
+            "top_k": top_k,
+            "score_threshold": score_threshold
+        })
 
         if not result.get("success"):
             raise ValueError(result.get("error", "查询失败"))
@@ -122,7 +209,7 @@ class ContainerRAGService:
 
     def list_documents(self) -> List[DocumentInfo]:
         """列出所有文档"""
-        result = self._exec_rag_command("list")
+        result = self._call_http("GET", "/documents")
 
         if not result.get("success"):
             return []
@@ -148,17 +235,17 @@ class ContainerRAGService:
 
     def delete_document(self, document_id: str) -> bool:
         """删除文档"""
-        result = self._exec_rag_command("delete", document_id)
+        result = self._call_http("DELETE", f"/documents/{document_id}")
         return result.get("success", False)
 
     def clear(self) -> int:
         """清空所有文档"""
-        result = self._exec_rag_command("clear")
+        result = self._call_http("POST", "/clear")
         return result.get("deleted_count", 0)
 
     def get_stats(self) -> Dict[str, Any]:
         """获取统计信息"""
-        result = self._exec_rag_command("stats")
+        result = self._call_http("GET", "/stats")
         if "error" in result:
             return {
                 "document_count": 0,
@@ -171,7 +258,7 @@ class ContainerRAGService:
     def is_available(self) -> bool:
         """检查服务是否可用"""
         try:
-            result = self._exec_rag_command("health")
+            result = self._call_http("GET", "/health")
             return result.get("status") == "healthy"
         except Exception:
             return False

@@ -20,29 +20,30 @@ export const useRAG = ({ addLog }) => {
   const [ragUploading, setRagUploading] = useState(false);
   const [parserContainerAvailable, setParserContainerAvailable] = useState(false);
 
-  // Check RAG service availability
-  useEffect(() => {
-    const checkRAG = async () => {
-      const health = await ragClient.healthCheck();
-      setRagServiceAvailable(health?.status === 'healthy');
-      setParserContainerAvailable(health?.parser_available === true);
-    };
-    checkRAG();
-    const interval = setInterval(checkRAG, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Check RAG service availability - 禁用自动检查，避免阻塞
+  // useEffect(() => {
+  //   const checkRAG = async () => {
+  //     const health = await ragClient.healthCheck();
+  //     setRagServiceAvailable(health?.status === 'healthy');
+  //     setParserContainerAvailable(health?.parser_available === true);
+  //   };
+  //   checkRAG();
+  //   const interval = setInterval(checkRAG, 30000);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   // When RAG mode switches to real, initialize service and refresh documents
-  useEffect(() => {
-    if (ragMode === 'real' && ragServiceAvailable) {
-      ragClient.init().then(() => {
-        ragClient.healthCheck().then(health => {
-          setParserContainerAvailable(health?.parser_available === true);
-        });
-      }).catch(console.error);
-      refreshRagDocuments();
-    }
-  }, [ragMode, ragServiceAvailable]);
+  // 禁用自动初始化，避免阻塞
+  // useEffect(() => {
+  //   if (ragMode === 'real' && ragServiceAvailable) {
+  //     ragClient.init().then(() => {
+  //       ragClient.healthCheck().then(health => {
+  //         setParserContainerAvailable(health?.parser_available === true);
+  //       });
+  //     }).catch(console.error);
+  //     refreshRagDocuments();
+  //   }
+  // }, [ragMode, ragServiceAvailable]);
 
   // Refresh RAG document list
   const refreshRagDocuments = async () => {

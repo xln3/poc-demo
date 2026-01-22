@@ -1,7 +1,7 @@
 """
 容器化文件解析服务
 
-使用 mcp-tools:latest 镜像在 Docker 容器内执行文件解析，
+使用 file-parser:latest 镜像在 Docker 容器内执行文件解析，
 解决主机缺少 tesseract 等依赖的问题。
 """
 
@@ -10,12 +10,13 @@ import logging
 from typing import List, Optional
 
 from .container import container_manager
-from ..models.schemas import ImageType
+from ..models.schemas import ContainerType, MEMORY_LIMITS
 
 logger = logging.getLogger(__name__)
 
-# 解析容器的固定 session_id
+# 解析容器配置
 PARSER_SESSION_ID = "parser"
+PARSER_IMAGE = "file-parser:latest"
 
 
 class ContainerParserService:
@@ -26,9 +27,11 @@ class ContainerParserService:
 
     def _ensure_container(self):
         """确保解析容器存在并运行"""
+        mem_limit = MEMORY_LIMITS[ContainerType.FILE_PARSER]
         info = container_manager.get_or_create_container(
-            image=ImageType.MCP_TOOLS,
-            session_id=PARSER_SESSION_ID
+            image=PARSER_IMAGE,
+            session_id=PARSER_SESSION_ID,
+            mem_limit=mem_limit
         )
         if not self._initialized:
             # 确保临时上传目录存在
@@ -70,7 +73,7 @@ class ContainerParserService:
 
         # 3. 执行解析命令
         parsers_json = json.dumps(parser_ids)
-        command = f"python3 /app/mcp_parser_cli.py '{container_path}' '{parsers_json}'"
+        command = f"python3 /app/file_parser_cli.py '{container_path}' '{parsers_json}'"
 
         try:
             exit_code, stdout, stderr = container_manager.exec_in_container(
@@ -105,7 +108,7 @@ class ContainerParserService:
             # 简单验证：检查 CLI 脚本是否存在
             exit_code, stdout, _ = container_manager.exec_in_container(
                 PARSER_SESSION_ID,
-                "test -f /app/mcp_parser_cli.py && echo ok"
+                "test -f /app/file_parser_cli.py && echo ok"
             )
             return exit_code == 0 and "ok" in stdout
         except Exception as e:

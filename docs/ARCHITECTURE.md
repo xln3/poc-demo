@@ -106,7 +106,7 @@ backend/app/
 │   ├── container_rag.py # 容器化 RAG
 │   ├── container_parser.py # 容器化文件解析
 │   ├── mcp.py           # MCP Server 实现
-│   ├── mcp_parsers.py   # 文件解析器
+│   ├── file_parsers.py   # 文件解析器
 │   └── case_storage.py  # 用例持久化
 └── models/              # 数据模型层
     ├── schemas.py       # Pydantic 模型
@@ -245,7 +245,7 @@ main.py
 ├── routers/
 │   ├── sandbox.py → container.py, tools.py, log_manager.py
 │   ├── rag.py → container_rag.py, rag_service.py
-│   ├── mcp.py → container_parser.py, mcp_parsers.py, mcp.py
+│   ├── mcp.py → container_parser.py, file_parsers.py, mcp.py
 │   └── cases.py → case_storage.py
 └── models/schemas.py (共享数据模型)
 ```
@@ -267,7 +267,7 @@ main.py
 | `python:3.11-slim` | Python 环境 | /workspace |
 | `ubuntu:22.04` | 完整 Linux | /workspace |
 | `node:20-slim` | Node.js 环境 | /workspace |
-| `mcp-tools:latest` | 文件解析工具 | /workspace |
+| `file-parser:latest` | 文件解析工具 | /workspace |
 
 ### 容器资源限制
 

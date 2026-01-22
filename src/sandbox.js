@@ -7,12 +7,25 @@ export const SANDBOX_CONFIG = {
   wsUrl: `ws://${window.location.host}`,
 };
 
-// 容器镜像类型
+// 终端沙箱镜像类型
+export const TerminalImage = {
+  PYTHON: 'terminal-python:3.11',
+  UBUNTU: 'terminal-ubuntu:22.04',
+  NODE: 'terminal-node:20',
+};
+
+// 容器类型
+export const ContainerType = {
+  FILE_PARSER: 'file-parser',
+  TERMINAL: 'terminal',
+  RAG_SERVER: 'rag-server',
+  MCP_SERVER: 'mcp-server',
+};
+
+// 兼容旧代码 - ImageType 包含终端镜像 + FILE_PARSER
 export const ImageType = {
-  PYTHON: 'python:3.11-slim',
-  UBUNTU: 'ubuntu:22.04',
-  NODE: 'node:20-slim',
-  MCP_TOOLS: 'mcp-tools:latest',  // MCP文件解析工具镜像
+  ...TerminalImage,
+  FILE_PARSER: 'file-parser:latest',  // 文件解析器镜像（独立容器）
 };
 
 // 工具类型
@@ -108,6 +121,63 @@ class SandboxClient {
         this.containerInfo = null;
       }
     }
+  }
+
+  // ============ Terminal Sandbox API (Singleton) ============
+
+  // 创建终端容器（单例，同时只能运行一个）
+  async createTerminal(image = TerminalImage.PYTHON, tag = 'default') {
+    const params = new URLSearchParams({ image, tag });
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminal?${params}`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      if (response.status === 409) {
+        throw new Error(`已有终端容器运行: ${error.detail}`);
+      }
+      throw new Error(`Failed to create terminal: ${error.detail || response.status}`);
+    }
+
+    this.containerInfo = await response.json();
+    this.sessionId = this.containerInfo.session_id;
+    return this.containerInfo;
+  }
+
+  // 获取当前终端状态
+  async getTerminalStatus() {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminal`);
+    if (!response.ok) {
+      throw new Error(`Failed to get terminal status: ${response.status}`);
+    }
+    const data = await response.json();
+    if (data) {
+      this.containerInfo = data;
+      this.sessionId = data.session_id;
+    }
+    return data;
+  }
+
+  // 销毁当前终端
+  async destroyTerminal() {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminal`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // 没有运行中的终端，清理本地状态
+        this.sessionId = null;
+        this.containerInfo = null;
+        return;
+      }
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(`Failed to destroy terminal: ${error.detail || response.status}`);
+    }
+
+    this.sessionId = null;
+    this.containerInfo = null;
   }
 
   // 执行工具

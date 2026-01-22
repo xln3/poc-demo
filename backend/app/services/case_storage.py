@@ -1,4 +1,7 @@
-"""Case storage service - JSON file based storage for saved test cases."""
+"""Case storage service - JSON file based storage for saved test cases.
+
+Only supports v1.0.0 Schema format.
+"""
 from __future__ import annotations
 import os
 import json
@@ -9,6 +12,32 @@ from typing import Optional, List, Dict
 
 # Storage directory path
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "saved-cases"
+
+
+def extract_summary(case_data: dict) -> dict:
+    """Extract summary from v1 format case."""
+    meta = case_data.get("meta", {})
+    source = case_data.get("source", {})
+    attack = source.get("attack", {})
+    environment = case_data.get("environment", {})
+    llm = environment.get("llm", {})
+    result = case_data.get("result", {})
+    judgment = result.get("judgment", {})
+
+    return {
+        "id": meta.get("caseId"),
+        "savedAt": meta.get("createdAt"),
+        "schemaVersion": meta.get("schemaVersion", "1.0.0"),
+        "name": meta.get("name") or attack.get("name"),
+        "capabilityLevel": source.get("capabilityLevel"),
+        "scenarioName": source.get("scenarioName"),
+        "attackName": attack.get("name") if attack else None,
+        "attackType": attack.get("type") if attack else None,
+        "riskLevel": attack.get("level") if attack else None,
+        "modelId": llm.get("modelId"),
+        "judgmentSuccess": judgment.get("success"),
+        "judgmentReason": judgment.get("reason"),
+    }
 
 
 class CaseStorage:
@@ -30,20 +59,27 @@ class CaseStorage:
         """Save a new case or update existing one.
 
         Args:
-            case_data: Case data including optional 'id' field
+            case_data: Case data (v1 format)
 
         Returns:
             The saved case with id and savedAt fields
         """
-        # Generate ID if not provided
-        if "id" not in case_data or not case_data["id"]:
-            case_data["id"] = self.generate_id()
+        now = datetime.now().isoformat()
 
-        # Add/update timestamp
-        case_data["savedAt"] = datetime.now().isoformat()
+        meta = case_data.get("meta", {})
+        if not meta.get("caseId"):
+            meta["caseId"] = self.generate_id()
+        if not meta.get("createdAt"):
+            meta["createdAt"] = now
+        case_data["meta"] = meta
+        case_id = meta["caseId"]
+
+        # Also set top-level id and savedAt for API response
+        case_data["id"] = case_id
+        case_data["savedAt"] = meta["createdAt"]
 
         # Write to file
-        case_path = self._get_case_path(case_data["id"])
+        case_path = self._get_case_path(case_id)
         with open(case_path, "w", encoding="utf-8") as f:
             json.dump(case_data, f, ensure_ascii=False, indent=2)
 
@@ -66,22 +102,15 @@ class CaseStorage:
         """List all saved cases.
 
         Returns:
-            List of case summaries (id, name, savedAt, sourceScenario, judgment)
+            List of case summaries
         """
         cases = []
         for case_file in DATA_DIR.glob("*.json"):
             try:
                 with open(case_file, "r", encoding="utf-8") as f:
                     case_data = json.load(f)
-                    # Return summary only (not full conversations/logs)
-                    cases.append({
-                        "id": case_data.get("id"),
-                        "savedAt": case_data.get("savedAt"),
-                        "name": case_data.get("name"),
-                        "sourceScenario": case_data.get("sourceScenario"),
-                        "testConfig": case_data.get("testConfig"),
-                        "judgment": case_data.get("judgment"),
-                    })
+                    summary = extract_summary(case_data)
+                    cases.append(summary)
             except (json.JSONDecodeError, IOError):
                 continue
 
@@ -103,14 +132,18 @@ class CaseStorage:
         if case_data is None:
             return None
 
-        # Only allow updating certain fields
-        allowed_fields = {"name", "tags", "notes"}
-        for key, value in updates.items():
-            if key in allowed_fields:
-                case_data[key] = value
+        now = datetime.now().isoformat()
 
-        # Update timestamp
-        case_data["updatedAt"] = datetime.now().isoformat()
+        # Update in meta
+        meta = case_data.get("meta", {})
+        if "name" in updates:
+            meta["name"] = updates["name"]
+        if "tags" in updates:
+            meta["tags"] = updates["tags"]
+        if "notes" in updates:
+            meta["notes"] = updates["notes"]
+        meta["updatedAt"] = now
+        case_data["meta"] = meta
 
         # Write back
         case_path = self._get_case_path(case_id)

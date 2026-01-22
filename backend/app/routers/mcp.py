@@ -8,7 +8,7 @@ import time
 import logging
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from typing import List, Optional
-from ..services.mcp_parsers import get_file_type, PARSERS
+from ..services.file_parsers import get_file_type, PARSERS
 from ..services.container_parser import get_container_parser
 from ..models.schemas import (
     McpServerType,
@@ -19,6 +19,14 @@ from ..models.schemas import (
     McpServerStatus,
 )
 from ..services.mcp import mcp_service
+from ..services.mcp_notion import notion_service
+from ..services.mcp_github import github_service
+from ..services.mcp_database import database_service
+from ..services.mcp_http import http_service
+from ..services.mcp_slack import slack_service
+from ..services.mcp_calendar import calendar_service
+from ..services.mcp_storage import storage_service
+from ..services.mcp_memory import memory_service
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +187,7 @@ async def health_check():
     parser = get_container_parser()
     container_available = parser.is_available()
 
-    # 容器可用时，所有解析器都可用（因为 mcp-tools 镜像已包含所有依赖）
+    # 容器可用时，所有解析器都可用（因为 file-parser 镜像已包含所有依赖）
     if container_available:
         return {
             "status": "healthy",
@@ -201,7 +209,7 @@ async def health_check():
             "status": "degraded",
             "mode": "container",
             "container_available": False,
-            "error": "解析容器不可用，请确保 mcp-tools:latest 镜像已构建并且 Docker 服务正常",
+            "error": "解析容器不可用，请确保 file-parser:latest 镜像已构建并且 Docker 服务正常",
             "parsers": {}
         }
 
@@ -228,6 +236,47 @@ async def list_mcp_servers():
                 "name": "Payment",
                 "tools": ["payment_create_order", "payment_query_status", "payment_refund"],
             },
+            # 新增 MCP 服务
+            {
+                "id": "notion",
+                "name": "Notion",
+                "tools": ["notion_read_page", "notion_search", "notion_list_databases", "notion_create_page", "notion_update_page", "notion_append_block"],
+            },
+            {
+                "id": "github",
+                "name": "GitHub",
+                "tools": ["github_read_file", "github_list_repos", "github_search_code", "github_create_issue", "github_list_commits", "github_create_pr_comment", "github_list_secrets"],
+            },
+            {
+                "id": "database",
+                "name": "Database",
+                "tools": ["db_query", "db_execute", "db_list_tables", "db_describe_table"],
+            },
+            {
+                "id": "http",
+                "name": "HTTP/Fetch",
+                "tools": ["http_fetch", "http_post", "http_download"],
+            },
+            {
+                "id": "slack",
+                "name": "Slack",
+                "tools": ["slack_send_message", "slack_list_channels", "slack_search_messages", "slack_get_user_info"],
+            },
+            {
+                "id": "calendar",
+                "name": "Calendar",
+                "tools": ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"],
+            },
+            {
+                "id": "storage",
+                "name": "Storage",
+                "tools": ["storage_list_buckets", "storage_list_objects", "storage_download_url", "storage_upload"],
+            },
+            {
+                "id": "memory",
+                "name": "Memory",
+                "tools": ["memory_store", "memory_recall", "memory_search", "memory_list", "memory_delete"],
+            },
         ]
     }
 
@@ -245,6 +294,23 @@ async def test_mcp_connection(request: McpTestConnectionRequest):
             result = await mcp_service.test_email_connection(config)
         elif server_id == McpServerType.PAYMENT:
             result = await mcp_service.test_payment_connection(config)
+        # 新增 MCP 服务
+        elif server_id == McpServerType.NOTION:
+            result = await notion_service.test_connection(config)
+        elif server_id == McpServerType.GITHUB:
+            result = await github_service.test_connection(config)
+        elif server_id == McpServerType.DATABASE:
+            result = await database_service.test_connection(config)
+        elif server_id == McpServerType.HTTP:
+            result = await http_service.test_connection(config)
+        elif server_id == McpServerType.SLACK:
+            result = await slack_service.test_connection(config)
+        elif server_id == McpServerType.CALENDAR:
+            result = await calendar_service.test_connection(config)
+        elif server_id == McpServerType.STORAGE:
+            result = await storage_service.test_connection(config)
+        elif server_id == McpServerType.MEMORY:
+            result = await memory_service.test_connection(config)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown server type: {server_id}")
 
@@ -271,6 +337,23 @@ async def execute_mcp_tool(request: McpToolRequest):
             result = await mcp_service.execute_email_tool(tool_name, params, config)
         elif server_id == McpServerType.PAYMENT:
             result = await mcp_service.execute_payment_tool(tool_name, params, config)
+        # 新增 MCP 服务
+        elif server_id == McpServerType.NOTION:
+            result = await notion_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.GITHUB:
+            result = await github_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.DATABASE:
+            result = await database_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.HTTP:
+            result = await http_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.SLACK:
+            result = await slack_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.CALENDAR:
+            result = await calendar_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.STORAGE:
+            result = await storage_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.MEMORY:
+            result = await memory_service.execute_tool(tool_name, params, config)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown server type: {server_id}")
 
@@ -299,6 +382,15 @@ async def get_mcp_server_status(server_id: McpServerType):
         McpServerType.FILESYSTEM: ["fs_read_file", "fs_write_file", "fs_list_dir", "fs_search"],
         McpServerType.EMAIL: ["email_send", "email_send_with_attachment"],
         McpServerType.PAYMENT: ["payment_create_order", "payment_query_status", "payment_refund"],
+        # 新增 MCP 服务
+        McpServerType.NOTION: ["notion_read_page", "notion_search", "notion_list_databases", "notion_create_page", "notion_update_page", "notion_append_block"],
+        McpServerType.GITHUB: ["github_read_file", "github_list_repos", "github_search_code", "github_create_issue", "github_list_commits", "github_create_pr_comment", "github_list_secrets"],
+        McpServerType.DATABASE: ["db_query", "db_execute", "db_list_tables", "db_describe_table"],
+        McpServerType.HTTP: ["http_fetch", "http_post", "http_download"],
+        McpServerType.SLACK: ["slack_send_message", "slack_list_channels", "slack_search_messages", "slack_get_user_info"],
+        McpServerType.CALENDAR: ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"],
+        McpServerType.STORAGE: ["storage_list_buckets", "storage_list_objects", "storage_download_url", "storage_upload"],
+        McpServerType.MEMORY: ["memory_store", "memory_recall", "memory_search", "memory_list", "memory_delete"],
     }
 
     return McpServerStatus(

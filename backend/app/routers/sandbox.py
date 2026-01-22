@@ -1,8 +1,8 @@
 from __future__ import annotations
 import asyncio
 import json
-from typing import List
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
 from datetime import datetime
 from ..models.schemas import (
     CreateContainerRequest,
@@ -13,10 +13,14 @@ from ..models.schemas import (
     LogType,
     LogStatus,
     ContainerStatus,
+    TerminalImage,
+    ContainerType,
+    MEMORY_LIMITS,
 )
 from ..services.container import container_manager
 from ..services.tools import tool_executor
 from ..services.log_manager import log_manager
+from ..services.terminal_sandbox_service import terminal_sandbox_service
 
 router = APIRouter(prefix="/sandbox", tags=["sandbox"])
 
@@ -25,9 +29,13 @@ router = APIRouter(prefix="/sandbox", tags=["sandbox"])
 async def create_or_get_container(request: CreateContainerRequest):
     """Create a new container or get existing one for session."""
     try:
-        info = container_manager.get_or_create_container(
-            image=request.image,
-            session_id=request.session_id
+        # 使用终端内存限制
+        mem_limit = MEMORY_LIMITS[ContainerType.TERMINAL]
+        info = await asyncio.to_thread(
+            container_manager.get_or_create_container,
+            image=request.image.value,  # TerminalImage 枚举转为字符串
+            session_id=request.session_id,
+            mem_limit=mem_limit
         )
 
         # Emit container start log
@@ -46,7 +54,9 @@ async def create_or_get_container(request: CreateContainerRequest):
 @router.get("/container/{session_id}", response_model=ContainerInfo)
 async def get_container_status(session_id: str):
     """Get container status for a session."""
-    info = container_manager.get_container_status(session_id)
+    info = await asyncio.to_thread(
+        container_manager.get_container_status, session_id
+    )
     if info.status == ContainerStatus.NOT_FOUND:
         raise HTTPException(status_code=404, detail="Session not found")
     return info
@@ -55,7 +65,9 @@ async def get_container_status(session_id: str):
 @router.delete("/container/{session_id}")
 async def destroy_container(session_id: str):
     """Destroy a container."""
-    success = container_manager.destroy_container(session_id)
+    success = await asyncio.to_thread(
+        container_manager.destroy_container, session_id
+    )
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -71,14 +83,16 @@ async def destroy_container(session_id: str):
 @router.get("/sessions", response_model=List[ContainerInfo])
 async def list_sessions():
     """List all active sessions."""
-    return container_manager.list_sessions()
+    return await asyncio.to_thread(container_manager.list_sessions)
 
 
 @router.post("/tool", response_model=ToolResult)
 async def execute_tool(request: ToolCallRequest):
     """Execute a tool in the sandbox."""
     # Check if container exists
-    info = container_manager.get_container_status(request.session_id)
+    info = await asyncio.to_thread(
+        container_manager.get_container_status, request.session_id
+    )
     if info.status == ContainerStatus.NOT_FOUND:
         raise HTTPException(status_code=404, detail="Session not found. Create a container first.")
     if info.status != ContainerStatus.RUNNING:
@@ -141,3 +155,78 @@ async def websocket_logs(websocket: WebSocket, session_id: str):
         pass
     finally:
         log_manager.remove_queue(session_id, queue)
+
+
+# ============ Terminal Sandbox Endpoints (Singleton Management) ============
+
+
+@router.post("/terminal", response_model=ContainerInfo)
+async def create_terminal(
+    image: TerminalImage = Query(default=TerminalImage.PYTHON, description="Terminal image type"),
+    tag: str = Query(..., description="Container tag for session identification")
+):
+    """Create a terminal container (singleton - only one can exist at a time).
+
+    Args:
+        image: Terminal image type (python, ubuntu, node)
+        tag: Container tag for session identification
+
+    Returns:
+        ContainerInfo: Container information
+
+    Raises:
+        HTTPException 409: If a terminal container already exists
+    """
+    try:
+        info = await asyncio.to_thread(
+            terminal_sandbox_service.create_terminal,
+            image=image,
+            tag=tag
+        )
+
+        # Emit container start log
+        await log_manager.emit_container_log(
+            info.session_id,
+            f"Terminal container started: {info.container_id} ({info.image})",
+            LogStatus.SUCCESS,
+            {"container_id": info.container_id, "image": info.image, "tag": tag}
+        )
+
+        return info
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/terminal", response_model=Optional[ContainerInfo])
+async def get_terminal_status():
+    """Get current terminal container status.
+
+    Returns:
+        ContainerInfo or null if no terminal is running
+    """
+    return await asyncio.to_thread(terminal_sandbox_service.get_current)
+
+
+@router.delete("/terminal")
+async def destroy_terminal():
+    """Destroy the current terminal container.
+
+    Raises:
+        HTTPException 404: If no terminal container is running
+    """
+    try:
+        session_id = terminal_sandbox_service.get_current_session_id()
+        await asyncio.to_thread(terminal_sandbox_service.destroy_terminal)
+
+        if session_id:
+            await log_manager.emit_container_log(
+                session_id,
+                "Terminal container destroyed",
+                LogStatus.WARNING
+            )
+
+        return {"success": True, "message": "Terminal destroyed"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

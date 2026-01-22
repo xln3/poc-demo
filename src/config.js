@@ -240,6 +240,100 @@ export const CONFIG = {
           { key: 'merchantId', label: '商户标识', type: 'text', required: true, placeholder: '用于订单备注' }
         ],
         tools: ['payment_create_order', 'payment_query_status', 'payment_refund']
+      },
+      // 新增 MCP 服务
+      notion: {
+        id: 'notion',
+        name: 'Notion',
+        icon: '📝',
+        description: 'Notion 知识库操作（读取/搜索/创建页面）',
+        fields: [
+          { key: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'secret_xxx (Integration Token)' }
+        ],
+        tools: ['notion_read_page', 'notion_search', 'notion_list_databases', 'notion_create_page', 'notion_update_page', 'notion_append_block']
+      },
+      github: {
+        id: 'github',
+        name: 'GitHub',
+        icon: '🐙',
+        description: 'GitHub 代码仓库操作（读取文件/搜索代码/管理Issue）',
+        fields: [
+          { key: 'token', label: 'Personal Access Token', type: 'password', required: true, placeholder: 'ghp_xxx 或 github_pat_xxx' }
+        ],
+        tools: ['github_read_file', 'github_list_repos', 'github_search_code', 'github_create_issue', 'github_list_commits', 'github_create_pr_comment', 'github_list_secrets']
+      },
+      database: {
+        id: 'database',
+        name: 'Database',
+        icon: '🗄️',
+        description: '数据库查询（支持 PostgreSQL 和 SQLite）',
+        fields: [
+          { key: 'type', label: '数据库类型', type: 'select', required: true, options: [{ value: 'postgres', label: 'PostgreSQL' }, { value: 'sqlite', label: 'SQLite' }], default: 'postgres' },
+          { key: 'host', label: '主机地址', type: 'text', required: false, placeholder: 'localhost (PostgreSQL)' },
+          { key: 'port', label: '端口', type: 'number', required: false, default: 5432 },
+          { key: 'user', label: '用户名', type: 'text', required: false },
+          { key: 'password', label: '密码', type: 'password', required: false },
+          { key: 'database', label: '数据库名', type: 'text', required: false },
+          { key: 'path', label: '文件路径', type: 'text', required: false, placeholder: '/path/to/db.sqlite (SQLite)' }
+        ],
+        tools: ['db_query', 'db_execute', 'db_list_tables', 'db_describe_table']
+      },
+      http: {
+        id: 'http',
+        name: 'HTTP/Fetch',
+        icon: '🌐',
+        description: 'HTTP 请求工具（含 SSRF 检测演示）',
+        fields: [
+          { key: 'allowPrivate', label: '允许访问内网地址', type: 'checkbox', required: false, default: false },
+          { key: 'timeout', label: '超时时间（秒）', type: 'number', required: false, default: 30 },
+          { key: 'maxBodySize', label: '最大响应体（字节）', type: 'number', required: false, default: 1048576 }
+        ],
+        tools: ['http_fetch', 'http_post', 'http_download']
+      },
+      slack: {
+        id: 'slack',
+        name: 'Slack',
+        icon: '💬',
+        description: 'Slack 工作区通信（发送消息/搜索/获取用户信息）',
+        fields: [
+          { key: 'token', label: 'Bot User OAuth Token', type: 'password', required: true, placeholder: 'xoxb-xxx' }
+        ],
+        tools: ['slack_send_message', 'slack_list_channels', 'slack_search_messages', 'slack_get_user_info']
+      },
+      calendar: {
+        id: 'calendar',
+        name: 'Calendar',
+        icon: '📅',
+        description: '日历管理（支持 Google Calendar 或 Mock 模式）',
+        fields: [
+          { key: 'type', label: '服务类型', type: 'select', required: true, options: [{ value: 'mock', label: 'Mock (本地演示)' }, { value: 'google', label: 'Google Calendar' }], default: 'mock' },
+          { key: 'accessToken', label: 'OAuth Access Token', type: 'password', required: false, placeholder: 'Google OAuth Token (可选)' }
+        ],
+        tools: ['calendar_list_events', 'calendar_create_event', 'calendar_update_event', 'calendar_delete_event']
+      },
+      storage: {
+        id: 'storage',
+        name: 'Storage',
+        icon: '☁️',
+        description: '云存储操作（支持 AWS S3 和阿里云 OSS）',
+        fields: [
+          { key: 'type', label: '存储类型', type: 'select', required: true, options: [{ value: 's3', label: 'AWS S3' }, { value: 'oss', label: '阿里云 OSS' }], default: 's3' },
+          { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true },
+          { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', required: true },
+          { key: 'region', label: '区域', type: 'text', required: false, placeholder: 'us-east-1 (S3)' },
+          { key: 'endpoint', label: 'Endpoint', type: 'text', required: false, placeholder: 'oss-cn-hangzhou.aliyuncs.com (OSS)' }
+        ],
+        tools: ['storage_list_buckets', 'storage_list_objects', 'storage_download_url', 'storage_upload']
+      },
+      memory: {
+        id: 'memory',
+        name: 'Memory',
+        icon: '🧠',
+        description: '持久化记忆存储（本地 JSON 文件）',
+        fields: [
+          { key: 'storagePath', label: '存储路径', type: 'text', required: false, placeholder: '/tmp/mcp_memory', default: '/tmp/mcp_memory' }
+        ],
+        tools: ['memory_store', 'memory_recall', 'memory_search', 'memory_list', 'memory_delete']
       }
     }
   },

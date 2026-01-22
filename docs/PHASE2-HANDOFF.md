@@ -5,30 +5,6 @@
 **接手人**: 后端开发者 (Phase 2)
 **任务**: 后端容器管理服务重构
 
----
-
-## ✅ Phase 1 状态
-
-### Phase 1 改动已提交到 Git
-
-**提交信息**:
-- **Commit ID**: `cf2c182`
-- **提交时间**: 2026-01-22 01:26
-- **提交文件**: 26 个文件，+7266 行代码
-- **提交消息**: "Phase 1 完成: Docker镜像重构 (6个专用镜像)"
-
-**查看 Phase 1 改动**:
-```bash
-# 查看提交详情
-git show cf2c182
-
-# 查看文件列表
-git show --stat cf2c182
-
-# 查看提交日志
-git log --oneline -3
-```
-
 **Phase 1 包含的文件** (26个):
 
 #### Dockerfiles (6个)
@@ -45,25 +21,10 @@ git log --oneline -3
 - `backend/app/services/file_parser_cli.py` (69行)
 - 8个 MCP 模块: `mcp_calendar.py`, `mcp_database.py`, `mcp_github.py`, `mcp_http.py`, `mcp_memory.py`, `mcp_notion.py`, `mcp_slack.py`, `mcp_storage.py`
 
-#### 文档 (7个)
-- `docs/BREAKING-CHANGES.md` (714行)
-- `docs/CONTAINER-REFACTOR-PLAN.md` (560行)
-- `docs/PHASE1-COMPLETE.md` (435行)
-- `docs/PHASE1-STATUS.md` (206行)
-- `docs/PHASE1-SUMMARY.md` (219行)
-- `docs/PHASE2-HANDOFF.md` (本文件)
-- `FILE-PARSER.md` (302行)
-
 #### 构建工具 (2个)
 - `backend/dockerfiles/build-all-images.sh` (161行)
 - `backend/dockerfiles/build-file-parser.sh` (30行)
 
-**获取最新代码**:
-```bash
-git pull origin master
-# 或
-git checkout cf2c182  # 切换到 Phase 1 提交
-```
 
 ---
 
@@ -510,58 +471,6 @@ docs/API-REFERENCE.md
 docs/FRONTEND.md
 ```
 
----
-
-## ⚡ 推荐工作流程
-
-### Day 1: 理解 + 环境准备
-
-1. **(30分钟)** 快速阅读：
-   - `PHASE1-SUMMARY.md` - 了解完成了什么
-   - `CONTAINER-REFACTOR-PLAN.md` 第 2、5.1 节 - 了解要做什么
-   - `BREAKING-CHANGES.md` 第 1、2、3 节 - 了解怎么改
-
-2. **(10分钟)** 获取代码：
-   ```bash
-   git pull origin master
-   # 或切换到 Phase 1 提交
-   git checkout cf2c182
-   ```
-
-3. **(10分钟)** 验证环境：
-   - 运行上面的镜像验证命令
-   - 确认所有 6 个镜像都可用
-
-### Day 2: 核心重构
-
-1. **(1小时)** 修改 schemas.py
-   - 添加新枚举
-   - 测试导入无错误
-
-2. **(2小时)** 重构 container.py → container_manager.py
-   - 支持动态内存限制
-   - 支持多容器类型
-
-3. **(2小时)** 实现 terminal_sandbox_service.py
-   - 单例逻辑
-   - 错误处理
-
-### Day 3: 服务适配 + 测试
-
-1. **(1小时)** 更新现有服务
-   - file_parser_service.py
-   - rag_service.py
-   - mcp_service.py
-
-2. **(2小时)** 重组 API 路由
-   - 拆分 sandbox.py
-   - 更新 rag.py, mcp.py
-   - 新建 terminal.py
-
-3. **(2小时)** 测试验证
-   - 单元测试
-   - 集成测试
-   - 手动测试各个端点
 
 ---
 
@@ -607,31 +516,3 @@ docs/FRONTEND.md
 - [ ] 提交代码并更新 CHANGELOG
 
 ---
-
-**交接完成时间**: 2026-01-22 01:30
-**Phase 1 提交**: cf2c182 (已提交到 Git)
-**预计 Phase 2 工作量**: 2-3 天
-**风险等级**: 中（破坏性变更，但当前无用户）
-**下一里程碑**: Phase 3 - 前端重构
-
----
-
-## 📌 快速开始
-
-```bash
-# 1. 获取 Phase 1 代码
-git pull origin master
-
-# 2. 查看 Phase 1 改动
-git show cf2c182
-
-# 3. 阅读核心文档（30分钟）
-cat docs/PHASE1-SUMMARY.md
-cat docs/CONTAINER-REFACTOR-PLAN.md
-cat docs/BREAKING-CHANGES.md
-
-# 4. 验证镜像环境
-docker images | grep -E "(file-parser|terminal|mcp-server|rag-server)"
-
-# 5. 开始 Phase 2 开发
-```

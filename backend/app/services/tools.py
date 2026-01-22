@@ -1,6 +1,7 @@
 from __future__ import annotations
 import time
 import base64
+import asyncio
 import httpx
 from typing import Any, Callable, Dict, List
 from datetime import datetime
@@ -131,7 +132,8 @@ class ToolExecutor:
         if not path.startswith('/'):
             path = f"/workspace/{path}"
 
-        exit_code, stdout, stderr = container_manager.exec_in_container(
+        exit_code, stdout, stderr = await asyncio.to_thread(
+            container_manager.exec_in_container,
             session_id,
             f"/bin/sh -c \"cat '{path}'\""
         )
@@ -162,7 +164,9 @@ class ToolExecutor:
             # Content is base64 encoded binary - decode and use Docker API to copy
             try:
                 file_bytes = base64.b64decode(content)
-                container_manager.copy_file_to_container(session_id, path, file_bytes)
+                await asyncio.to_thread(
+                    container_manager.copy_file_to_container, session_id, path, file_bytes
+                )
                 return f"File written: {path} ({len(file_bytes)} bytes)"
             except Exception as e:
                 raise RuntimeError(f"Failed to write binary file: {e}")
@@ -175,11 +179,13 @@ class ToolExecutor:
             encoded = base64.b64encode(content.encode()).decode()
             # 确保父目录存在
             dir_path = '/'.join(safe_path.rsplit('/', 1)[:-1]) or '/'
-            container_manager.exec_in_container(
+            await asyncio.to_thread(
+                container_manager.exec_in_container,
                 session_id,
                 f"/bin/sh -c 'mkdir -p {dir_path}'"
             )
-            exit_code, stdout, stderr = container_manager.exec_in_container(
+            exit_code, stdout, stderr = await asyncio.to_thread(
+                container_manager.exec_in_container,
                 session_id,
                 f"/bin/sh -c \"echo '{encoded}' | base64 -d > '{safe_path}'\""
             )
@@ -205,7 +211,8 @@ class ToolExecutor:
         # 通过 shell 执行命令，确保管道、重定向等功能正常
         # 转义双引号以便在 shell 命令中使用
         escaped_command = command.replace('"', '\\"')
-        exit_code, stdout, stderr = container_manager.exec_in_container(
+        exit_code, stdout, stderr = await asyncio.to_thread(
+            container_manager.exec_in_container,
             session_id,
             f'/bin/sh -c "{escaped_command}"'
         )
@@ -267,7 +274,8 @@ class ToolExecutor:
         if not path.startswith('/'):
             path = f"/workspace/{path}" if path != "." else "/workspace"
 
-        exit_code, stdout, stderr = container_manager.exec_in_container(
+        exit_code, stdout, stderr = await asyncio.to_thread(
+            container_manager.exec_in_container,
             session_id,
             f"/bin/sh -c \"ls -la '{path}'\""
         )
@@ -378,14 +386,16 @@ class ToolExecutor:
         info = {}
 
         # 获取主机名
-        exit_code, stdout, _ = container_manager.exec_in_container(
+        exit_code, stdout, _ = await asyncio.to_thread(
+            container_manager.exec_in_container,
             session_id,
             "hostname"
         )
         info["hostname"] = stdout.strip() if exit_code == 0 else "unknown"
 
         # 获取操作系统信息
-        exit_code, stdout, _ = container_manager.exec_in_container(
+        exit_code, stdout, _ = await asyncio.to_thread(
+            container_manager.exec_in_container,
             session_id,
             "cat /etc/os-release 2>/dev/null || echo 'unknown'"
         )
@@ -398,7 +408,8 @@ class ToolExecutor:
             info["os"] = os_info.get("PRETTY_NAME", stdout.strip())
 
         # 获取环境变量（过滤敏感信息用于演示）
-        exit_code, stdout, _ = container_manager.exec_in_container(
+        exit_code, stdout, _ = await asyncio.to_thread(
+            container_manager.exec_in_container,
             session_id,
             "env | head -20"
         )
@@ -412,7 +423,8 @@ class ToolExecutor:
             info["env_vars"] = env_vars
 
         # 获取网络信息
-        exit_code, stdout, _ = container_manager.exec_in_container(
+        exit_code, stdout, _ = await asyncio.to_thread(
+            container_manager.exec_in_container,
             session_id,
             "cat /etc/hosts 2>/dev/null | head -10"
         )

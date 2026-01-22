@@ -5,7 +5,7 @@ import tarfile
 import base64
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
-from ..models.schemas import ImageType, ContainerStatus, ContainerInfo
+from ..models.schemas import ContainerStatus, ContainerInfo
 
 # Docker is optional
 try:
@@ -34,8 +34,9 @@ class ContainerManager:
 
     def get_or_create_container(
         self,
-        image: ImageType,
-        session_id: Optional[str] = None
+        image: str,  # 改为 str，支持任意镜像名
+        session_id: Optional[str] = None,
+        mem_limit: str = "512m"  # 新增参数
     ) -> ContainerInfo:
         """Get existing container for session or create new one."""
 
@@ -79,13 +80,13 @@ class ContainerManager:
 
         # Create new container
         container = self.client.containers.run(
-            image=image.value,
+            image=image,  # 直接使用字符串
             name=container_name,
             detach=True,
             tty=True,
             working_dir=self.WORK_DIR,
             # Security: limit resources
-            mem_limit="512m",
+            mem_limit=mem_limit,  # 使用传入的参数
             cpu_period=100000,
             cpu_quota=50000,  # 50% CPU
             network_mode="bridge",  # Allow network access
@@ -95,7 +96,7 @@ class ContainerManager:
 
         created_at = datetime.now().isoformat()
         self._sessions[new_session_id] = container.id
-        self._session_images[new_session_id] = image.value
+        self._session_images[new_session_id] = image  # 直接使用字符串
         self._session_created[new_session_id] = created_at
 
         # Create workspace directory
@@ -104,7 +105,7 @@ class ContainerManager:
         return ContainerInfo(
             session_id=new_session_id,
             container_id=container.id[:12],
-            image=image.value,
+            image=image,  # 直接使用字符串
             status=ContainerStatus.RUNNING,
             created_at=created_at
         )
@@ -164,7 +165,19 @@ class ContainerManager:
         while keeping logs/progress from stderr separate.
         """
         if session_id not in self._sessions:
-            raise ValueError(f"Session {session_id} not found")
+            # 尝试恢复已存在的容器（后端重启后容器可能仍在运行）
+            container_name = f"{self.CONTAINER_PREFIX}{session_id}"
+            try:
+                container = self.client.containers.get(container_name)
+                if container.status == "running":
+                    # 恢复会话
+                    self._sessions[session_id] = container.id
+                    self._session_images[session_id] = container.image.tags[0] if container.image.tags else "unknown"
+                    self._session_created[session_id] = datetime.now().isoformat()
+                else:
+                    raise ValueError(f"Session {session_id} not found (container not running)")
+            except docker.errors.NotFound:
+                raise ValueError(f"Session {session_id} not found")
 
         container_id = self._sessions[session_id]
         container = self.client.containers.get(container_id)
@@ -192,7 +205,18 @@ class ContainerManager:
             True if successful
         """
         if session_id not in self._sessions:
-            raise ValueError(f"Session {session_id} not found")
+            # 尝试恢复已存在的容器
+            container_name = f"{self.CONTAINER_PREFIX}{session_id}"
+            try:
+                container = self.client.containers.get(container_name)
+                if container.status == "running":
+                    self._sessions[session_id] = container.id
+                    self._session_images[session_id] = container.image.tags[0] if container.image.tags else "unknown"
+                    self._session_created[session_id] = datetime.now().isoformat()
+                else:
+                    raise ValueError(f"Session {session_id} not found (container not running)")
+            except docker.errors.NotFound:
+                raise ValueError(f"Session {session_id} not found")
 
         container_id = self._sessions[session_id]
         container = self.client.containers.get(container_id)

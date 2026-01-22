@@ -41,7 +41,7 @@
 | 向量存储 | ChromaDB | 向量数据库 |
 | 嵌入模型 | all-MiniLM-L6-v2 | 文本向量化 |
 | 文件解析 | PyMuPDF, python-docx, openpyxl, pytesseract | 多格式支持 |
-| 容器化 | Docker (mcp-tools:latest) | 隔离执行 |
+| 容器化 | Docker (file-parser:latest) | 隔离执行 |
 
 ## 核心文件
 

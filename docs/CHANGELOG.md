@@ -75,6 +75,42 @@
 
 ## 变更记录
 
+### [1.2.0] - 2026-01-21
+
+#### Added
+- **测试用例 v1.0.0 Schema**: 完整的 JSON 格式用于记录、导出、回放测试用例
+  - `src/schemas/testCase.js` - 前端 Schema 定义、验证、工具函数
+  - 支持 F1-F5 所有能力层级的完整状态记录
+  - 支持 SHA-256 校验和验证
+- **回放模式**: 从已保存用例恢复完整测试环境并回放执行过程
+  - `usePlayback` Hook - 回放状态管理
+  - 支持恢复 LLM、工具、沙箱、RAG、MCP 配置
+  - 按时序动画回放 messages 和 logs
+  - 工具调用过程可视化还原
+
+#### Changed
+- **重构 useCases Hook**: 接收 60+ 状态参数，构建完整 v1 测试用例
+- **重构 case_storage.py**: 只支持 v1 格式，移除旧格式兼容
+
+#### Removed
+- **移除旧格式支持** (Breaking Change)
+  - 删除 `SourceScenario`, `TestConfig`, `Judgment` 等旧模型
+  - 删除 `migrateOldCaseFormat()` 函数
+  - 旧格式用例文件不再自动迁移
+
+#### Breaking Changes
+- **已保存的旧格式用例 (.json) 将不再兼容**
+  - 影响: `backend/data/saved-cases/` 目录下的旧文件
+  - 解决方案: 删除旧文件或手动转换为 v1 格式
+- **API 请求格式变更**
+  - `POST /cases` 现在要求 v1 格式 (必须包含 `meta`, `source` 字段)
+  - 返回格式统一为 v1 结构
+
+#### Docs
+- 更新 CHANGELOG.md - 记录 Schema 变更和破坏性改动
+
+---
+
 ### [1.1.0] - 2026-01-21
 
 #### Changed

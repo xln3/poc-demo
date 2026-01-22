@@ -3,6 +3,9 @@ RAG API Router - RAG 服务的 HTTP 端点
 
 提供文档上传、摄入、查询、管理等 API。
 使用容器化 RAG 服务（ChromaDB 在 Docker 容器中）。
+
+注意：所有路由使用同步 def（非 async def），FastAPI 会自动在线程池中执行，
+避免同步的 Docker 操作阻塞事件循环。
 """
 
 import logging
@@ -32,7 +35,7 @@ class ResetResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check():
+def health_check():
     """健康检查 - 检查 RAG 服务状态"""
     try:
         rag_service = get_container_rag_service()
@@ -43,7 +46,7 @@ async def health_check():
             status="healthy" if is_available else "degraded",
             embedding_model=stats.get("embedding_model", "unknown"),
             embedding_available=stats.get("embedding_available", False),
-            parser_available=is_available,  # 容器可用则解析器也可用
+            parser_available=is_available,
             document_count=stats.get("document_count", 0),
             chunk_count=stats.get("chunk_count", 0)
         )
@@ -60,7 +63,7 @@ async def health_check():
 
 
 @router.post("/init", response_model=ResetResponse)
-async def init_rag():
+def init_rag():
     """
     初始化 RAG 知识库
 
@@ -87,7 +90,7 @@ async def init_rag():
 
 
 @router.post("/reset", response_model=ResetResponse)
-async def reset_rag():
+def reset_rag():
     """
     重置 RAG 知识库为预置数据
 
@@ -114,7 +117,7 @@ async def reset_rag():
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_document(
+def upload_document(
     file: UploadFile = File(...),
     source_name: Optional[str] = Form(None)
 ):
@@ -124,8 +127,8 @@ async def upload_document(
     支持的文件类型：PDF, DOCX, XLSX, 图片（OCR）, 纯文本
     """
     try:
-        # 读取文件内容
-        file_bytes = await file.read()
+        # 同步读取文件内容
+        file_bytes = file.file.read()
         filename = file.filename or "uploaded_file"
         display_name = source_name or filename
 
@@ -161,7 +164,7 @@ async def upload_document(
 
 
 @router.post("/ingest", response_model=IngestResponse)
-async def ingest_text(request: IngestRequest):
+def ingest_text(request: IngestRequest):
     """
     直接摄入文本到 RAG 知识库
 
@@ -192,7 +195,7 @@ async def ingest_text(request: IngestRequest):
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query_documents(request: QueryRequest):
+def query_documents(request: QueryRequest):
     """
     查询 RAG 知识库
 
@@ -220,7 +223,7 @@ async def query_documents(request: QueryRequest):
 
 
 @router.get("/documents", response_model=DocumentListResponse)
-async def list_documents():
+def list_documents():
     """列出所有已添加的文档"""
     try:
         rag_service = get_container_rag_service()
@@ -238,7 +241,7 @@ async def list_documents():
 
 
 @router.delete("/documents/{document_id}", response_model=DeleteResponse)
-async def delete_document(document_id: str):
+def delete_document(document_id: str):
     """删除指定文档"""
     try:
         rag_service = get_container_rag_service()
@@ -261,7 +264,7 @@ async def delete_document(document_id: str):
 
 
 @router.delete("/clear", response_model=ClearResponse)
-async def clear_documents():
+def clear_documents():
     """清空所有文档"""
     try:
         rag_service = get_container_rag_service()

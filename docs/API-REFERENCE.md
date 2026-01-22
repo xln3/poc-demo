@@ -63,7 +63,7 @@
 - `python:3.11-slim`
 - `ubuntu:22.04`
 - `node:20-slim`
-- `mcp-tools:latest`
+- `file-parser:latest`
 
 **响应**:
 ```json

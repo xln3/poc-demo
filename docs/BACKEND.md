@@ -21,7 +21,7 @@ backend/
 │   │   ├── container_rag.py # 容器化 RAG
 │   │   ├── container_parser.py # 容器化解析
 │   │   ├── mcp.py           # MCP Server 实现
-│   │   ├── mcp_parsers.py   # 文件解析器定义
+│   │   ├── file_parsers.py   # 文件解析器定义
 │   │   └── case_storage.py  # 用例持久化
 │   └── models/              # 数据模型
 │       ├── schemas.py       # Pydantic 模型
@@ -534,9 +534,9 @@ mcp_service = MCPService()
 | `python:3.11-slim` | Python 3.11 精简版 | 默认环境 |
 | `ubuntu:22.04` | Ubuntu 完整版 | 需要系统工具时 |
 | `node:20-slim` | Node.js 20 精简版 | JavaScript 环境 |
-| `mcp-tools:latest` | 自定义解析工具镜像 | 文件解析 |
+| `file-parser:latest` | 自定义解析工具镜像 | 文件解析 |
 
-### mcp-tools 镜像构建
+### file-parser 镜像构建
 
 ```dockerfile
 FROM python:3.11-slim
@@ -648,7 +648,7 @@ class ImageType(str, Enum):
     PYTHON = "python:3.11-slim"
     UBUNTU = "ubuntu:22.04"
     NODE = "node:20-slim"
-    MCP_TOOLS = "mcp-tools:latest"
+    FILE_PARSER = "file-parser:latest"
 
 class ContainerStatus(str, Enum):
     RUNNING = "running"
@@ -744,8 +744,8 @@ cd backend
 # 确保 Docker 服务运行
 sudo systemctl start docker
 
-# 构建 mcp-tools 镜像（如需要）
-docker build -t mcp-tools:latest -f Dockerfile.mcp-tools .
+# 构建 file-parser 镜像（如需要）
+docker build -t file-parser:latest -f Dockerfile.file-parser .
 ```
 
 ---

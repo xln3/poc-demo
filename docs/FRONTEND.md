@@ -21,7 +21,10 @@ src/
 │   ├── useCases.js      # 用例持久化
 │   ├── useMCP.js        # MCP 配置管理
 │   ├── useConversation.js # 对话状态管理
-│   └── useLLMConfig.js  # LLM 参数配置
+│   ├── useLLMConfig.js  # LLM 参数配置
+│   └── usePlayback.js   # 用例回放
+├── schemas/             # 数据结构定义
+│   └── testCase.js      # 测试用例 v1.0.0 Schema
 ├── utils/               # 工具函数
 │   ├── index.js         # 工具导出入口
 │   └── export.js        # 导出功能
@@ -185,6 +188,40 @@ llmConfig.resetLLMConfig()      // 重置为默认值
 llmConfig.enableAllTools()      // 启用所有工具
 llmConfig.enableSafeToolsOnly() // 仅启用安全工具
 llmConfig.disableAllTools()     // 禁用所有工具
+```
+
+### usePlayback
+
+管理测试用例回放功能。
+
+```javascript
+import { usePlayback } from './hooks/index.js';
+
+const playback = usePlayback({
+  // 需要传入所有状态设置器
+  setMode, setSelectedModel, setLlmTemperature, setLlmMaxTokens,
+  setLlmTopP, setThinkingEnabled, setThinkingBudget, setCustomSystemPrompt,
+  setToolsEnabled, setEnabledTools, setMaxToolCalls,
+  setSandboxEnabled, setSandboxImage,
+  setRagEnabled, setRagMode, setRagKnowledge,
+  setMcpEnabled, setMcpParsers, setMcpServerEnabled, setSelectedMcpServer,
+  setMessages, setLogs, setToolCallHistory,
+  setApiStatus, setRealResponse, setLastTestResult, setCustomTestPayload,
+});
+
+// 状态
+playback.isPlaybackMode         // 是否在回放模式
+playback.playbackCase           // 当前回放的用例
+playback.isPlaying              // 是否正在播放
+playback.playbackProgress       // 播放进度
+playback.playbackTotal          // 总项目数
+
+// 函数
+playback.startPlayback(testCase) // 开始回放
+playback.stopPlayback()          // 停止回放
+playback.exitPlayback()          // 退出回放模式
+playback.skipToEnd()             // 跳过动画直接显示结果
+playback.restoreEnvironment(testCase) // 恢复环境配置
 ```
 
 ---

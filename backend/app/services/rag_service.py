@@ -360,7 +360,7 @@ def parse_file_for_rag(file_bytes: bytes, filename: str) -> Tuple[str, DocumentT
     Returns:
         (提取的文本, 文档类型)
     """
-    from .mcp_parsers import get_file_type
+    from .file_parsers import get_file_type
     from .container_parser import get_container_parser
 
     file_type = get_file_type(filename)

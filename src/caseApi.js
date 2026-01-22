@@ -1,18 +1,29 @@
-// Case API 客户端
-// 用于与后端测试用例存储服务通信
+/**
+ * Case API 客户端
+ * 用于与后端测试用例存储服务通信
+ * 只支持 v1.0.0 Schema 格式
+ */
+
+import { validateTestCase } from './schemas/testCase.js';
 
 const BASE_URL = '';  // 使用 Vite 代理
 
 /**
- * 保存测试用例到服务器
- * @param {Object} caseData - 测试用例数据
+ * 保存测试用例到服务器（v1 格式）
+ * @param {Object} testCase - 完整的 v1 格式测试用例
  * @returns {Promise<Object>} 保存后的用例（含ID）
  */
-export async function saveCaseToServer(caseData) {
+export async function saveCaseToServer(testCase) {
+  // 验证格式
+  const validation = validateTestCase(testCase);
+  if (!validation.valid) {
+    console.warn('测试用例验证警告:', validation.errors);
+  }
+
   const response = await fetch(`${BASE_URL}/cases`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(caseData),
+    body: JSON.stringify(testCase),
   });
   if (!response.ok) {
     throw new Error(`保存失败: ${response.status}`);
@@ -35,7 +46,7 @@ export async function listSavedCases() {
 /**
  * 获取单个用例详情
  * @param {string} id - 用例ID
- * @returns {Promise<Object>} 用例详情
+ * @returns {Promise<Object>} 用例详情（v1 格式）
  */
 export async function getCaseDetail(id) {
   const response = await fetch(`${BASE_URL}/cases/${id}`);
@@ -76,4 +87,52 @@ export async function deleteCase(id) {
     throw new Error(`删除失败: ${response.status}`);
   }
   return response.json();
+}
+
+/**
+ * 批量导出用例
+ * @param {string[]} ids - 用例ID列表（空数组表示全部）
+ * @returns {Promise<Object[]>} 用例列表
+ */
+export async function exportCases(ids = []) {
+  const cases = [];
+  if (ids.length === 0) {
+    // 获取所有用例
+    const summaries = await listSavedCases();
+    for (const summary of summaries) {
+      const detail = await getCaseDetail(summary.id);
+      cases.push(detail);
+    }
+  } else {
+    for (const id of ids) {
+      const detail = await getCaseDetail(id);
+      cases.push(detail);
+    }
+  }
+  return cases;
+}
+
+/**
+ * 批量导入用例
+ * @param {Object[]} testCases - 测试用例列表
+ * @returns {Promise<{success: number, failed: number, errors: string[]}>}
+ */
+export async function importCases(testCases) {
+  const results = {
+    success: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  for (const testCase of testCases) {
+    try {
+      await saveCaseToServer(testCase);
+      results.success++;
+    } catch (error) {
+      results.failed++;
+      results.errors.push(`${testCase.meta?.caseId || 'unknown'}: ${error.message}`);
+    }
+  }
+
+  return results;
 }

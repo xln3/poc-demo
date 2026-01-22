@@ -5,8 +5,8 @@ import { sandboxClient, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
 import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
 import { mcpClient } from './mcp.js';
-import { exportReport, exportTestResult, exportHTML } from './utils/index.js';
-import { useSandbox, ImageType, useRAG, useCases, useMCP, useConversation, useLLMConfig } from './hooks/index.js';
+import { exportReport, exportHTML } from './utils/index.js';
+import { useSandbox, ImageType, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback } from './hooks/index.js';
 
 // 能力层级图标
 const LEVEL_ICONS = {
@@ -76,7 +76,7 @@ export default function App() {
     sandboxFiles, setSandboxFiles, uploadingSandboxFile,
     startContainer, stopContainer, handleUploadToSandbox, handleRemoveSandboxFile,
     presetSandboxFiles, refreshSandboxFiles, handleDownloadSandboxFile, executeCommand,
-    handleSandboxLog, isSandboxAvailable, isMcpToolsContainerReady
+    handleSandboxLog, isSandboxAvailable, isFileParserReady
   } = sandbox;
 
   // RAG hook
@@ -90,12 +90,9 @@ export default function App() {
     handleRagDelete, handleRagClear, handleRagReset, performRagQuery
   } = rag;
 
-  // Cases hook
-  const cases = useCases({ lastTestResult, messages, logs });
-  const {
-    viewMode, setViewMode, savedCases, setSavedCases, selectedCase, setSelectedCase,
-    isSaving, loadingSavedCases, saveToServer, loadSavedCases, viewCaseDetail, handleDeleteCase
-  } = cases;
+  // Cases hook - 延迟初始化，在获取所有状态后调用
+  // 注意：useCases 需要的状态在下面的 hooks 中定义
+  // 这里先声明，实际调用移到所有 hooks 之后
 
   // MCP hook
   const mcp = useMCP();
@@ -145,6 +142,112 @@ export default function App() {
   const currentAttack = currentScenario.attacks[selectedAttack.index];
   const attackType = ATTACK_TYPES[currentAttack.type];
   const riskLevel = RISK_LEVELS[currentAttack.level];
+
+  // Cases hook - 需要在所有状态定义之后调用
+  const cases = useCases({
+    // 基础状态
+    mode,
+    dialogMode,
+    messages,
+    logs,
+    conversationHistory,
+
+    // 场景和攻击
+    selectedAttack,
+    currentScenario,
+    currentAttack,
+
+    // LLM 配置
+    selectedModel,
+    llmTemperature,
+    llmMaxTokens,
+    llmTopP,
+    thinkingEnabled,
+    thinkingBudget,
+
+    // 系统提示词
+    customSystemPrompt,
+
+    // 工具配置
+    toolsEnabled,
+    enabledTools,
+    maxToolCalls,
+    toolCallHistory,
+
+    // 沙箱配置
+    sandboxEnabled,
+    sandboxStatus,
+    sandboxImage,
+    containerInfo,
+    presetSandboxFiles,
+    sandboxFiles,
+
+    // RAG 配置
+    ragEnabled,
+    ragMode,
+    ragKnowledge,
+    ragDocuments,
+
+    // MCP 配置
+    mcpEnabled,
+    mcpParsers,
+    mcpServerEnabled,
+    selectedMcpServer,
+    mcpServerConfigs,
+    mcpServerStatus,
+
+    // Payload 文件
+    payloadFiles,
+    customTestPayload,
+
+    // API 结果
+    apiStatus,
+    apiError,
+    realResponse,
+    lastJudgment: lastTestResult?.judgment,
+    apiTime: lastTestResult?.apiTime,
+  });
+  const {
+    viewMode, setViewMode, savedCases, setSavedCases, selectedCase, setSelectedCase,
+    isSaving, loadingSavedCases, saveToServer, exportCurrentCase, importFromFile,
+    loadSavedCases, viewCaseDetail, handleDeleteCase
+  } = cases;
+
+  // Playback hook - 回放已保存的测试用例
+  const playback = usePlayback({
+    setMode,
+    setSelectedModel,
+    setLlmTemperature,
+    setLlmMaxTokens,
+    setLlmTopP,
+    setThinkingEnabled,
+    setThinkingBudget,
+    setCustomSystemPrompt,
+    setToolsEnabled,
+    setEnabledTools,
+    setMaxToolCalls,
+    setSandboxEnabled,
+    setSandboxImage,
+    setRagEnabled,
+    setRagMode,
+    setRagKnowledge,
+    setMcpEnabled,
+    setMcpParsers,
+    setMcpServerEnabled,
+    setSelectedMcpServer,
+    setMessages,
+    setLogs,
+    setToolCallHistory,
+    setApiStatus,
+    setRealResponse,
+    setLastTestResult,
+    setCustomTestPayload,
+  });
+  const {
+    isPlaybackMode, playbackCase, isPlaying: isPlaybackPlaying,
+    playbackProgress, playbackTotal,
+    startPlayback, stopPlayback, exitPlayback, skipToEnd
+  } = playback;
 
   // 自动滚动
   useEffect(() => {
@@ -1259,7 +1362,15 @@ export default function App() {
 
     // 1. 上传文件到沙箱
     const fileBytes = await file.arrayBuffer();
-    const fileBase64 = btoa(String.fromCharCode(...new Uint8Array(fileBytes)));
+    // 分块处理 base64 编码，避免大文件导致调用栈溢出
+    const uint8Array = new Uint8Array(fileBytes);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    const fileBase64 = btoa(binary);
 
     // 使用安全的文件名（避免特殊字符问题）
     const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -1292,7 +1403,7 @@ export default function App() {
     const parseCommand = `python3 -c "
 import sys
 sys.path.append('/app')
-from mcp_parsers import parse_file
+from file_parsers import parse_file
 
 results = parse_file(open('${filePath}', 'rb').read(), '${file.name}', [${parsersStr}])
 
@@ -1383,15 +1494,15 @@ print('\\n'.join(all_text))
     let activeContainerInfo = containerInfo;
 
     if (requiresDocker) {
-      // 自动启动/切换到 MCP-tools 容器
-      if (!isMcpToolsContainerReady()) {
+      // 自动启动/切换到 File Parser 容器
+      if (!isFileParserReady()) {
         setParsingProgress({
           filename: file.name,
           parser: '准备中...',
           startTime,
           elapsedTime: 0,
           estimatedTime: 10000,
-          runLocation: '启动 MCP-tools 容器...'
+          runLocation: '启动 File Parser 容器...'
         });
 
         // 如果有其他容器在运行，先停止
@@ -1403,11 +1514,11 @@ print('\\n'.join(all_text))
           }
         }
 
-        // 启动 MCP-tools 容器
-        setSandboxImage(ImageType.MCP_TOOLS);
+        // 启动 File Parser 容器
+        setSandboxImage(ImageType.FILE_PARSER);
         setSandboxStatus('connecting');
         try {
-          const info = await sandboxClient.createContainer(ImageType.MCP_TOOLS);
+          const info = await sandboxClient.createContainer(ImageType.FILE_PARSER);
           activeContainerInfo = info; // 保存到局部变量，立即可用
           setContainerInfo(info);
           setSandboxStatus('running');
@@ -1478,68 +1589,79 @@ print('\\n'.join(all_text))
     }
   };
 
-  // 文件处理函数 - 读取文件内容作为文本
-  // 注：这模拟了真实世界中 LLM 系统处理文件的方式（先解析再发送文本给模型）
+  // 文件处理函数 - 解析文件内容作为文本
+  // F2 文件注入场景：直接调用后端 /mcp/parse/text API 解析（不依赖 mcpEnabled）
   const handleAddFile = async (e) => {
     const files = Array.from(e.target.files);
 
     for (const file of files) {
       let content;
       let parsedWith = null;
-      let runLocation = null;
       let parseError = null;
 
-      // 1. 判断文件类型
-      const fileType = getFileTypeForMcp(file.name);
-      console.log('📁 文件上传:', file.name, '类型:', fileType, 'MCP启用:', mcpEnabled);
+      // 判断是否是需要解析的二进制文件类型
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      const needsParsing = ['pdf', 'docx', 'xlsx', 'xls', 'doc', 'pptx', 'ppt', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
 
-      // 2. 尝试使用MCP解析
-      if (mcpEnabled && fileType) {
-        console.log('✅ 进入MCP解析分支');
+      if (needsParsing) {
         try {
-          // 创建取消控制器
-          const abortController = new AbortController();
-          setParsingAbortController(abortController);
           setIsParsingFile(true);
 
-          // 解析文件（自动选择沙箱或后端）
-          const result = await parseFileWithMcp(file, fileType, abortController);
-          content = result.content;
-          parsedWith = result.parsedWith;
-          runLocation = result.runLocation;
+          // 构建 FormData
+          const formData = new FormData();
+          formData.append('file', file);
 
-          console.log(`✓ 使用 ${parsedWith} 在${runLocation === 'sandbox' ? '沙箱' : '后端'}解析 ${file.name}`);
-          console.log(`📝 解析得到的内容长度: ${content?.length || 0} 字符，预览:`, content?.substring(0, 100));
+          // 根据文件类型选择默认解析器
+          let defaultParsers;
+          if (['pdf'].includes(ext)) {
+            defaultParsers = ['pymupdf'];
+          } else if (['docx', 'doc'].includes(ext)) {
+            defaultParsers = ['python-docx'];
+          } else if (['xlsx', 'xls'].includes(ext)) {
+            defaultParsers = ['openpyxl'];
+          } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
+            defaultParsers = ['tesseract'];
+          } else {
+            defaultParsers = ['text'];
+          }
+          formData.append('parsers', JSON.stringify(defaultParsers));
 
-        } catch (error) {
-          // 解析失败，记录错误
-          console.error('❌ MCP解析异常:', error);
-          if (error.name === 'AbortError') {
-            console.log('⛔ 解析被用户取消');
-            return;  // 用户取消，不添加文件
+          // 调用后端解析 API
+          const response = await fetch(`${CONFIG.mcp.serverUrl}/mcp/parse/text`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!response.ok) {
+            throw new Error(`解析失败: ${response.status}`);
           }
 
+          const result = await response.json();
+          content = result.text || '';
+          parsedWith = defaultParsers.join(', ');
+
+        } catch (error) {
+          console.error('文件解析失败:', error);
           parseError = error.message;
-          console.error('⚠️ MCP解析失败，降级到file.text():', error.message);
+          // 降级：读取原始内容
           content = await file.text();
           parsedWith = 'fallback (原始文本)';
         } finally {
           setIsParsingFile(false);
-          setParsingAbortController(null);
         }
       } else {
-        // MCP未启用或不支持的文件类型
+        // 文本文件直接读取
         content = await file.text();
       }
 
-      // 3. 添加到文件列表
+      // 添加到文件列表
       setPayloadFiles(prev => [...prev, {
         name: file.name,
         content,
         size: file.size,
         parsedWith,
-        runLocation,
-        parseError  // 记录错误信息
+        runLocation: 'backend',
+        parseError
       }]);
     }
 
@@ -1650,7 +1772,7 @@ print('\\n'.join(all_text))
                     <option value={ImageType.PYTHON}>🐍 Python 3.11</option>
                     <option value={ImageType.UBUNTU}>🐧 Ubuntu 22.04</option>
                     <option value={ImageType.NODE}>📦 Node 20</option>
-                    <option value={ImageType.MCP_TOOLS}>🔧 MCP Tools (PDF OCR)</option>
+                    <option value={ImageType.FILE_PARSER}>🔧 File Parser (PDF OCR)</option>
                   </select>
                 </div>
               )}
@@ -1798,18 +1920,18 @@ print('\\n'.join(all_text))
                 🎬 当前演示 (HTML)
               </button>
               <button
-                onClick={() => exportTestResult(lastTestResult, logs)}
-                disabled={!lastTestResult}
-                className={`w-full py-1.5 rounded ${lastTestResult ? 'bg-purple-600 hover:bg-purple-500' : 'bg-slate-600 cursor-not-allowed'}`}
+                onClick={exportCurrentCase}
+                disabled={apiStatus !== 'success'}
+                className={`w-full py-1.5 rounded ${apiStatus === 'success' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-slate-600 cursor-not-allowed'}`}
               >
-                📊 测试结果 (JSON) {lastTestResult ? '✓' : ''}
+                📊 测试结果 (JSON) {apiStatus === 'success' ? '✓' : ''}
               </button>
               <button
                 onClick={saveToServer}
-                disabled={!lastTestResult || isSaving}
-                className={`w-full py-1.5 rounded ${lastTestResult && !isSaving ? 'bg-orange-600 hover:bg-orange-500' : 'bg-slate-600 cursor-not-allowed'}`}
+                disabled={apiStatus !== 'success' || isSaving}
+                className={`w-full py-1.5 rounded ${apiStatus === 'success' && !isSaving ? 'bg-orange-600 hover:bg-orange-500' : 'bg-slate-600 cursor-not-allowed'}`}
               >
-                {isSaving ? '⏳ 保存中...' : '💾 保存到服务器'} {lastTestResult && !isSaving ? '' : ''}
+                {isSaving ? '⏳ 保存中...' : '💾 保存到服务器'} {apiStatus === 'success' && !isSaving ? '' : ''}
               </button>
             </div>
           )}
@@ -1899,27 +2021,41 @@ print('\\n'.join(all_text))
                   >
                     <div className="flex items-center justify-between">
                       <div className="text-xs font-medium truncate flex-1">
-                        {item.name || item.sourceScenario?.attackName || '未命名'}
+                        {item.name || item.attackName || '未命名'}
                       </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteCase(item.id); }}
-                        className="text-xs text-slate-400 hover:text-red-400 ml-2"
-                        title="删除"
-                      >
-                        🗑️
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const detail = await getCaseDetail(item.id);
+                            startPlayback(detail);
+                            setViewMode('scenarios');
+                          }}
+                          className="text-xs text-slate-400 hover:text-cyan-400"
+                          title="回放"
+                        >
+                          ▶️
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteCase(item.id); }}
+                          className="text-xs text-slate-400 hover:text-red-400"
+                          title="删除"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
-                      {item.sourceScenario?.name} · {item.testConfig?.model}
+                      {item.scenarioName || item.sourceScenario?.name} · {item.modelId || item.testConfig?.model}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        item.judgment?.success === true ? 'bg-red-600' :
-                        item.judgment?.success === false ? 'bg-green-600' :
+                        item.judgmentSuccess === true ? 'bg-red-600' :
+                        item.judgmentSuccess === false ? 'bg-green-600' :
                         'bg-yellow-600'
                       }`}>
-                        {item.judgment?.success === true ? '攻击成功' :
-                         item.judgment?.success === false ? '攻击失败' : '不确定'}
+                        {item.judgmentSuccess === true ? '攻击成功' :
+                         item.judgmentSuccess === false ? '攻击失败' : '不确定'}
                       </span>
                       <span className="text-xs text-slate-500">
                         {item.savedAt ? new Date(item.savedAt).toLocaleString('zh-CN') : ''}
@@ -1941,21 +2077,35 @@ print('\\n'.join(all_text))
             {/* 标题区 */}
             <div className="mb-4">
               <div className="flex items-center gap-3 mb-1">
-                <h2 className="text-lg font-bold">{selectedCase.name || selectedCase.sourceScenario?.attackName}</h2>
+                <h2 className="text-lg font-bold">
+                  {selectedCase.meta?.name || selectedCase.source?.attack?.name || selectedCase.name || selectedCase.sourceScenario?.attackName}
+                </h2>
                 <span className={`px-2 py-0.5 rounded text-xs ${
-                  selectedCase.judgment?.success === true ? 'bg-red-600' :
-                  selectedCase.judgment?.success === false ? 'bg-green-600' :
+                  (selectedCase.result?.judgment?.success ?? selectedCase.judgment?.success) === true ? 'bg-red-600' :
+                  (selectedCase.result?.judgment?.success ?? selectedCase.judgment?.success) === false ? 'bg-green-600' :
                   'bg-yellow-600'
                 }`}>
-                  {selectedCase.judgment?.success === true ? '攻击成功' :
-                   selectedCase.judgment?.success === false ? '攻击失败' : '不确定'}
+                  {(selectedCase.result?.judgment?.success ?? selectedCase.judgment?.success) === true ? '攻击成功' :
+                   (selectedCase.result?.judgment?.success ?? selectedCase.judgment?.success) === false ? '攻击失败' : '不确定'}
                 </span>
+                <button
+                  onClick={() => {
+                    startPlayback(selectedCase);
+                    setViewMode('scenarios');
+                  }}
+                  className="px-2 py-0.5 text-xs bg-cyan-600 hover:bg-cyan-500 rounded transition"
+                >
+                  ▶️ 回放
+                </button>
               </div>
               <div className="text-xs text-slate-400 mt-1">
-                场景: {selectedCase.sourceScenario?.name} · 模型: {selectedCase.testConfig?.model}
+                场景: {selectedCase.source?.scenarioName || selectedCase.sourceScenario?.name} · 模型: {selectedCase.environment?.llm?.modelId || selectedCase.testConfig?.model}
               </div>
               <div className="text-xs text-slate-500 mt-1">
-                保存时间: {selectedCase.savedAt ? new Date(selectedCase.savedAt).toLocaleString('zh-CN') : '未知'}
+                保存时间: {(selectedCase.meta?.createdAt || selectedCase.savedAt) ? new Date(selectedCase.meta?.createdAt || selectedCase.savedAt).toLocaleString('zh-CN') : '未知'}
+                {selectedCase.source?.capabilityLevel && (
+                  <span className="ml-2">· 能力层级: {selectedCase.source.capabilityLevel}</span>
+                )}
               </div>
             </div>
 
@@ -1967,7 +2117,7 @@ print('\\n'.join(all_text))
                   💬 对话记录
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scroll space-y-2">
-                  {(selectedCase.conversations || []).map((msg, idx) => (
+                  {(selectedCase.execution?.messages || selectedCase.conversations || []).map((msg, idx) => (
                     <div
                       key={idx}
                       className={`p-2 rounded text-xs ${
@@ -1992,14 +2142,16 @@ print('\\n'.join(all_text))
                   {/* 判定理由 */}
                   <div>
                     <div className="text-slate-400 mb-1">判定理由</div>
-                    <div className="p-2 bg-slate-700 rounded">{selectedCase.judgment?.reason || '无'}</div>
+                    <div className="p-2 bg-slate-700 rounded">
+                      {selectedCase.result?.judgment?.reason || selectedCase.judgment?.reason || '无'}
+                    </div>
                   </div>
 
                   {/* 测试载荷 */}
                   <div>
                     <div className="text-slate-400 mb-1">测试载荷</div>
                     <div className="p-2 bg-slate-700 rounded whitespace-pre-wrap max-h-32 overflow-y-auto custom-scroll">
-                      {selectedCase.payload || '无'}
+                      {selectedCase.execution?.payload?.display || selectedCase.payload || '无'}
                     </div>
                   </div>
 
@@ -2007,16 +2159,42 @@ print('\\n'.join(all_text))
                   <div>
                     <div className="text-slate-400 mb-1">LLM 响应</div>
                     <div className="p-2 bg-slate-700 rounded whitespace-pre-wrap max-h-40 overflow-y-auto custom-scroll">
-                      {selectedCase.response || '无'}
+                      {selectedCase.result?.response || selectedCase.response || '无'}
                     </div>
                   </div>
 
-                  {/* 系统日志 */}
-                  {selectedCase.logs && selectedCase.logs.length > 0 && (
+                  {/* 工具调用记录 */}
+                  {((selectedCase.execution?.toolCalls || selectedCase.toolCalls)?.length > 0) && (
                     <div>
-                      <div className="text-slate-400 mb-1">系统日志 ({selectedCase.logs.length})</div>
+                      <div className="text-slate-400 mb-1">
+                        🔧 工具调用 ({(selectedCase.execution?.toolCalls || selectedCase.toolCalls).length})
+                      </div>
                       <div className="space-y-1">
-                        {selectedCase.logs.slice(0, 10).map((log, idx) => (
+                        {(selectedCase.execution?.toolCalls || selectedCase.toolCalls).map((tc, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-1.5 rounded text-xs ${
+                              tc.category === 'dangerous' ? 'bg-red-900/30 border-l-2 border-red-500' :
+                              tc.category === 'risky' ? 'bg-yellow-900/30 border-l-2 border-yellow-500' :
+                              'bg-slate-700'
+                            }`}
+                          >
+                            <span className="text-cyan-400">{tc.name}</span>
+                            <span className="text-slate-500 ml-1">({JSON.stringify(tc.args).slice(0, 50)}...)</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 系统日志 */}
+                  {((selectedCase.execution?.logs || selectedCase.logs)?.length > 0) && (
+                    <div>
+                      <div className="text-slate-400 mb-1">
+                        系统日志 ({(selectedCase.execution?.logs || selectedCase.logs).length})
+                      </div>
+                      <div className="space-y-1">
+                        {(selectedCase.execution?.logs || selectedCase.logs).slice(0, 10).map((log, idx) => (
                           <div
                             key={idx}
                             className={`p-1.5 rounded text-xs ${
@@ -2029,8 +2207,10 @@ print('\\n'.join(all_text))
                             {log.content}
                           </div>
                         ))}
-                        {selectedCase.logs.length > 10 && (
-                          <div className="text-slate-500">...还有 {selectedCase.logs.length - 10} 条日志</div>
+                        {(selectedCase.execution?.logs || selectedCase.logs).length > 10 && (
+                          <div className="text-slate-500">
+                            ...还有 {(selectedCase.execution?.logs || selectedCase.logs).length - 10} 条日志
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2048,11 +2228,72 @@ print('\\n'.join(all_text))
           </div>
         ) : (
         <>
+        {/* 回放模式控制条 */}
+        {isPlaybackMode && (
+          <div className="mb-4 p-3 bg-cyan-900/30 border border-cyan-600 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-cyan-400 font-medium">▶️ 回放模式</span>
+                <span className="text-xs text-slate-400">
+                  {playbackCase?.meta?.name || playbackCase?.source?.attack?.name || '未命名用例'}
+                </span>
+                {isPlaybackPlaying && (
+                  <span className="text-xs text-cyan-400 animate-pulse">
+                    ● 播放中 ({playbackProgress}/{playbackTotal})
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isPlaybackPlaying ? (
+                  <>
+                    <button
+                      onClick={stopPlayback}
+                      className="px-2 py-1 text-xs bg-yellow-600 hover:bg-yellow-500 rounded"
+                    >
+                      ⏸️ 暂停
+                    </button>
+                    <button
+                      onClick={skipToEnd}
+                      className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded"
+                    >
+                      ⏭️ 跳过
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => playbackCase && startPlayback(playbackCase)}
+                    className="px-2 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 rounded"
+                    disabled={!playbackCase}
+                  >
+                    ▶️ 重新播放
+                  </button>
+                )}
+                <button
+                  onClick={exitPlayback}
+                  className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 rounded"
+                >
+                  ✕ 退出回放
+                </button>
+              </div>
+            </div>
+            {playbackTotal > 0 && (
+              <div className="mt-2">
+                <div className="w-full bg-slate-700 rounded-full h-1.5">
+                  <div
+                    className="bg-cyan-500 h-1.5 rounded-full transition-all duration-200"
+                    style={{ width: `${(playbackProgress / playbackTotal) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 标题区 */}
         <div className="mb-4">
           <div className="flex items-center gap-3 mb-1">
             <h2 className="text-lg font-bold">{currentAttack.name}—{currentScenario.name}</h2>
-            {mode === 'real' && (
+            {mode === 'real' && !isPlaybackMode && (
               <span className="px-2 py-0.5 bg-green-600 rounded text-xs">🔬 真实测试模式</span>
             )}
           </div>
@@ -2064,10 +2305,10 @@ print('\\n'.join(all_text))
             <span className={`px-2 py-0.5 rounded text-xs ${riskLevel.color}`}>
               危害等级：{riskLevel.label}
             </span>
-            {mode === 'mock' && isPlaying && (
+            {mode === 'mock' && isPlaying && !isPlaybackMode && (
               <span className="text-xs text-green-400 animate-pulse">● 演示中</span>
             )}
-            {mode === 'real' && apiStatus === 'loading' && (
+            {mode === 'real' && apiStatus === 'loading' && !isPlaybackMode && (
               <span className="text-xs text-yellow-400 animate-pulse">● 请求中... {(apiElapsedTime / 1000).toFixed(1)}s</span>
             )}
           </div>

@@ -106,7 +106,15 @@ export const useSandbox = ({ addLog }) => {
     try {
       for (const file of files) {
         const bytes = await file.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+        // 分块处理 base64 编码，避免大文件导致调用栈溢出
+        const uint8Array = new Uint8Array(bytes);
+        let binary = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < uint8Array.length; i += chunkSize) {
+          const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+          binary += String.fromCharCode.apply(null, chunk);
+        }
+        const base64 = btoa(binary);
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const path = `/workspace/${safeName}`;
 
@@ -316,9 +324,9 @@ export const useSandbox = ({ addLog }) => {
     return sandboxEnabled && sandboxStatus === 'running' && containerInfo !== null;
   };
 
-  // Check if MCP-tools container is ready
-  const isMcpToolsContainerReady = () => {
-    return isSandboxAvailable() && containerInfo?.image === 'mcp-tools:latest';
+  // Check if file-parser container is ready
+  const isFileParserReady = () => {
+    return isSandboxAvailable() && containerInfo?.image === 'file-parser:latest';
   };
 
   return {
@@ -355,7 +363,7 @@ export const useSandbox = ({ addLog }) => {
 
     // Helper functions
     isSandboxAvailable,
-    isMcpToolsContainerReady,
+    isFileParserReady,
   };
 };
 
