@@ -36,19 +36,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装Python文件解析依赖（无chromadb）
+# 注意：版本约束必须用引号包裹，否则 shell 会将 > 解释为重定向
 RUN pip install --no-cache-dir \
-    # PDF解析
-    PyMuPDF>=1.24.0 \
-    pdfplumber>=0.10.0 \
-    pdf2image>=1.16.0 \
-    pytesseract>=0.3.10 \
-    # DOCX解析
-    python-docx>=1.1.0 \
-    mammoth>=1.6.0 \
-    # XLSX解析
-    openpyxl>=3.1.0 \
-    # 图片处理
-    Pillow>=10.0.0
+    "PyMuPDF>=1.24.0" \
+    "pdfplumber>=0.10.0" \
+    "pdf2image>=1.16.0" \
+    "pytesseract>=0.3.10" \
+    "python-docx>=1.1.0" \
+    "mammoth>=1.6.0" \
+    "openpyxl>=3.1.0" \
+    "Pillow>=10.0.0"
 
 # 复制文件解析器模块和CLI入口
 COPY app/services/file_parsers.py /app/file_parsers.py

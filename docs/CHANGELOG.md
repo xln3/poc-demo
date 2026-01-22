@@ -75,6 +75,33 @@
 
 ## 变更记录
 
+### [1.3.0] - 2026-01-22
+
+#### Changed
+- **清理 F3/F4/F5 场景**: 每个层级保留 1 个空骨架，供人工测试
+  - F3-tool-use: 删除 5 个场景，保留 `sandbox.js`
+  - F4-rag: 删除 2 个场景，保留 `rag.js`
+  - F5-mcp: 删除 12 个场景，保留 `mcp.js`
+
+#### Removed
+- 删除 `public/attack-samples/rag/` 目录 (14 个预置文件)
+- 删除 F3 场景: configPoison, jumpPad, persistent, financialForgery, financeConfig
+- 删除 F4 场景: ragSecurity, ragAttackChain
+- 删除 F5 场景: salesData, financeQuery, email, payment, notion, github, database, http, slack, calendar, storage, memory
+
+#### Fixed
+- **修复 Dockerfile pip install shell 重定向问题**
+  - 原因: `pip install requests>=2.31.0` 中的 `>` 被 shell 解释为重定向，创建空文件 `=2.31.0`
+  - 修复: 所有版本约束用引号包裹 `"requests>=2.31.0"`
+  - 影响文件:
+    - `Dockerfile.terminal-python`
+    - `Dockerfile.rag-server`
+    - `Dockerfile.file-parser`
+    - `Dockerfile.mcp-server`
+  - **需要重新构建镜像**: `docker build -f dockerfiles/Dockerfile.terminal-python -t terminal-python:3.11 .`
+
+---
+
 ### [1.2.0] - 2026-01-21
 
 #### Added

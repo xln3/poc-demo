@@ -209,7 +209,6 @@ class ToolExecutor:
         )
 
         # 通过 shell 执行命令，确保管道、重定向等功能正常
-        # 转义双引号以便在 shell 命令中使用
         escaped_command = command.replace('"', '\\"')
         exit_code, stdout, stderr = await asyncio.to_thread(
             container_manager.exec_in_container,

@@ -44,21 +44,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装常用Python库
+# 注意：版本约束必须用引号包裹，否则 shell 会将 > 解释为重定向
 RUN pip install --no-cache-dir \
-    # HTTP请求
-    requests>=2.31.0 \
-    # HTML解析
-    beautifulsoup4>=4.12.0 \
-    lxml>=4.9.0 \
-    # 数据处理
-    pandas>=2.1.0 \
-    numpy>=1.26.0 \
-    # 日期时间
-    python-dateutil>=2.8.0 \
-    # JSON处理
-    pydantic>=2.5.0 \
-    # 环境变量
-    python-dotenv>=1.0.0
+    "requests>=2.31.0" \
+    "beautifulsoup4>=4.12.0" \
+    "lxml>=4.9.0" \
+    "pandas>=2.1.0" \
+    "numpy>=1.26.0" \
+    "python-dateutil>=2.8.0" \
+    "pydantic>=2.5.0" \
+    "python-dotenv>=1.0.0"
 
 # 创建工作目录
 RUN mkdir -p /workspace
