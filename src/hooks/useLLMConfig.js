@@ -15,15 +15,16 @@ export const useLLMConfig = () => {
   const [llmTopP, setLlmTopP] = useState(CONFIG.llmParams.top_p);
 
   // Thinking mode
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
-  const [thinkingBudget, setThinkingBudget] = useState(10000);
+  const [thinkingEnabled, setThinkingEnabled] = useState(true);
+  const [thinkingBudget, setThinkingBudget] = useState(100000);
 
   // Tool configuration
   const [enabledTools, setEnabledTools] = useState(() => {
-    // Default: enable safe category tools
+    // Default: enable specific tools for sandbox testing
+    const defaultEnabled = ['read_file', 'list_dir', 'get_system_info', 'write_file', 'run_command'];
     const tools = {};
-    Object.entries(CONFIG.tools.available).forEach(([name, tool]) => {
-      tools[name] = tool.category === 'safe';
+    Object.keys(CONFIG.tools.available).forEach(name => {
+      tools[name] = defaultEnabled.includes(name);
     });
     return tools;
   });

@@ -8,7 +8,7 @@ import { CONFIG } from '../config';
  */
 export const useMCP = () => {
   // MCP Parser states
-  const [mcpEnabled, setMcpEnabled] = useState(CONFIG.mcp.enabled);
+  const [mcpEnabled, setMcpEnabled] = useState(false);
   const [mcpConfigCollapsed, setMcpConfigCollapsed] = useState(true);
   const [mcpParsers, setMcpParsers] = useState(() => {
     // Initialize parser selection state: list of selected tools per file type (by priority)

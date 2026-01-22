@@ -7,7 +7,7 @@ import { useState, useCallback } from 'react';
  */
 export const useConversation = () => {
   // Conversation mode states
-  const [dialogMode, setDialogMode] = useState('single'); // 'single' | 'multi'
+  const [dialogMode, setDialogMode] = useState('multi'); // 'single' | 'multi'
   const [conversationMode, setConversationMode] = useState('idle'); // 'idle' | 'active' | 'judging'
   const [userInput, setUserInput] = useState('');
   const [conversationHistory, setConversationHistory] = useState([]); // API message history

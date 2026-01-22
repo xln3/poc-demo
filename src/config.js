@@ -1,6 +1,9 @@
 // ============ 配置文件 ============
 // 敏感配置请在 .env 文件中设置，参考 .env.example
 
+// 动态获取后端主机地址（与前端同主机）
+const BACKEND_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+
 export const CONFIG = {
   // 动画配置
   typingSpeed: 18,        // 打字速度(ms/字符)
@@ -16,13 +19,13 @@ export const CONFIG = {
 
   // RAG API 配置
   ragApi: {
-    baseUrl: 'http://localhost:8001',
+    baseUrl: `http://${BACKEND_HOST}:8001`,
     enabled: true,
   },
 
   // Sandbox 配置
   sandbox: {
-    baseUrl: 'http://localhost:8000',
+    baseUrl: `http://${BACKEND_HOST}:8000`,
   },
 
   // 工具调用配置 (Tool Calling)
@@ -164,7 +167,7 @@ export const CONFIG = {
   // MCP 文件解析配置
   mcp: {
     enabled: true,  // 默认启用
-    serverUrl: 'http://localhost:8000',  // 与sandbox同一后端
+    serverUrl: `http://${BACKEND_HOST}:8000`,  // 与sandbox同一后端
     // 可用的解析器，按文件类型分组
     parsers: {
       pdf: {
@@ -203,7 +206,7 @@ export const CONFIG = {
   // MCP Server 配置
   mcpServers: {
     enabled: false,
-    apiUrl: 'http://localhost:8000/mcp',
+    apiUrl: `http://${BACKEND_HOST}:8000/mcp`,
     available: {
       filesystem: {
         id: 'filesystem',
@@ -350,7 +353,7 @@ export const CONFIG = {
   // LLM 参数默认值
   llmParams: {
     temperature: 0.7,
-    max_tokens: 2048,
+    max_tokens: 8192,
     top_p: 0.9,
   },
 
@@ -390,11 +393,13 @@ export const CONFIG = {
       const totalTime = Date.now() - startTime;
       const message = data.choices?.[0]?.message;
 
-      // Return object with content, thinking, and timing
+      // Return object with content, thinking, timing, and raw response
+      // 兼容不同 API 的思考字段：thinking (Anthropic) 或 reasoning_content (其他)
       return {
         content: message?.content || '(无响应)',
-        thinking: message?.thinking || null,
-        timing: { totalTime }
+        thinking: message?.thinking || message?.reasoning_content || null,
+        timing: { totalTime },
+        raw: data  // 完整的 API 响应
       };
     } catch (error) {
       console.error('API 调用失败:', error);
@@ -453,13 +458,14 @@ export const CONFIG = {
       const message = data.choices?.[0]?.message;
       const finishReason = data.choices?.[0]?.finish_reason;
 
+      // 兼容不同 API 的思考字段：thinking (Anthropic) 或 reasoning_content (其他)
       return {
         content: message?.content || '',
         tool_calls: message?.tool_calls || [],
         finish_reason: finishReason,
-        thinking: message?.thinking || null,
+        thinking: message?.thinking || message?.reasoning_content || null,
         timing: { totalTime },
-        raw: message
+        raw: data  // 完整的 API 响应
       };
     } catch (error) {
       console.error('API 调用失败:', error);

@@ -13,6 +13,7 @@ import { indirectInjection } from './F2-file-injection/index.js';
 
 // ============ F3-tool-use: 沙箱终端工具 ============
 import { sandbox } from './F3-tool-use/sandbox.js';
+import { finbot } from './F3-tool-use/finbot.js';
 
 // ============ F4-rag: RAG检索 ============
 import { rag } from './F4-rag/rag.js';
@@ -34,6 +35,7 @@ export const SCENARIOS = {
 
   // F3-tool-use: 沙箱终端工具
   sandbox,
+  finbot,
 
   // F4-rag: RAG检索
   rag,
@@ -55,7 +57,8 @@ export const SCENARIOS_BY_LEVEL = {
     indirectInjection
   },
   'F3-tool-use': {
-    sandbox
+    sandbox,
+    finbot
   },
   'F4-rag': {
     rag
@@ -77,6 +80,7 @@ export {
   indirectInjection,
   // F3-tool-use
   sandbox,
+  finbot,
   // F4-rag
   rag,
   // F5-mcp

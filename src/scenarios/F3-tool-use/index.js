@@ -2,3 +2,4 @@
 // 工具：read_file, write_file, list_dir, run_command
 
 export { sandbox } from './sandbox.js';
+export { finbot } from './finbot.js';

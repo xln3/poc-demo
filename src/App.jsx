@@ -39,9 +39,9 @@ const getGroupedData = () => {
 
 export default function App() {
   // 状态
-  const [mode, setMode] = useState('mock'); // 'mock' | 'real'
-  const [selectedAttack, setSelectedAttack] = useState({ scenario: 'loan', index: 0 });
-  const [expanded, setExpanded] = useState({ type: 'F1-conversation', scenario: 'loan' });
+  const [mode, setMode] = useState('real'); // 'mock' | 'real'
+  const [selectedAttack, setSelectedAttack] = useState({ scenario: 'finbot', index: 0 });
+  const [expanded, setExpanded] = useState({ type: 'F3-tool-use', scenario: 'finbot' });
   const [messages, setMessages] = useState([]);
   const [logs, setLogs] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState(new Set()); // 跟踪展开的日志索引
@@ -61,6 +61,11 @@ export default function App() {
   const [isEditingPayload, setIsEditingPayload] = useState(false);
   const [payloadFiles, setPayloadFiles] = useState([]);
   const [lastTestResult, setLastTestResult] = useState(null); // 存储最后一次测试结果
+
+  // Thinking 面板状态
+  const [thinkingContent, setThinkingContent] = useState('');
+  const [rawApiResponse, setRawApiResponse] = useState(null);
+  const [thinkingTab, setThinkingTab] = useState('thinking'); // 'thinking' | 'raw'
 
   // Log helper for hooks
   const addLog = useCallback((log) => {
@@ -125,7 +130,7 @@ export default function App() {
   } = llmConfig;
 
   // Tool calling UI config
-  const [toolsEnabled, setToolsEnabled] = useState(CONFIG.tools.enabled);
+  const [toolsEnabled, setToolsEnabled] = useState(true);
   const [toolsConfigCollapsed, setToolsConfigCollapsed] = useState(true);
   const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false);
 
@@ -381,6 +386,11 @@ export default function App() {
     setMessages([]);
     setLogs([]);
     setExpandedLogs(new Set());
+
+    // 重置 thinking 面板
+    setThinkingContent('');
+    setRawApiResponse(null);
+    setThinkingTab('thinking');
 
     // 构建实际发送的 payload
     // 优先级：用户添加的文件 + 自定义 payload > 攻击的 realTestPayload > 攻击的 testPayload
@@ -725,15 +735,24 @@ export default function App() {
     return { type: 'enabled', budget_tokens: thinkingBudget };
   };
 
-  // 添加 thinking 日志（如果有）
-  const addThinkingLog = (thinking) => {
-    if (thinking) {
+  // 更新 thinking 面板和日志
+  const updateThinkingPanel = (response) => {
+    // 更新思考内容面板
+    if (response.thinking) {
+      setThinkingContent(response.thinking);
+    }
+    // 更新原始响应面板
+    if (response.raw) {
+      setRawApiResponse(response.raw);
+    }
+    // 保留日志记录
+    if (response.thinking) {
       setLogs(prev => [...prev, {
         type: 'thinking',
-        content: `💭 模型思考过程 (${thinking.length} 字符)`,
+        content: `💭 模型思考过程 (${response.thinking.length} 字符)`,
         status: 'normal',
         expandable: true,
-        fullContent: thinking
+        fullContent: response.thinking
       }]);
     }
   };
@@ -751,6 +770,11 @@ export default function App() {
     setExpandedLogs(new Set());
     setConversationHistory([]);
     setConversationMode('active');
+
+    // 重置 thinking 面板
+    setThinkingContent('');
+    setRawApiResponse(null);
+    setThinkingTab('thinking');
 
     // 构建实际发送的 payload
     let actualPayload;
@@ -891,7 +915,7 @@ export default function App() {
         totalApiTime += response.timing?.totalTime || 0;
 
         // 显示 thinking（如有）
-        addThinkingLog(response.thinking);
+        updateThinkingPanel(response);
 
         // 检查是否有工具调用
         const toolCalls = response.tool_calls || [];
@@ -1084,7 +1108,7 @@ export default function App() {
         totalApiTime += response.timing?.totalTime || 0;
 
         // 显示 thinking（如有）
-        addThinkingLog(response.thinking);
+        updateThinkingPanel(response);
 
         // 检查是否有工具调用
         const toolCalls = response.tool_calls || [];
@@ -3742,7 +3766,7 @@ print('\\n'.join(all_text))
         )}
 
         {/* 主面板 */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
+        <div className={`flex-1 grid grid-cols-1 ${thinkingEnabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4 min-h-0`}>
           {/* 对话面板 */}
           <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
             <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
@@ -3833,6 +3857,65 @@ print('\\n'.join(all_text))
               </div>
             )}
           </div>
+
+          {/* 思考面板 - 仅在 thinking 启用时显示 */}
+          {thinkingEnabled && (
+            <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
+              {/* 标题栏 + Tab 切换 */}
+              <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  {/* Tab 按钮 */}
+                  <button
+                    onClick={() => setThinkingTab('thinking')}
+                    className={`text-xs px-2 py-1 rounded transition ${
+                      thinkingTab === 'thinking' ? 'bg-purple-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                    }`}
+                  >
+                    思考过程
+                  </button>
+                  <button
+                    onClick={() => setThinkingTab('raw')}
+                    className={`text-xs px-2 py-1 rounded transition ${
+                      thinkingTab === 'raw' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                    }`}
+                  >
+                    原始响应
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setThinkingContent(''); setRawApiResponse(null); }}
+                  className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded transition"
+                >
+                  清空
+                </button>
+              </div>
+
+              {/* 内容区 */}
+              <div className="flex-1 overflow-y-auto custom-scroll font-mono text-xs pr-1">
+                {thinkingTab === 'thinking' ? (
+                  thinkingContent ? (
+                    <pre className="whitespace-pre-wrap text-purple-300/80 leading-relaxed">
+                      {thinkingContent}
+                    </pre>
+                  ) : (
+                    <div className="text-slate-500 text-center py-8">
+                      {apiStatus === 'loading' ? '等待模型思考...' : '暂无思考内容'}
+                    </div>
+                  )
+                ) : (
+                  rawApiResponse ? (
+                    <pre className="whitespace-pre-wrap text-blue-300/80 leading-relaxed">
+                      {JSON.stringify(rawApiResponse, null, 2)}
+                    </pre>
+                  ) : (
+                    <div className="text-slate-500 text-center py-8">
+                      {apiStatus === 'loading' ? '等待 API 响应...' : '暂无 API 响应'}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 日志面板 */}
           <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
