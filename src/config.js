@@ -26,6 +26,12 @@ export const CONFIG = {
   // Sandbox 配置
   sandbox: {
     baseUrl: `http://${BACKEND_HOST}:8000`,
+    // 文件传输配置
+    transfer: {
+      maxFileSize: 100 * 1024 * 1024,  // 100MB
+      chunkSize: 1024 * 1024,           // 1MB
+      allowedPaths: ['/workspace/', '/tmp/'],
+    },
   },
 
   // 工具调用配置 (Tool Calling)

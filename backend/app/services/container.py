@@ -171,11 +171,11 @@ class ContainerManager:
         del self._session_created[session_id]
         return True
 
-    def exec_in_container(self, session_id: str, command: str) -> Tuple[int, str, str]:
-        """Execute command in container and return (exit_code, stdout, stderr).
+    def _ensure_session(self, session_id: str):
+        """确保会话存在，如需要则恢复
 
-        Returns stdout and stderr separately so callers can parse JSON from stdout
-        while keeping logs/progress from stderr separate.
+        Returns:
+            container: Docker container object
         """
         if session_id not in self._sessions:
             # 尝试恢复已存在的容器（后端重启后容器可能仍在运行）
@@ -193,7 +193,15 @@ class ContainerManager:
                 raise ValueError(f"Session {session_id} not found")
 
         container_id = self._sessions[session_id]
-        container = self.client.containers.get(container_id)
+        return self.client.containers.get(container_id)
+
+    def exec_in_container(self, session_id: str, command: str) -> Tuple[int, str, str]:
+        """Execute command in container and return (exit_code, stdout, stderr).
+
+        Returns stdout and stderr separately so callers can parse JSON from stdout
+        while keeping logs/progress from stderr separate.
+        """
+        container = self._ensure_session(session_id)
 
         result = container.exec_run(
             command,
@@ -206,6 +214,62 @@ class ContainerManager:
 
         return result.exit_code, stdout.strip(), stderr.strip()
 
+    def exec_in_container_binary(
+        self, session_id: str, command: str
+    ) -> Tuple[int, bytes, bytes]:
+        """执行命令并返回二进制输出（用于处理含特殊字符的文件名）
+
+        Returns:
+            (exit_code, stdout_bytes, stderr_bytes)
+        """
+        container = self._ensure_session(session_id)
+
+        result = container.exec_run(
+            command,
+            workdir=self.WORK_DIR,
+            demux=True
+        )
+
+        # 返回原始二进制，不解码
+        stdout = result.output[0] if result.output[0] else b""
+        stderr = result.output[1] if result.output[1] else b""
+
+        return result.exit_code, stdout, stderr
+
+    def get_archive(self, session_id: str, path: str) -> Tuple[bytes, dict]:
+        """从容器获取文件/目录的 tar 归档
+
+        Args:
+            session_id: 会话 ID
+            path: 容器内路径
+
+        Returns:
+            (tar_data, stat_info)
+        """
+        container = self._ensure_session(session_id)
+
+        # Docker SDK 的 get_archive 返回 (generator, stat_dict)
+        bits, stat = container.get_archive(path)
+
+        # 读取所有数据
+        tar_data = b''.join(bits)
+
+        return tar_data, stat
+
+    def put_archive(self, session_id: str, path: str, data: bytes) -> bool:
+        """将 tar 归档写入容器
+
+        Args:
+            session_id: 会话 ID
+            path: 容器内目标目录
+            data: tar 归档数据
+
+        Returns:
+            bool: 是否成功
+        """
+        container = self._ensure_session(session_id)
+        return container.put_archive(path, data)
+
     def copy_file_to_container(self, session_id: str, path: str, content: bytes) -> bool:
         """Copy a file to container using Docker's put_archive API.
 
@@ -217,22 +281,7 @@ class ContainerManager:
         Returns:
             True if successful
         """
-        if session_id not in self._sessions:
-            # 尝试恢复已存在的容器
-            container_name = f"{self.CONTAINER_PREFIX}{session_id}"
-            try:
-                container = self.client.containers.get(container_name)
-                if container.status == "running":
-                    self._sessions[session_id] = container.id
-                    self._session_images[session_id] = container.image.tags[0] if container.image.tags else "unknown"
-                    self._session_created[session_id] = datetime.now().isoformat()
-                else:
-                    raise ValueError(f"Session {session_id} not found (container not running)")
-            except docker.errors.NotFound:
-                raise ValueError(f"Session {session_id} not found")
-
-        container_id = self._sessions[session_id]
-        container = self.client.containers.get(container_id)
+        container = self._ensure_session(session_id)
 
         # Create a tar archive in memory
         tar_stream = io.BytesIO()

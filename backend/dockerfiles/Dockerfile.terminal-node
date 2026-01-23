@@ -37,6 +37,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     # 进程管理
     procps \
+    # 文件监控
+    inotify-tools \
     # 其他常用工具
     tree \
     less \

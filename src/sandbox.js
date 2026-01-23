@@ -205,6 +205,115 @@ class SandboxClient {
     this.sessionId = sessionId;
   }
 
+  // 获取结构化文件列表
+  async listFilesStructured(tag, path = '/workspace', recursive = false) {
+    const params = new URLSearchParams({ path });
+    if (recursive) params.append('recursive', 'true');
+
+    const response = await fetch(
+      `${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/files?${params}`
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `获取文件列表失败: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 上传文件（带进度）
+  uploadFile(tag, file, targetPath = '/workspace', onProgress = null) {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('path', targetPath);
+
+      const xhr = new XMLHttpRequest();
+
+      if (onProgress) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            onProgress({ loaded: e.loaded, total: e.total });
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.detail || `上传失败: ${xhr.status}`));
+          } catch {
+            reject(new Error(`上传失败: ${xhr.status}`));
+          }
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('网络错误'));
+      xhr.onabort = () => reject(new Error('已取消'));
+
+      xhr.open('POST', `${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/files`);
+      xhr.setRequestHeader('X-Source', 'ui');
+      xhr.send(formData);
+
+      // 返回 abort 函数
+      this._currentXhr = xhr;
+    });
+  }
+
+  // 取消当前上传
+  cancelUpload() {
+    if (this._currentXhr) {
+      this._currentXhr.abort();
+      this._currentXhr = null;
+    }
+  }
+
+  // 下载文件（带进度）
+  async downloadFile(tag, filePath, onProgress = null) {
+    const url = `${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/files/download?path=${encodeURIComponent(filePath)}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `下载失败: ${response.status}`);
+    }
+
+    // 获取文件大小
+    const contentLength = response.headers.get('Content-Length');
+    const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+    // 获取文件名
+    const disposition = response.headers.get('Content-Disposition');
+    const match = disposition?.match(/filename="?([^";\n]+)"?/);
+    const fileName = match ? match[1] : filePath.split('/').pop();
+
+    // 流式读取
+    const reader = response.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      chunks.push(value);
+      loaded += value.length;
+
+      if (onProgress) {
+        onProgress({ loaded, total: total || loaded });
+      }
+    }
+
+    // 合并数据并返回
+    const blob = new Blob(chunks);
+    return { blob, fileName };
+  }
+
   // ============ Tool Execution (uses current terminal) ============
 
   // 执行工具（使用当前终端）

@@ -1,8 +1,11 @@
 from __future__ import annotations
 import asyncio
+import io
 import json
+import tarfile
 from typing import List, Optional
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query, File, UploadFile, Form, Header, Body
+from fastapi.responses import StreamingResponse
 from datetime import datetime
 from ..models.schemas import (
     ToolCallRequest,
@@ -19,11 +22,16 @@ from ..models.schemas import (
     CleanupResult,
     CreateTerminalRequest,
     TerminalToolRequest,
+    FileListResponse,
 )
 from ..services.container import container_manager
 from ..services.tools import tool_executor
 from ..services.log_manager import log_manager
 from ..services.terminal_sandbox_service import terminal_sandbox_service
+from ..services.terminal_lock import terminal_lock
+from ..services.file_watcher import file_watcher
+from ..services.container import container_manager as cm
+from ..config import TRANSFER_CONFIG
 
 router = APIRouter(prefix="/sandbox", tags=["sandbox"])
 
@@ -180,6 +188,225 @@ async def execute_tool_in_terminal(tag: str, request: TerminalToolRequest):
     return result
 
 
+# ============ File Management Endpoints ============
+
+
+@router.get("/terminals/{tag}/files", response_model=FileListResponse)
+async def list_files(
+    tag: str,
+    path: str = Query("/workspace", description="目录路径"),
+    recursive: bool = Query(False, description="是否递归列出")
+):
+    """获取终端文件列表（结构化）
+
+    使用 find -printf 命令获取文件信息，正确处理含空格/中文的文件名。
+    """
+    info = await asyncio.to_thread(terminal_sandbox_service.get_terminal, tag)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"终端 '{tag}' 不存在")
+    if info.status != ContainerStatus.RUNNING:
+        raise HTTPException(status_code=400, detail=f"终端 '{tag}' 未运行")
+
+    try:
+        result = await tool_executor.list_dir_structured(
+            session_id=info.session_id,
+            path=path,
+            recursive=recursive
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/terminals/{tag}/files")
+async def upload_file(
+    tag: str,
+    file: UploadFile = File(...),
+    path: str = Form("/workspace"),
+    x_source: Optional[str] = Header(None, alias="X-Source"),
+):
+    """上传文件到终端容器
+
+    支持任意文件类型，自动处理二进制内容。
+    X-Source header 用于区分上传来源（UI/API）。
+    """
+    # 验证终端存在
+    info = await asyncio.to_thread(terminal_sandbox_service.get_terminal, tag)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"终端 '{tag}' 不存在")
+    if info.status != ContainerStatus.RUNNING:
+        raise HTTPException(status_code=400, detail=f"终端 '{tag}' 未运行")
+
+    # 路径安全检查
+    if ".." in path:
+        raise HTTPException(status_code=400, detail="路径不允许包含 '..'")
+
+    # 检查路径前缀
+    allowed = any(path.startswith(p) for p in TRANSFER_CONFIG['allowed_paths'])
+    if not allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"路径必须以 {TRANSFER_CONFIG['allowed_paths']} 之一开头"
+        )
+
+    # 检查文件大小
+    content = await file.read()
+    if len(content) > TRANSFER_CONFIG['max_file_size']:
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件过大，最大允许 {TRANSFER_CONFIG['max_file_size'] // (1024*1024)}MB"
+        )
+
+    # 构建完整路径 - 保留原始文件名
+    full_path = f"{path.rstrip('/')}/{file.filename}"
+
+    try:
+        await asyncio.to_thread(
+            container_manager.copy_file_to_container,
+            info.session_id,
+            full_path,
+            content
+        )
+
+        return {
+            "success": True,
+            "path": full_path,
+            "size": len(content),
+            "source": x_source or "api",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/terminals/{tag}/files/download")
+async def download_file(
+    tag: str,
+    path: str = Query(..., description="文件路径"),
+):
+    """下载文件/目录
+
+    单文件直接返回，目录返回 tar 归档。
+    """
+    info = await asyncio.to_thread(terminal_sandbox_service.get_terminal, tag)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"终端 '{tag}' 不存在")
+    if info.status != ContainerStatus.RUNNING:
+        raise HTTPException(status_code=400, detail=f"终端 '{tag}' 未运行")
+
+    # 路径安全检查
+    if ".." in path:
+        raise HTTPException(status_code=400, detail="路径不允许包含 '..'")
+
+    try:
+        tar_data, stat = await asyncio.to_thread(
+            container_manager.get_archive,
+            info.session_id,
+            path
+        )
+
+        filename = path.split('/')[-1]
+
+        # 检查是否是目录 - stat['mode'] 是八进制字符串
+        mode = int(stat.get('mode', '0'), 8) if isinstance(stat.get('mode'), str) else stat.get('mode', 0)
+        is_dir = (mode & 0o170000) == 0o040000  # S_IFDIR
+
+        if is_dir:
+            # 目录返回 tar
+            return StreamingResponse(
+                io.BytesIO(tar_data),
+                media_type="application/x-tar",
+                headers={
+                    "Content-Disposition": f"attachment; filename=\"{filename}.tar\""
+                }
+            )
+        else:
+            # 单文件：从 tar 中提取
+            tar_io = io.BytesIO(tar_data)
+            with tarfile.open(fileobj=tar_io, mode='r') as tar:
+                member = tar.getmembers()[0]
+                f = tar.extractfile(member)
+                file_content = f.read() if f else b''
+
+            return StreamingResponse(
+                io.BytesIO(file_content),
+                media_type="application/octet-stream",
+                headers={
+                    "Content-Disposition": f"attachment; filename=\"{filename}\"",
+                    "Content-Length": str(len(file_content))
+                }
+            )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============ Terminal Lock Endpoints ============
+
+
+@router.post("/terminals/{tag}/lock")
+async def acquire_lock(
+    tag: str,
+    user_id: str = Body(..., embed=True),
+):
+    """获取终端独占锁
+
+    Args:
+        tag: 终端标识
+        user_id: 用户标识（前端生成的 UUID）
+
+    Returns:
+        {"success": bool, "holder": str|None, "message": str}
+    """
+    # 验证终端存在
+    info = await asyncio.to_thread(terminal_sandbox_service.get_terminal, tag)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"终端 '{tag}' 不存在")
+
+    result = await asyncio.to_thread(terminal_lock.acquire, tag, user_id)
+    return result
+
+
+@router.delete("/terminals/{tag}/lock")
+async def release_lock(
+    tag: str,
+    user_id: str = Query(..., description="用户标识"),
+):
+    """释放终端独占锁
+
+    Args:
+        tag: 终端标识
+        user_id: 用户标识
+    """
+    result = await asyncio.to_thread(terminal_lock.release, tag, user_id)
+    return result
+
+
+@router.post("/terminals/{tag}/lock/heartbeat")
+async def lock_heartbeat(
+    tag: str,
+    user_id: str = Body(..., embed=True),
+):
+    """锁心跳续期
+
+    前端应每 30 秒调用一次以保持锁有效
+    """
+    result = await asyncio.to_thread(terminal_lock.heartbeat, tag, user_id)
+    return result
+
+
+@router.get("/terminals/{tag}/lock")
+async def get_lock_status(tag: str):
+    """获取锁状态
+
+    Returns:
+        {"locked": bool, "holder": str|None, "acquired_at": str|None, "expired": bool}
+    """
+    result = await asyncio.to_thread(terminal_lock.get_status, tag)
+    return result
+
+
 # ============ Deleted Terminals Management ============
 
 
@@ -318,3 +545,78 @@ async def websocket_logs(websocket: WebSocket, session_id: str):
         pass
     finally:
         log_manager.remove_queue(session_id, queue)
+
+
+# ============ File Watcher WebSocket ============
+
+
+@router.websocket("/terminals/{tag}/watch")
+async def websocket_file_watch(websocket: WebSocket, tag: str, path: str = "/workspace"):
+    """WebSocket endpoint for file change monitoring.
+
+    前端连接后会启动 inotifywait 监控指定目录，
+    文件变化会通过 WebSocket 推送。
+
+    Args:
+        tag: 终端标识
+        path: 监控路径 (默认 /workspace)
+    """
+    # 验证终端存在
+    info = await asyncio.to_thread(terminal_sandbox_service.get_terminal, tag)
+    if info is None:
+        await websocket.close(code=4004, reason=f"终端 '{tag}' 不存在")
+        return
+    if info.status != ContainerStatus.RUNNING:
+        await websocket.close(code=4000, reason=f"终端 '{tag}' 未运行")
+        return
+
+    await websocket.accept()
+
+    # 事件队列
+    event_queue = asyncio.Queue()
+
+    def on_event(event: dict):
+        """事件回调"""
+        try:
+            event_queue.put_nowait(event)
+        except asyncio.QueueFull:
+            pass  # 丢弃溢出事件
+
+    # 启动监控
+    try:
+        await file_watcher.start_watching(
+            tag=tag,
+            session_id=info.session_id,
+            path=path,
+            callback=on_event,
+            container_manager=cm,
+        )
+
+        # 发送初始消息
+        await websocket.send_text(json.dumps({
+            "type": "watching",
+            "path": path,
+            "timestamp": datetime.now().isoformat(),
+        }))
+
+        # 转发事件
+        while True:
+            try:
+                event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+                await websocket.send_text(json.dumps(event))
+            except asyncio.TimeoutError:
+                # 发送心跳
+                await websocket.send_text(json.dumps({"type": "heartbeat"}))
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": str(e),
+            }))
+        except:
+            pass
+    finally:
+        await file_watcher.stop_watching(tag)

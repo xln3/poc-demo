@@ -12,6 +12,30 @@ class ContainerType(str, Enum):
     MCP_SERVER = "mcp-server"
 
 
+class FileType(str, Enum):
+    """文件类型"""
+    FILE = "file"
+    DIRECTORY = "directory"
+    SYMLINK = "symlink"
+
+
+class FileEntry(BaseModel):
+    """文件条目"""
+    name: str           # 文件名
+    path: str           # 完整路径
+    type: FileType      # 类型
+    size: int           # 字节数 (目录为 0)
+    mtime: str          # 修改时间 ISO 格式
+    permissions: str    # 权限字符串 (如 "rwxr-xr-x")
+
+
+class FileListResponse(BaseModel):
+    """文件列表响应"""
+    path: str
+    entries: List[FileEntry]
+    total: int
+
+
 class TerminalImage(str, Enum):
     """终端沙箱镜像"""
     PYTHON = "terminal-python:3.11"

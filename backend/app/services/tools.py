@@ -5,8 +5,106 @@ import asyncio
 import httpx
 from typing import Any, Callable, Dict, List
 from datetime import datetime
-from ..models.schemas import ToolType, ToolResult, LogEntry, LogType, LogStatus
+from ..models.schemas import ToolType, ToolResult, LogEntry, LogType, LogStatus, FileEntry, FileType
 from .container import container_manager
+
+
+def _octal_to_permissions(mode_str: str) -> str:
+    """将八进制权限转换为 rwx 格式"""
+    try:
+        mode = int(mode_str, 8)
+    except ValueError:
+        return mode_str
+
+    result = ""
+    for shift in [6, 3, 0]:
+        bits = (mode >> shift) & 7
+        result += "r" if bits & 4 else "-"
+        result += "w" if bits & 2 else "-"
+        result += "x" if bits & 1 else "-"
+
+    return result
+
+
+def parse_find_output(output: bytes, base_path: str) -> List[FileEntry]:
+    """解析 find -printf 的 NUL 分隔输出
+
+    格式: path\0type\0size\0mtime\0mode\0
+    """
+    entries = []
+
+    # 按 NUL 分割
+    parts = output.split(b'\0')
+
+    # 每 5 个字段为一组
+    i = 0
+    while i + 4 < len(parts):
+        try:
+            path = parts[i].decode('utf-8', errors='replace')
+            file_type = parts[i + 1].decode('utf-8')
+            size_str = parts[i + 2].decode('utf-8')
+            mtime_str = parts[i + 3].decode('utf-8')
+            mode_str = parts[i + 4].decode('utf-8')
+
+            # 跳过根目录本身
+            normalized_base = base_path.rstrip('/')
+            if path == normalized_base or path == normalized_base + '/':
+                i += 5
+                continue
+
+            # 提取文件名
+            name = path.split('/')[-1]
+            if not name:
+                i += 5
+                continue
+
+            # 确定文件类型
+            if file_type == 'd':
+                entry_type = FileType.DIRECTORY
+            elif file_type == 'l':
+                entry_type = FileType.SYMLINK
+            else:
+                entry_type = FileType.FILE
+
+            # 解析大小
+            try:
+                size = int(size_str)
+            except ValueError:
+                size = 0
+
+            # 格式化修改时间 - 处理带毫秒的时间格式
+            try:
+                # find 的 %TS 会输出秒数（可能带小数），我们需要截断
+                mtime_clean = mtime_str.split('.')[0] if '.' in mtime_str else mtime_str
+                # 尝试多种格式
+                for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S']:
+                    try:
+                        mtime = datetime.strptime(mtime_clean, fmt).isoformat()
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    mtime = mtime_str
+            except Exception:
+                mtime = mtime_str
+
+            # 权限转换 (数字 -> rwx 格式)
+            permissions = _octal_to_permissions(mode_str)
+
+            entries.append(FileEntry(
+                name=name,
+                path=path,
+                type=entry_type,
+                size=size,
+                mtime=mtime,
+                permissions=permissions,
+            ))
+        except Exception:
+            pass
+
+        i += 5
+
+    return entries
 
 
 class ToolExecutor:
@@ -283,6 +381,53 @@ class ToolExecutor:
             raise RuntimeError(f"Failed to list directory: {stderr or stdout}")
 
         return stdout.split("\n")
+
+    async def list_dir_structured(self, session_id: str, path: str = "/workspace", recursive: bool = False) -> dict:
+        """List directory contents with structured data.
+
+        使用 find -printf 命令获取文件信息，正确处理含空格/中文的文件名。
+
+        Args:
+            session_id: 会话 ID
+            path: 目录路径
+            recursive: 是否递归列出
+
+        Returns:
+            dict: {"path": str, "entries": List[FileEntry], "total": int}
+        """
+        if ".." in path:
+            raise ValueError("Path traversal not allowed")
+
+        # 转换为绝对路径
+        if not path.startswith('/'):
+            path = f"/workspace/{path}" if path != "." else "/workspace"
+
+        # 构建 find 命令
+        # -printf 格式: 路径\0类型\0大小\0修改时间\0权限\0
+        depth_arg = "" if recursive else "-maxdepth 1"
+        # 对路径进行转义，处理特殊字符
+        escaped_path = path.replace("'", "'\\''")
+        cmd = f"/bin/sh -c \"find '{escaped_path}' {depth_arg} -printf '%p\\0%y\\0%s\\0%TY-%Tm-%Td %TH:%TM:%TS\\0%m\\0' 2>/dev/null\""
+
+        exit_code, stdout, stderr = await asyncio.to_thread(
+            container_manager.exec_in_container_binary,
+            session_id,
+            cmd
+        )
+
+        if exit_code != 0:
+            # 目录不存在时返回空列表
+            if b"No such file" in stderr:
+                return {"path": path, "entries": [], "total": 0}
+            raise RuntimeError(f"Failed to list directory: {stderr.decode('utf-8', errors='replace')}")
+
+        entries = parse_find_output(stdout, path)
+
+        return {
+            "path": path,
+            "entries": [e.model_dump() for e in entries],
+            "total": len(entries)
+        }
 
     async def _query_database(self, session_id: str, params: dict) -> dict:
         """Simulate SQL query execution. Returns mock data for demonstration."""

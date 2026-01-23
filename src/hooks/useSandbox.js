@@ -30,6 +30,17 @@ export const useSandbox = ({ addLog }) => {
   const [creatingTerminal, setCreatingTerminal] = useState(false);
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
 
+  // File tree browser state
+  const [fileTreeOpen, setFileTreeOpen] = useState(false);
+  const [fileTreeTag, setFileTreeTag] = useState('');
+
+  // File upload dialog state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadTargetPath, setUploadTargetPath] = useState('/workspace');
+
+  // Transfer progress state
+  const [transferState, setTransferState] = useState(null); // { type: 'upload'|'download', fileName, loaded, total }
+
   // Refs for intervals
   const terminalPollRef = useRef(null);
   const deletedPollRef = useRef(null);
@@ -534,6 +545,146 @@ export const useSandbox = ({ addLog }) => {
   // Set container info (no-op for compatibility)
   const setContainerInfo = () => {};
 
+  // ============ File Tree Browser Functions ============
+
+  // Open file tree browser for a terminal
+  const openFileTree = useCallback((tag) => {
+    setFileTreeTag(tag);
+    setFileTreeOpen(true);
+  }, []);
+
+  // Close file tree browser
+  const closeFileTree = useCallback(() => {
+    setFileTreeOpen(false);
+    setFileTreeTag('');
+  }, []);
+
+  // Open upload dialog
+  const openUploadDialog = useCallback((targetPath = '/workspace') => {
+    setUploadTargetPath(targetPath);
+    setUploadDialogOpen(true);
+  }, []);
+
+  // Close upload dialog
+  const closeUploadDialog = useCallback(() => {
+    setUploadDialogOpen(false);
+  }, []);
+
+  // ============ Transfer Functions with Progress ============
+
+  // Upload files with progress tracking
+  const uploadFilesWithProgress = useCallback(async (files, targetPath = '/workspace') => {
+    const tag = fileTreeTag || currentTag;
+    if (!tag) {
+      addLog({
+        type: 'error',
+        content: '没有活跃的终端',
+        status: 'danger',
+      });
+      return;
+    }
+
+    closeUploadDialog();
+
+    for (const file of files) {
+      try {
+        setTransferState({
+          type: 'upload',
+          fileName: file.name,
+          loaded: 0,
+          total: file.size,
+        });
+
+        await sandboxClient.uploadFile(tag, file, targetPath, (progress) => {
+          setTransferState(prev => prev ? { ...prev, ...progress } : null);
+        });
+
+        addLog({
+          type: 'data',
+          content: `文件已上传: ${targetPath}/${file.name}`,
+          status: 'success',
+        });
+
+      } catch (error) {
+        if (error.message !== '已取消') {
+          addLog({
+            type: 'error',
+            content: `上传失败 ${file.name}: ${error.message}`,
+            status: 'danger',
+          });
+        }
+      } finally {
+        setTransferState(null);
+      }
+    }
+
+    // Refresh file list after upload
+    refreshSandboxFiles();
+  }, [fileTreeTag, currentTag, addLog, refreshSandboxFiles]);
+
+  // Download file with progress tracking
+  const downloadFileWithProgress = useCallback(async (filePath, fileName) => {
+    const tag = fileTreeTag || currentTag;
+    if (!tag) {
+      addLog({
+        type: 'error',
+        content: '没有活跃的终端',
+        status: 'danger',
+      });
+      return;
+    }
+
+    try {
+      setTransferState({
+        type: 'download',
+        fileName: fileName || filePath.split('/').pop(),
+        loaded: 0,
+        total: 0,
+      });
+
+      const { blob, fileName: downloadName } = await sandboxClient.downloadFile(
+        tag,
+        filePath,
+        (progress) => {
+          setTransferState(prev => prev ? { ...prev, ...progress } : null);
+        }
+      );
+
+      // Trigger download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      addLog({
+        type: 'data',
+        content: `已下载: ${downloadName}`,
+        status: 'success',
+      });
+
+    } catch (error) {
+      if (error.message !== '已取消') {
+        addLog({
+          type: 'error',
+          content: `下载失败: ${error.message}`,
+          status: 'danger',
+        });
+      }
+    } finally {
+      setTransferState(null);
+    }
+  }, [fileTreeTag, currentTag, addLog]);
+
+  // Cancel current transfer
+  const cancelTransfer = useCallback(() => {
+    sandboxClient.cancelUpload();
+    setTransferState(null);
+  }, []);
+
   return {
     // Multi-terminal state
     terminals,
@@ -565,6 +716,13 @@ export const useSandbox = ({ addLog }) => {
     setSandboxFiles,
     uploadingSandboxFile,
 
+    // File tree browser state
+    fileTreeOpen,
+    fileTreeTag,
+    uploadDialogOpen,
+    uploadTargetPath,
+    transferState,
+
     // Multi-terminal functions
     createTerminal,
     switchTerminal,
@@ -583,6 +741,15 @@ export const useSandbox = ({ addLog }) => {
     handleDownloadSandboxFile,
     executeCommand,
     handleSandboxLog,
+
+    // File tree browser functions
+    openFileTree,
+    closeFileTree,
+    openUploadDialog,
+    closeUploadDialog,
+    uploadFilesWithProgress,
+    downloadFileWithProgress,
+    cancelTransfer,
 
     // Helper functions
     isSandboxAvailable,
