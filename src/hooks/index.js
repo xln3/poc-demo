@@ -1,4 +1,5 @@
 export { useSandbox, TerminalImage, formatBytes, formatTimeAgo } from './useSandbox.js';
+export { useToast } from './useToast.js';
 // 兼容旧代码
 export { TerminalImage as ImageType } from './useSandbox.js';
 export { useRAG } from './useRAG.js';

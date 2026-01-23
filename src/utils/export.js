@@ -96,7 +96,7 @@ body{background:#0f172a;color:#fff;font-family:system-ui;padding:20px}
 <div class="tags"><span class="tag tag-type">${attackType.icon} ${attackType.label}</span><span class="tag tag-level">危害等级：${riskLevel.label}</span></div>
 <div class="container">
 <div class="panel"><div class="panel-title">🤖 被测模型：${CONFIG.api.model}</div><div class="chat" id="chat"></div></div>
-<div class="panel"><div class="panel-title">🖥️ 系统后台日志</div><div id="logs"></div></div>
+<div class="panel"><div class="panel-title">终端运行日志</div><div id="logs"></div></div>
 </div>
 <script>
 const msgs=${JSON.stringify(attack.conversations)};

@@ -6,7 +6,8 @@ import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
 import { mcpClient } from './mcp.js';
 import { exportReport, exportHTML } from './utils/index.js';
-import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback } from './hooks/index.js';
+import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast } from './hooks/index.js';
+import Toast from './components/Toast.jsx';
 
 // 能力层级图标
 const LEVEL_ICONS = {
@@ -67,10 +68,30 @@ export default function App() {
   const [rawApiResponse, setRawApiResponse] = useState(null);
   const [thinkingTab, setThinkingTab] = useState('thinking'); // 'thinking' | 'raw'
 
-  // Log helper for hooks
+  // Toast notifications
+  const { toasts, addToast, removeToast } = useToast();
+
+  // Types that show as toast (operation status)
+  const TOAST_LOG_TYPES = new Set(['container', 'error', 'info']);
+
+  // Map log status to toast type
+  const getToastType = (log) => {
+    if (log.status === 'danger') return 'error';
+    if (log.status === 'success') return 'success';
+    if (log.status === 'warning') return 'warning';
+    return 'info';
+  };
+
+  // Log helper for hooks - routes to toast or log panel
   const addLog = useCallback((log) => {
-    setLogs(prev => [...prev, log]);
-  }, []);
+    if (TOAST_LOG_TYPES.has(log.type)) {
+      // Route to toast notification
+      addToast(log.content, getToastType(log));
+    } else {
+      // Route to log panel
+      setLogs(prev => [...prev, log]);
+    }
+  }, [addToast]);
 
   // Sandbox hook (multi-terminal)
   const sandbox = useSandbox({ addLog });
@@ -1725,6 +1746,9 @@ print('\\n'.join(all_text))
 
   return (
     <div className="h-screen bg-slate-900 text-white flex text-sm overflow-hidden">
+      {/* Toast 通知 */}
+      <Toast toasts={toasts} removeToast={removeToast} />
+
       {/* 滚动条样式已移至 index.css */}
 
       {/* 左侧导航 */}
@@ -4021,7 +4045,7 @@ print('\\n'.join(all_text))
           <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">🖥️ 系统后台日志</span>
+                <span className="text-xs text-slate-400">终端运行日志</span>
                 <span className="text-xs text-slate-500">({logs.length})</span>
               </div>
               <button

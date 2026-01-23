@@ -22,3 +22,34 @@
 html, body, #root {
   height: 100%;
 }
+
+/* Toast 动画 */
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+.animate-toast-enter {
+  animation: toast-enter 0.2s ease-out forwards;
+}
+
+.animate-toast-exit {
+  animation: toast-exit 0.2s ease-in forwards;
+}
