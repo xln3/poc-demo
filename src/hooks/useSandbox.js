@@ -1,25 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
-import { sandboxClient, ImageType } from '../sandbox.js';
-import { CONFIG } from '../config';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { sandboxClient, TerminalImage, formatBytes, formatTimeAgo } from '../sandbox.js';
 
 /**
- * Custom hook for sandbox container management
+ * Custom hook for multi-terminal sandbox management
  * @param {Object} options
  * @param {Function} options.addLog - Function to add log entries
  * @returns {Object} Sandbox state and functions
  */
 export const useSandbox = ({ addLog }) => {
-  // Sandbox states
+  // Multi-terminal state
+  const [terminals, setTerminals] = useState([]); // List of running terminals
+  const [currentTag, setCurrentTag] = useState(''); // Currently selected terminal tag
+  const [newTerminalTag, setNewTerminalTag] = useState(''); // Input for new terminal tag
+  const [newTerminalImage, setNewTerminalImage] = useState(TerminalImage.PYTHON);
+
+  // Deleted terminals state
+  const [deletedTerminals, setDeletedTerminals] = useState([]);
+  const [deletedTotalSize, setDeletedTotalSize] = useState(0);
+
+  // UI state
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [sandboxStatus, setSandboxStatus] = useState('disconnected'); // 'disconnected' | 'connecting' | 'running' | 'error'
-  const [sandboxImage, setSandboxImage] = useState(ImageType.PYTHON);
-  const [containerInfo, setContainerInfo] = useState(null);
   const [sandboxAvailable, setSandboxAvailable] = useState(false);
   const [toolCommand, setToolCommand] = useState('');
   const [toolResult, setToolResult] = useState(null);
   const [showSandboxPanel, setShowSandboxPanel] = useState(true);
-  const [sandboxFiles, setSandboxFiles] = useState([]); // [{name, path, size, preset?}]
+  const [sandboxFiles, setSandboxFiles] = useState([]);
   const [uploadingSandboxFile, setUploadingSandboxFile] = useState(false);
+  const [creatingTerminal, setCreatingTerminal] = useState(false);
+  const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
+
+  // Refs for intervals
+  const terminalPollRef = useRef(null);
+  const deletedPollRef = useRef(null);
 
   // Check sandbox service availability
   useEffect(() => {
@@ -32,6 +45,57 @@ export const useSandbox = ({ addLog }) => {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch terminals list
+  const fetchTerminals = useCallback(async () => {
+    try {
+      const response = await sandboxClient.listTerminals();
+      setTerminals(response.terminals || []);
+
+      // If current terminal is gone, clear selection
+      if (currentTag && !response.terminals.find(t => t.tag === currentTag)) {
+        setCurrentTag('');
+        setSandboxStatus('disconnected');
+        setSandboxEnabled(false);
+        sandboxClient.disconnectLogs();
+      }
+    } catch (error) {
+      console.error('Failed to fetch terminals:', error);
+    }
+  }, [currentTag]);
+
+  // Fetch deleted terminals list
+  const fetchDeletedTerminals = useCallback(async () => {
+    try {
+      const response = await sandboxClient.listDeletedTerminals();
+      setDeletedTerminals(response.terminals || []);
+      setDeletedTotalSize(response.total_size_bytes || 0);
+    } catch (error) {
+      console.error('Failed to fetch deleted terminals:', error);
+    }
+  }, []);
+
+  // Poll for terminals
+  useEffect(() => {
+    fetchTerminals();
+    terminalPollRef.current = setInterval(fetchTerminals, 10000);
+    return () => {
+      if (terminalPollRef.current) {
+        clearInterval(terminalPollRef.current);
+      }
+    };
+  }, [fetchTerminals]);
+
+  // Poll for deleted terminals (less frequent)
+  useEffect(() => {
+    fetchDeletedTerminals();
+    deletedPollRef.current = setInterval(fetchDeletedTerminals, 30000);
+    return () => {
+      if (deletedPollRef.current) {
+        clearInterval(deletedPollRef.current);
+      }
+    };
+  }, [fetchDeletedTerminals]);
+
   // Sandbox WebSocket log callback
   const handleSandboxLog = useCallback((log) => {
     addLog({
@@ -43,70 +107,185 @@ export const useSandbox = ({ addLog }) => {
     });
   }, [addLog]);
 
-  // Start container
-  const startContainer = async () => {
-    setSandboxStatus('connecting');
+  // Create new terminal
+  const createTerminal = async (tag, image = TerminalImage.PYTHON) => {
+    if (!tag || tag.trim() === '') {
+      addLog({
+        type: 'error',
+        content: '请输入终端标识（tag）',
+        status: 'danger',
+      });
+      return null;
+    }
+
+    setCreatingTerminal(true);
     try {
-      const info = await sandboxClient.createContainer(sandboxImage);
-      setContainerInfo(info);
+      const info = await sandboxClient.createTerminal(tag.trim(), image);
+
+      addLog({
+        type: 'container',
+        content: `终端已创建: ${info.tag} (${info.image})`,
+        status: 'success',
+      });
+
+      // Switch to the new terminal
+      setCurrentTag(info.tag);
       setSandboxStatus('running');
       setSandboxEnabled(true);
+      setNewTerminalTag('');
 
-      // Connect WebSocket for real-time logs
+      // Connect WebSocket for logs
       sandboxClient.connectLogs(handleSandboxLog, (error) => {
         console.error('Sandbox WebSocket error:', error);
       });
 
-      addLog({
-        type: 'container',
-        content: `容器已启动: ${info.container_id} (${info.image})`,
-        status: 'success',
-      });
+      // Refresh terminal list
+      await fetchTerminals();
 
       return info;
     } catch (error) {
-      setSandboxStatus('error');
       addLog({
         type: 'error',
-        content: `容器启动失败: ${error.message}`,
+        content: `创建终端失败: ${error.message}`,
         status: 'danger',
       });
-      throw error;
+      return null;
+    } finally {
+      setCreatingTerminal(false);
     }
   };
 
-  // Stop container
-  const stopContainer = async () => {
+  // Switch to a terminal
+  const switchTerminal = useCallback(async (tag) => {
+    if (tag === currentTag) return;
+
+    // Disconnect from current terminal
     sandboxClient.disconnectLogs();
+
+    const terminal = terminals.find(t => t.tag === tag);
+    if (!terminal) {
+      addLog({
+        type: 'error',
+        content: `终端 '${tag}' 不存在`,
+        status: 'danger',
+      });
+      return;
+    }
+
+    // Switch to new terminal
+    sandboxClient.switchTerminal(tag, terminal.session_id);
+    setCurrentTag(tag);
+    setSandboxStatus('running');
+    setSandboxEnabled(true);
+    setSandboxFiles([]);
+
+    // Connect WebSocket for logs
+    sandboxClient.connectLogs(handleSandboxLog, (error) => {
+      console.error('Sandbox WebSocket error:', error);
+    });
+
+    addLog({
+      type: 'container',
+      content: `已切换到终端: ${tag}`,
+      status: 'normal',
+    });
+
+    // Refresh files
+    refreshSandboxFiles();
+  }, [currentTag, terminals, handleSandboxLog, addLog]);
+
+  // Destroy a terminal
+  const destroyTerminal = async (tag) => {
     try {
-      await sandboxClient.destroyContainer();
-      setContainerInfo(null);
-      setSandboxStatus('disconnected');
-      setSandboxFiles([]);
+      await sandboxClient.destroyTerminal(tag);
+
       addLog({
         type: 'container',
-        content: '容器已停止',
+        content: `终端已销毁: ${tag}`,
         status: 'warning',
       });
+
+      if (tag === currentTag) {
+        setCurrentTag('');
+        setSandboxStatus('disconnected');
+        setSandboxEnabled(false);
+        setSandboxFiles([]);
+      }
+
+      // Refresh lists
+      await fetchTerminals();
+      await fetchDeletedTerminals();
     } catch (error) {
       addLog({
         type: 'error',
-        content: `容器停止失败: ${error.message}`,
+        content: `销毁终端失败: ${error.message}`,
         status: 'danger',
       });
     }
   };
 
-  // Upload files to sandbox (without parsing, direct write to container filesystem)
+  // Cleanup single deleted terminal
+  const cleanupDeleted = async (name) => {
+    try {
+      const result = await sandboxClient.cleanupDeletedTerminal(name);
+
+      addLog({
+        type: 'container',
+        content: `已清理: ${name} (释放 ${formatBytes(result.freed_bytes)})`,
+        status: 'success',
+      });
+
+      await fetchDeletedTerminals();
+    } catch (error) {
+      addLog({
+        type: 'error',
+        content: `清理失败: ${error.message}`,
+        status: 'danger',
+      });
+    }
+  };
+
+  // Cleanup all deleted terminals
+  const cleanupAllDeleted = async () => {
+    try {
+      const result = await sandboxClient.cleanupAllDeleted();
+
+      addLog({
+        type: 'container',
+        content: `已清理 ${result.cleaned_count} 个终端 (释放 ${formatBytes(result.freed_bytes)})`,
+        status: 'success',
+      });
+
+      if (result.errors && result.errors.length > 0) {
+        result.errors.forEach(err => {
+          addLog({
+            type: 'error',
+            content: err,
+            status: 'danger',
+          });
+        });
+      }
+
+      setShowCleanupConfirm(false);
+      await fetchDeletedTerminals();
+    } catch (error) {
+      addLog({
+        type: 'error',
+        content: `清理失败: ${error.message}`,
+        status: 'danger',
+      });
+    }
+  };
+
+  // Upload files to sandbox
   const handleUploadToSandbox = async (e) => {
     const files = e.target.files;
-    if (!files?.length || sandboxStatus !== 'running') return;
+    if (!files?.length || sandboxStatus !== 'running' || !currentTag) return;
 
     setUploadingSandboxFile(true);
     try {
       for (const file of files) {
         const bytes = await file.arrayBuffer();
-        // 分块处理 base64 编码，避免大文件导致调用栈溢出
         const uint8Array = new Uint8Array(bytes);
         let binary = '';
         const chunkSize = 8192;
@@ -118,11 +297,11 @@ export const useSandbox = ({ addLog }) => {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const path = `/workspace/${safeName}`;
 
-        const response = await fetch(`${CONFIG.sandbox.baseUrl}/sandbox/tool`, {
+        const response = await fetch(`/sandbox/tool`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            session_id: containerInfo.session_id,
+            session_id: sandboxClient.sessionId,
             tool: 'write_file',
             params: { path, content: base64, is_base64: true }
           })
@@ -136,7 +315,7 @@ export const useSandbox = ({ addLog }) => {
 
         addLog({
           type: 'data',
-          content: `📁 文件已上传到沙箱: ${path}`,
+          content: `文件已上传到沙箱: ${path}`,
           status: 'normal'
         });
       }
@@ -159,7 +338,7 @@ export const useSandbox = ({ addLog }) => {
       setSandboxFiles(prev => prev.filter(f => f.path !== path));
       addLog({
         type: 'data',
-        content: `🗑️ 文件已删除: ${path}`,
+        content: `文件已删除: ${path}`,
         status: 'normal'
       });
     } catch (error) {
@@ -187,7 +366,7 @@ export const useSandbox = ({ addLog }) => {
         }]);
         addLog({
           type: 'data',
-          content: `📁 预置文件: ${path}`,
+          content: `预置文件: ${path}`,
           status: 'normal'
         });
       } catch (error) {
@@ -200,7 +379,7 @@ export const useSandbox = ({ addLog }) => {
     }
   };
 
-  // Refresh sandbox file list (read from /workspace/ directory)
+  // Refresh sandbox file list
   const refreshSandboxFiles = async () => {
     if (sandboxStatus !== 'running') return;
 
@@ -214,7 +393,6 @@ export const useSandbox = ({ addLog }) => {
         return;
       }
 
-      // Parse ls -la output
       const lines = output.split('\n').filter(line => line.trim() && !line.startsWith('total'));
       const files = [];
       for (const line of lines) {
@@ -226,7 +404,7 @@ export const useSandbox = ({ addLog }) => {
           if (name === '.' || name === '..') continue;
           const isDir = perms.startsWith('d');
           files.push({
-            name: isDir ? `📁 ${name}` : name,
+            name,
             path: `/workspace/${name}`,
             size,
             isDir
@@ -262,7 +440,7 @@ export const useSandbox = ({ addLog }) => {
 
       addLog({
         type: 'data',
-        content: `📥 已下载: ${fileName}`,
+        content: `已下载: ${fileName}`,
         status: 'normal'
       });
     } catch (error) {
@@ -312,6 +490,11 @@ export const useSandbox = ({ addLog }) => {
     }
   };
 
+  // Get current terminal info
+  const getCurrentTerminal = useCallback(() => {
+    return terminals.find(t => t.tag === currentTag) || null;
+  }, [terminals, currentTag]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -321,24 +504,56 @@ export const useSandbox = ({ addLog }) => {
 
   // Check if sandbox is available for use
   const isSandboxAvailable = () => {
-    return sandboxEnabled && sandboxStatus === 'running' && containerInfo !== null;
+    return sandboxEnabled && sandboxStatus === 'running' && currentTag !== '';
   };
 
-  // Check if file-parser container is ready
-  const isFileParserReady = () => {
-    return isSandboxAvailable() && containerInfo?.image === 'file-parser:latest';
+  // Get current container info (compatibility with old API)
+  const containerInfo = getCurrentTerminal();
+
+  // Get current sandbox image (compatibility with old API)
+  const sandboxImage = containerInfo?.image || newTerminalImage;
+
+  // Check if file-parser container is ready (legacy - always false in new system)
+  const isFileParserReady = () => false;
+
+  // Legacy start/stop container functions (create/destroy current terminal)
+  const startContainer = async () => {
+    const tag = newTerminalTag || `terminal-${Date.now()}`;
+    return createTerminal(tag, newTerminalImage);
   };
+
+  const stopContainer = async () => {
+    if (currentTag) {
+      return destroyTerminal(currentTag);
+    }
+  };
+
+  // Set sandbox image (updates newTerminalImage)
+  const setSandboxImage = setNewTerminalImage;
+
+  // Set container info (no-op for compatibility)
+  const setContainerInfo = () => {};
 
   return {
-    // State
+    // Multi-terminal state
+    terminals,
+    currentTag,
+    setCurrentTag,
+    newTerminalTag,
+    setNewTerminalTag,
+    newTerminalImage,
+    setNewTerminalImage,
+    deletedTerminals,
+    deletedTotalSize,
+    creatingTerminal,
+    showCleanupConfirm,
+    setShowCleanupConfirm,
+
+    // UI state
     sandboxEnabled,
     setSandboxEnabled,
     sandboxStatus,
     setSandboxStatus,
-    sandboxImage,
-    setSandboxImage,
-    containerInfo,
-    setContainerInfo,
     sandboxAvailable,
     toolCommand,
     setToolCommand,
@@ -350,9 +565,17 @@ export const useSandbox = ({ addLog }) => {
     setSandboxFiles,
     uploadingSandboxFile,
 
-    // Functions
-    startContainer,
-    stopContainer,
+    // Multi-terminal functions
+    createTerminal,
+    switchTerminal,
+    destroyTerminal,
+    fetchTerminals,
+    fetchDeletedTerminals,
+    cleanupDeleted,
+    cleanupAllDeleted,
+    getCurrentTerminal,
+
+    // File functions
     handleUploadToSandbox,
     handleRemoveSandboxFile,
     presetSandboxFiles,
@@ -363,8 +586,16 @@ export const useSandbox = ({ addLog }) => {
 
     // Helper functions
     isSandboxAvailable,
+
+    // Legacy compatibility (for useCases and other code)
+    sandboxImage,
+    setSandboxImage,
+    containerInfo,
+    setContainerInfo,
+    startContainer,
+    stopContainer,
     isFileParserReady,
   };
 };
 
-export { ImageType };
+export { TerminalImage, formatBytes, formatTimeAgo };

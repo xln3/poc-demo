@@ -1,4 +1,6 @@
-export { useSandbox, ImageType } from './useSandbox.js';
+export { useSandbox, TerminalImage, formatBytes, formatTimeAgo } from './useSandbox.js';
+// 兼容旧代码
+export { TerminalImage as ImageType } from './useSandbox.js';
 export { useRAG } from './useRAG.js';
 export { useCases } from './useCases.js';
 export { useMCP } from './useMCP.js';

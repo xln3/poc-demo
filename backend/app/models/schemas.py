@@ -956,3 +956,56 @@ class PlaybackSequenceSummary(BaseModel):
     judgmentSuccess: Optional[bool] = None
     stateCount: int = 0
     duration: int = 0
+
+
+# ============ Multi-Terminal Sandbox Models ============
+
+class TerminalInfo(BaseModel):
+    """终端信息"""
+    tag: str
+    session_id: str
+    container_id: str
+    image: str
+    status: ContainerStatus
+    created_at: str
+    mount_path: str
+
+
+class DeletedTerminalInfo(BaseModel):
+    """已删除终端信息"""
+    original_tag: str
+    deleted_at: str
+    path: str
+    size_bytes: int
+
+
+class TerminalListResponse(BaseModel):
+    """终端列表响应"""
+    terminals: List[TerminalInfo]
+    count: int
+
+
+class DeletedTerminalsResponse(BaseModel):
+    """已删除终端列表响应"""
+    terminals: List[DeletedTerminalInfo]
+    count: int
+    total_size_bytes: int
+
+
+class CleanupResult(BaseModel):
+    """清理结果"""
+    cleaned_count: int
+    freed_bytes: int
+    errors: List[str] = []
+
+
+class CreateTerminalRequest(BaseModel):
+    """创建终端请求"""
+    tag: str
+    image: TerminalImage = TerminalImage.PYTHON
+
+
+class TerminalToolRequest(BaseModel):
+    """终端工具执行请求"""
+    tool: ToolType
+    params: Dict[str, Any]

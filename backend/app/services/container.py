@@ -36,9 +36,20 @@ class ContainerManager:
         self,
         image: str,  # 改为 str，支持任意镜像名
         session_id: Optional[str] = None,
-        mem_limit: str = "512m"  # 新增参数
+        mem_limit: str = "512m",
+        volumes: Optional[Dict[str, dict]] = None  # 宿主机挂载卷
     ) -> ContainerInfo:
-        """Get existing container for session or create new one."""
+        """Get existing container for session or create new one.
+
+        Args:
+            image: 容器镜像名
+            session_id: 会话 ID，用于标识容器
+            mem_limit: 内存限制
+            volumes: 挂载卷映射，如 {'/host/path': {'bind': '/container/path', 'mode': 'rw'}}
+
+        Returns:
+            ContainerInfo: 容器信息
+        """
 
         if session_id and session_id in self._sessions:
             container_id = self._sessions[session_id]
@@ -90,6 +101,8 @@ class ContainerManager:
             cpu_period=100000,
             cpu_quota=50000,  # 50% CPU
             network_mode="bridge",  # Allow network access
+            # Volume mounts for file persistence
+            volumes=volumes or {},
             # Keep container alive
             command="tail -f /dev/null"
         )

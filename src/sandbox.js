@@ -16,16 +16,14 @@ export const TerminalImage = {
 
 // 容器类型
 export const ContainerType = {
-  FILE_PARSER: 'file-parser',
   TERMINAL: 'terminal',
   RAG_SERVER: 'rag-server',
   MCP_SERVER: 'mcp-server',
 };
 
-// 兼容旧代码 - ImageType 包含终端镜像 + FILE_PARSER
+// 兼容旧代码 - ImageType 包含终端镜像
 export const ImageType = {
   ...TerminalImage,
-  FILE_PARSER: 'file-parser:latest',  // 文件解析器镜像（独立容器）
 };
 
 // 工具类型
@@ -60,130 +58,159 @@ export const SandboxLogStatus = {
 
 class SandboxClient {
   constructor() {
+    this.currentTag = null;
     this.sessionId = null;
     this.containerInfo = null;
     this.ws = null;
     this.logCallbacks = [];
   }
 
-  // 创建或获取容器
-  async createContainer(image = ImageType.PYTHON, sessionId = null) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/container`, {
+  // ============ Multi-Terminal API (v2) ============
+
+  // 创建终端（多用户支持）
+  async createTerminal(tag, image = TerminalImage.PYTHON) {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        image,
-        session_id: sessionId || this.sessionId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create container: ${response.status}`);
-    }
-
-    this.containerInfo = await response.json();
-    this.sessionId = this.containerInfo.session_id;
-    return this.containerInfo;
-  }
-
-  // 获取容器状态
-  async getContainerStatus(sessionId = null) {
-    const sid = sessionId || this.sessionId;
-    if (!sid) {
-      throw new Error('No session ID');
-    }
-
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/container/${sid}`);
-    if (!response.ok) {
-      if (response.status === 404) {
-        return null;
-      }
-      throw new Error(`Failed to get container status: ${response.status}`);
-    }
-
-    return response.json();
-  }
-
-  // 销毁容器
-  async destroyContainer(sessionId = null) {
-    const sid = sessionId || this.sessionId;
-    if (!sid) {
-      return;
-    }
-
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/container/${sid}`, {
-      method: 'DELETE',
-    });
-
-    if (response.ok) {
-      if (sid === this.sessionId) {
-        this.sessionId = null;
-        this.containerInfo = null;
-      }
-    }
-  }
-
-  // ============ Terminal Sandbox API (Singleton) ============
-
-  // 创建终端容器（单例，同时只能运行一个）
-  async createTerminal(image = TerminalImage.PYTHON, tag = 'default') {
-    const params = new URLSearchParams({ image, tag });
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminal?${params}`, {
-      method: 'POST',
+      body: JSON.stringify({ tag, image }),
     });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
       if (response.status === 409) {
-        throw new Error(`已有终端容器运行: ${error.detail}`);
+        throw new Error(`Tag '${tag}' 已被使用: ${error.detail}`);
       }
-      throw new Error(`Failed to create terminal: ${error.detail || response.status}`);
+      if (response.status === 400) {
+        throw new Error(`无效的 tag: ${error.detail}`);
+      }
+      throw new Error(`创建终端失败: ${error.detail || response.status}`);
     }
 
-    this.containerInfo = await response.json();
-    this.sessionId = this.containerInfo.session_id;
-    return this.containerInfo;
+    const info = await response.json();
+    this.currentTag = tag;
+    this.sessionId = info.session_id;
+    this.containerInfo = info;
+    return info;
   }
 
-  // 获取当前终端状态
-  async getTerminalStatus() {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminal`);
+  // 列出所有运行中的终端
+  async listTerminals() {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals`);
     if (!response.ok) {
-      throw new Error(`Failed to get terminal status: ${response.status}`);
+      throw new Error(`获取终端列表失败: ${response.status}`);
     }
-    const data = await response.json();
-    if (data) {
-      this.containerInfo = data;
-      this.sessionId = data.session_id;
-    }
-    return data;
+    return response.json();
   }
 
-  // 销毁当前终端
-  async destroyTerminal() {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminal`, {
+  // 获取指定终端状态
+  async getTerminalStatus(tag) {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      throw new Error(`获取终端状态失败: ${response.status}`);
+    }
+    const info = await response.json();
+    if (tag === this.currentTag) {
+      this.containerInfo = info;
+      this.sessionId = info.session_id;
+    }
+    return info;
+  }
+
+  // 销毁指定终端
+  async destroyTerminal(tag) {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}`, {
       method: 'DELETE',
     });
 
     if (!response.ok) {
       if (response.status === 404) {
-        // 没有运行中的终端，清理本地状态
-        this.sessionId = null;
-        this.containerInfo = null;
+        // 终端不存在，清理本地状态
+        if (tag === this.currentTag) {
+          this.currentTag = null;
+          this.sessionId = null;
+          this.containerInfo = null;
+        }
         return;
       }
       const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(`Failed to destroy terminal: ${error.detail || response.status}`);
+      throw new Error(`销毁终端失败: ${error.detail || response.status}`);
     }
 
-    this.sessionId = null;
-    this.containerInfo = null;
+    if (tag === this.currentTag) {
+      this.currentTag = null;
+      this.sessionId = null;
+      this.containerInfo = null;
+    }
   }
 
-  // 执行工具
+  // 在指定终端执行工具
+  async executeToolInTerminal(tag, tool, params) {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/tool`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool, params }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `工具执行失败: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 列出已删除终端
+  async listDeletedTerminals() {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals`);
+    if (!response.ok) {
+      throw new Error(`获取已删除终端列表失败: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  // 清理单个已删除终端
+  async cleanupDeletedTerminal(name) {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(`清理失败: ${error.detail || response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 清理所有已删除终端
+  async cleanupAllDeleted() {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals?confirm=true`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(`清理失败: ${error.detail || response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 切换当前终端
+  switchTerminal(tag, sessionId) {
+    this.currentTag = tag;
+    this.sessionId = sessionId;
+  }
+
+  // ============ Tool Execution (uses current terminal) ============
+
+  // 执行工具（使用当前终端）
   async executeTool(tool, params) {
     if (!this.sessionId) {
-      throw new Error('No active session. Create a container first.');
+      throw new Error('没有活跃的终端，请先创建终端');
     }
 
     const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/tool`, {
@@ -198,7 +225,7 @@ class SandboxClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || `Tool execution failed: ${response.status}`);
+      throw new Error(error.detail || `工具执行失败: ${response.status}`);
     }
 
     return response.json();
@@ -249,10 +276,12 @@ class SandboxClient {
     return this.executeTool(ToolType.ACCESS_SECRET, { name, namespace });
   }
 
+  // ============ WebSocket Logs ============
+
   // 连接 WebSocket 获取实时日志
   connectLogs(onLog, onError = null) {
     if (!this.sessionId) {
-      throw new Error('No active session');
+      throw new Error('没有活跃的终端');
     }
 
     if (this.ws) {
@@ -298,14 +327,7 @@ class SandboxClient {
     }
   }
 
-  // 获取所有活跃会话
-  async listSessions() {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/sessions`);
-    if (!response.ok) {
-      throw new Error(`Failed to list sessions: ${response.status}`);
-    }
-    return response.json();
-  }
+  // ============ Health Check ============
 
   // 检查后端服务是否可用
   async healthCheck() {
@@ -377,4 +399,28 @@ export const TOOL_DESCRIPTIONS = {
     description: '访问密钥存储（模拟）',
     params: ['name', 'namespace'],
   },
+};
+
+// 格式化字节大小
+export const formatBytes = (bytes) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+};
+
+// 格式化时间距离
+export const formatTimeAgo = (dateStr) => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return '刚刚';
+  if (diffMins < 60) return `${diffMins}分钟前`;
+  if (diffHours < 24) return `${diffHours}小时前`;
+  return `${diffDays}天前`;
 };

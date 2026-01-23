@@ -6,7 +6,7 @@ import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
 import { mcpClient } from './mcp.js';
 import { exportReport, exportHTML } from './utils/index.js';
-import { useSandbox, ImageType, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback } from './hooks/index.js';
+import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback } from './hooks/index.js';
 
 // 能力层级图标
 const LEVEL_ICONS = {
@@ -72,16 +72,27 @@ export default function App() {
     setLogs(prev => [...prev, log]);
   }, []);
 
-  // Sandbox hook
+  // Sandbox hook (multi-terminal)
   const sandbox = useSandbox({ addLog });
   const {
+    // Multi-terminal state
+    terminals, currentTag, setCurrentTag, newTerminalTag, setNewTerminalTag,
+    newTerminalImage, setNewTerminalImage, deletedTerminals, deletedTotalSize,
+    creatingTerminal, showCleanupConfirm, setShowCleanupConfirm,
+    // UI state
     sandboxEnabled, setSandboxEnabled, sandboxStatus, setSandboxStatus,
-    sandboxImage, setSandboxImage, containerInfo, setContainerInfo,
     sandboxAvailable, toolCommand, setToolCommand, toolResult, setToolResult,
     sandboxFiles, setSandboxFiles, uploadingSandboxFile,
-    startContainer, stopContainer, handleUploadToSandbox, handleRemoveSandboxFile,
-    presetSandboxFiles, refreshSandboxFiles, handleDownloadSandboxFile, executeCommand,
-    handleSandboxLog, isSandboxAvailable, isFileParserReady
+    // Multi-terminal functions
+    createTerminal, switchTerminal, destroyTerminal, fetchTerminals,
+    fetchDeletedTerminals, cleanupDeleted, cleanupAllDeleted, getCurrentTerminal,
+    // File functions
+    handleUploadToSandbox, handleRemoveSandboxFile, presetSandboxFiles,
+    refreshSandboxFiles, handleDownloadSandboxFile, executeCommand,
+    handleSandboxLog, isSandboxAvailable,
+    // Legacy compatibility
+    sandboxImage, setSandboxImage, containerInfo, setContainerInfo,
+    startContainer, stopContainer, isFileParserReady
   } = sandbox;
 
   // RAG hook
@@ -1768,71 +1779,160 @@ print('\\n'.join(all_text))
         <>
         <div className="mb-3 p-2 bg-slate-700 rounded">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-400">🐳 运行沙箱</span>
+            <span className="text-xs text-slate-400">🐳 终端沙箱</span>
             <span className={`text-xs px-1.5 py-0.5 rounded ${
               !sandboxAvailable ? 'bg-slate-600 text-slate-400' :
-              sandboxStatus === 'running' ? 'bg-green-600 text-white' :
-              sandboxStatus === 'connecting' ? 'bg-yellow-600 text-white' :
-              sandboxStatus === 'error' ? 'bg-red-600 text-white' :
+              terminals.length > 0 ? 'bg-green-600 text-white' :
               'bg-slate-600 text-slate-300'
             }`}>
-              {!sandboxAvailable ? '离线' :
-               sandboxStatus === 'running' ? '运行中' :
-               sandboxStatus === 'connecting' ? '启动中' :
-               sandboxStatus === 'error' ? '错误' : '未启动'}
+              {!sandboxAvailable ? '离线' : `${terminals.length} 运行中`}
             </span>
           </div>
 
           {sandboxAvailable ? (
             <>
-              {sandboxStatus !== 'running' && (
-                <div className="mb-2">
+              {/* 创建新终端 */}
+              <div className="mb-2 p-2 bg-slate-800 rounded">
+                <div className="text-xs text-slate-500 mb-1">创建新终端</div>
+                <div className="flex gap-1 mb-1">
+                  <input
+                    type="text"
+                    value={newTerminalTag}
+                    onChange={(e) => setNewTerminalTag(e.target.value)}
+                    placeholder="输入 tag (如: luna)"
+                    className="flex-1 bg-slate-600 text-white text-xs px-2 py-1 rounded border border-slate-500 focus:outline-none focus:border-blue-500"
+                    disabled={creatingTerminal}
+                  />
                   <select
-                    value={sandboxImage}
-                    onChange={(e) => setSandboxImage(e.target.value)}
-                    className="w-full bg-slate-600 text-white text-xs px-2 py-1 rounded border border-slate-500 focus:outline-none"
-                    disabled={sandboxStatus === 'connecting'}
+                    value={newTerminalImage}
+                    onChange={(e) => setNewTerminalImage(e.target.value)}
+                    className="w-8 bg-slate-600 text-white text-sm text-center py-1 rounded border border-slate-500 focus:outline-none cursor-pointer appearance-none"
+                    disabled={creatingTerminal}
+                    title={newTerminalImage.includes('python') ? 'Python 3.11' : newTerminalImage.includes('ubuntu') ? 'Ubuntu 22.04' : 'Node 20'}
+                    style={{ backgroundImage: 'none' }}
                   >
-                    <option value={ImageType.PYTHON}>🐍 Python 3.11</option>
-                    <option value={ImageType.UBUNTU}>🐧 Ubuntu 22.04</option>
-                    <option value={ImageType.NODE}>📦 Node 20</option>
-                    <option value={ImageType.FILE_PARSER}>🔧 File Parser (PDF OCR)</option>
+                    <option value={TerminalImage.PYTHON} title="Python 3.11">🐍</option>
+                    <option value={TerminalImage.UBUNTU} title="Ubuntu 22.04">🐧</option>
+                    <option value={TerminalImage.NODE} title="Node 20">⬢</option>
                   </select>
+                </div>
+                <button
+                  onClick={() => createTerminal(newTerminalTag, newTerminalImage)}
+                  disabled={creatingTerminal || !newTerminalTag.trim()}
+                  className={`w-full py-1.5 rounded text-xs transition ${
+                    creatingTerminal || !newTerminalTag.trim()
+                      ? 'bg-slate-600 cursor-not-allowed'
+                      : 'bg-emerald-600 hover:bg-emerald-500'
+                  }`}
+                >
+                  {creatingTerminal ? '⏳ 创建中...' : '➕ 创建终端'}
+                </button>
+              </div>
+
+              {/* 运行中的终端列表 */}
+              {terminals.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-xs text-slate-500 mb-1">运行中 ({terminals.length})</div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {terminals.map(t => (
+                      <div
+                        key={t.tag}
+                        className={`flex items-center text-xs px-2 py-1.5 rounded cursor-pointer ${
+                          t.tag === currentTag
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-600 hover:bg-slate-500'
+                        }`}
+                        onClick={() => switchTerminal(t.tag)}
+                      >
+                        <span className="mr-1.5">
+                          {t.image.includes('python') ? '🐍' :
+                           t.image.includes('ubuntu') ? '🐧' : '📦'}
+                        </span>
+                        <span className="flex-1 truncate font-mono">{t.tag}</span>
+                        <span className="text-xs opacity-70 mr-2">
+                          {formatTimeAgo(t.created_at)}
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); destroyTerminal(t.tag); }}
+                          className="text-red-400 hover:text-red-300"
+                          title="销毁终端"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              <div className="flex gap-1">
-                {sandboxStatus === 'running' ? (
-                  <button
-                    onClick={stopContainer}
-                    className="flex-1 py-1.5 rounded text-xs bg-red-600 hover:bg-red-500 transition"
-                  >
-                    ⏹️ 停止容器
-                  </button>
-                ) : (
-                  <button
-                    onClick={startContainer}
-                    disabled={sandboxStatus === 'connecting'}
-                    className={`flex-1 py-1.5 rounded text-xs transition ${
-                      sandboxStatus === 'connecting'
-                        ? 'bg-slate-600 cursor-not-allowed'
-                        : 'bg-emerald-600 hover:bg-emerald-500'
-                    }`}
-                  >
-                    {sandboxStatus === 'connecting' ? '⏳ 启动中...' : '▶️ 启动容器'}
-                  </button>
-                )}
-              </div>
-
-              {containerInfo && sandboxStatus === 'running' && (
-                <>
-                  <div className="mt-2 text-xs text-slate-400 font-mono">
-                    <div>ID: {containerInfo.container_id}</div>
-                    <div>Session: {containerInfo.session_id}</div>
+              {/* 已删除终端列表 */}
+              {deletedTerminals.length > 0 && (
+                <div className="mb-2 p-2 bg-slate-800 rounded">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                    <span>已删除 ({deletedTerminals.length}) {formatBytes(deletedTotalSize)}</span>
+                    <button
+                      onClick={() => setShowCleanupConfirm(true)}
+                      className="text-red-400 hover:text-red-300 text-xs"
+                      title="清理全部"
+                    >
+                      清理全部
+                    </button>
                   </div>
+                  <div className="space-y-1 max-h-20 overflow-y-auto">
+                    {deletedTerminals.map(d => {
+                      const name = `${d.original_tag}-${d.deleted_at.replace(/[-:T]/g, '').slice(0, 14)}`;
+                      return (
+                        <div key={d.path} className="flex items-center text-xs text-slate-400">
+                          <span className="flex-1 truncate font-mono">{d.original_tag}</span>
+                          <span className="mr-2">{formatBytes(d.size_bytes)}</span>
+                          <button
+                            onClick={() => cleanupDeleted(name)}
+                            className="text-red-400 hover:text-red-300"
+                            title="清理"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                  {/* 上传文件到沙箱 */}
-                  <div className="mt-3 pt-2 border-t border-slate-600">
+              {/* 清理确认对话框 */}
+              {showCleanupConfirm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                  <div className="bg-slate-800 p-4 rounded-lg max-w-sm mx-4">
+                    <div className="text-sm font-medium mb-2">确认永久删除？</div>
+                    <div className="text-xs text-slate-400 mb-4">
+                      将删除所有已删除终端的文件（不可恢复）
+                      <br />共 {deletedTerminals.length} 个，{formatBytes(deletedTotalSize)}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowCleanupConfirm(false)}
+                        className="flex-1 py-1.5 rounded text-xs bg-slate-600 hover:bg-slate-500"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={cleanupAllDeleted}
+                        className="flex-1 py-1.5 rounded text-xs bg-red-600 hover:bg-red-500"
+                      >
+                        确认清理
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 当前终端操作区 */}
+              {currentTag && sandboxStatus === 'running' && (
+                <>
+                  <div className="mt-2 pt-2 border-t border-slate-600">
+                    <div className="text-xs text-slate-500 mb-1">当前: <span className="font-mono text-white">{currentTag}</span></div>
+
+                    {/* 上传文件 */}
                     <input
                       type="file"
                       id="sandbox-file-input"
@@ -1840,7 +1940,7 @@ print('\\n'.join(all_text))
                       multiple
                       onChange={handleUploadToSandbox}
                     />
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 mb-2">
                       <button
                         onClick={() => document.getElementById('sandbox-file-input').click()}
                         disabled={uploadingSandboxFile}
@@ -1858,10 +1958,10 @@ print('\\n'.join(all_text))
                       </button>
                     </div>
 
-                    {/* 沙箱文件列表 */}
-                    <div className="mt-2 space-y-1">
+                    {/* 文件列表 */}
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>沙箱文件 ({sandboxFiles.length})</span>
+                        <span>文件 ({sandboxFiles.length})</span>
                       </div>
                       {sandboxFiles.length === 0 ? (
                         <div className="text-xs text-slate-600 text-center py-2">
@@ -1869,15 +1969,15 @@ print('\\n'.join(all_text))
                         </div>
                       ) : (
                         sandboxFiles.map(f => (
-                          <div key={f.path} className="flex items-center text-xs bg-slate-700 px-2 py-1 rounded group">
+                          <div key={f.path} className="flex items-center text-xs bg-slate-600 px-2 py-1 rounded group">
                             <span className="truncate flex-1" title={f.path}>
                               {f.preset && <span className="text-emerald-400 mr-1">⚙️</span>}
-                              {f.isDir ? f.name : f.name}
+                              {f.isDir ? `📁 ${f.name}` : f.name}
                             </span>
                             <div className="flex gap-1 ml-1 flex-shrink-0">
                               {!f.isDir && (
                                 <button
-                                  onClick={() => handleDownloadSandboxFile(f.path, f.name.replace('📁 ', ''))}
+                                  onClick={() => handleDownloadSandboxFile(f.path, f.name)}
                                   className="text-blue-400 hover:text-blue-300 opacity-60 group-hover:opacity-100"
                                   title="下载文件"
                                 >
