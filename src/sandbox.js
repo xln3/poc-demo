@@ -480,13 +480,14 @@ class SandboxClient {
 
   // ============ Terminal Lock API ============
 
-  // 生成或获取用户 ID（浏览器标识）
+  // 生成或获取用户 ID（标签页会话标识）
+  // 使用 sessionStorage 确保每个标签页有独立的 ID
   getUserId() {
     if (!this._userId) {
-      let stored = localStorage.getItem('sandbox_user_id');
+      let stored = sessionStorage.getItem('sandbox_user_id');
       if (!stored) {
         stored = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        localStorage.setItem('sandbox_user_id', stored);
+        sessionStorage.setItem('sandbox_user_id', stored);
       }
       this._userId = stored;
     }

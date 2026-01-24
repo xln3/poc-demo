@@ -67,17 +67,19 @@ class TerminalLock:
         last_heartbeat = lock_info.get('last_heartbeat', 0)
         return time.time() - last_heartbeat > self._timeout
 
-    def acquire(self, tag: str, user_id: str) -> Dict[str, Any]:
+    def acquire(self, tag: str, user_id: str, client_ip: str = None) -> Dict[str, Any]:
         """尝试获取锁
 
         Args:
             tag: 终端标识
             user_id: 用户/浏览器标识
+            client_ip: 客户端 IP 地址
 
         Returns:
             {
                 "success": bool,
                 "holder": str | None,  # 当前持有者
+                "holder_ip": str | None,  # 持有者 IP
                 "message": str
             }
         """
@@ -89,25 +91,34 @@ class TerminalLock:
                 if not self._is_expired(lock_info):
                     # 锁仍然有效
                     if lock_info['user_id'] == user_id:
-                        # 同一用户，更新心跳
+                        # 同一用户，更新心跳和 IP
                         lock_info['last_heartbeat'] = time.time()
+                        if client_ip:
+                            lock_info['client_ip'] = client_ip
                         self._write_lock(tag, lock_info)
                         return {
                             "success": True,
                             "holder": user_id,
+                            "holder_ip": lock_info.get('client_ip'),
                             "message": "锁已刷新"
                         }
+                    elif client_ip and lock_info.get('client_ip') == client_ip:
+                        # 同 IP 不同会话，允许抢夺锁
+                        # 继续往下创建新锁
+                        pass
                     else:
-                        # 被其他用户持有
+                        # 被其他用户（不同 IP）持有
                         return {
                             "success": False,
                             "holder": lock_info['user_id'],
+                            "holder_ip": lock_info.get('client_ip'),
                             "message": f"终端被 {lock_info['user_id'][:8]}... 占用"
                         }
 
             # 锁不存在或已超时，创建新锁
             new_lock = {
                 "user_id": user_id,
+                "client_ip": client_ip,
                 "acquired_at": datetime.now().isoformat(),
                 "last_heartbeat": time.time()
             }
@@ -116,12 +127,14 @@ class TerminalLock:
                 return {
                     "success": True,
                     "holder": user_id,
+                    "holder_ip": client_ip,
                     "message": "锁已获取"
                 }
             else:
                 return {
                     "success": False,
                     "holder": None,
+                    "holder_ip": None,
                     "message": "写入锁文件失败"
                 }
 
@@ -205,6 +218,7 @@ class TerminalLock:
             {
                 "locked": bool,
                 "holder": str | None,
+                "holder_ip": str | None,
                 "acquired_at": str | None,
                 "expired": bool
             }
@@ -216,6 +230,7 @@ class TerminalLock:
                 return {
                     "locked": False,
                     "holder": None,
+                    "holder_ip": None,
                     "acquired_at": None,
                     "expired": False
                 }
@@ -224,6 +239,7 @@ class TerminalLock:
             return {
                 "locked": not expired,
                 "holder": lock_info['user_id'] if not expired else None,
+                "holder_ip": lock_info.get('client_ip') if not expired else None,
                 "acquired_at": lock_info['acquired_at'],
                 "expired": expired
             }
