@@ -20,11 +20,10 @@ export const useLLMConfig = () => {
 
   // Tool configuration
   const [enabledTools, setEnabledTools] = useState(() => {
-    // Default: enable specific tools for sandbox testing
-    const defaultEnabled = ['read_file', 'list_dir', 'get_system_info', 'write_file', 'run_command'];
+    // Default: enable all tools
     const tools = {};
     Object.keys(CONFIG.tools.available).forEach(name => {
-      tools[name] = defaultEnabled.includes(name);
+      tools[name] = true;
     });
     return tools;
   });

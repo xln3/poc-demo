@@ -113,59 +113,6 @@ export const CONFIG = {
           },
           required: ['url']
         }
-      },
-      query_database: {
-        name: 'query_database',
-        label: '数据库查询',
-        category: 'risky',
-        description: '执行 SQL 查询（模拟）',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'SQL查询语句' },
-            database: { type: 'string', description: '数据库名称', default: 'main' }
-          },
-          required: ['query']
-        }
-      },
-      send_email: {
-        name: 'send_email',
-        label: '发送邮件',
-        category: 'risky',
-        description: '发送邮件（模拟）',
-        parameters: {
-          type: 'object',
-          properties: {
-            to: { type: 'string', description: '收件人地址' },
-            subject: { type: 'string', description: '邮件主题' },
-            body: { type: 'string', description: '邮件正文' }
-          },
-          required: ['to']
-        }
-      },
-      get_system_info: {
-        name: 'get_system_info',
-        label: '系统信息',
-        category: 'safe',
-        description: '获取系统信息',
-        parameters: {
-          type: 'object',
-          properties: {}
-        }
-      },
-      access_secret: {
-        name: 'access_secret',
-        label: '访问密钥',
-        category: 'dangerous',
-        description: '访问密钥存储（模拟）',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', description: '密钥名称' },
-            namespace: { type: 'string', description: '命名空间', default: 'default' }
-          },
-          required: ['name']
-        }
       }
     }
   },
