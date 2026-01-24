@@ -1843,12 +1843,14 @@ print('\\n'.join(all_text))
                 <select
                   value={newTerminalImage}
                   onChange={(e) => setNewTerminalImage(e.target.value)}
-                  className="w-16 bg-slate-700 text-white text-xs py-1 rounded border border-slate-600 focus:outline-none cursor-pointer"
+                  className="w-8 bg-slate-700 text-white text-sm py-1 rounded border border-slate-600 focus:outline-none cursor-pointer text-center"
                   disabled={creatingTerminal}
+                  title={newTerminalImage.includes('python') ? 'Python 3.11' : newTerminalImage.includes('ubuntu') ? 'Ubuntu 22.04' : 'Node 20'}
+                  style={{ appearance: 'none' }}
                 >
-                  <option value={TerminalImage.PYTHON}>Python</option>
-                  <option value={TerminalImage.UBUNTU}>Ubuntu</option>
-                  <option value={TerminalImage.NODE}>Node</option>
+                  <option value={TerminalImage.PYTHON}>🐍</option>
+                  <option value={TerminalImage.UBUNTU}>🐧</option>
+                  <option value={TerminalImage.NODE}>⬢</option>
                 </select>
                 <button
                   onClick={() => createTerminal(newTerminalTag, newTerminalImage)}

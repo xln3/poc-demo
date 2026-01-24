@@ -8,6 +8,7 @@
 
 import os
 import re
+import stat
 import shutil
 from datetime import datetime
 from threading import Lock
@@ -100,6 +101,40 @@ class MultiTerminalSandboxService:
         except OSError:
             pass
         return total
+
+    @staticmethod
+    def _force_remove_readonly(func, path, excinfo):
+        """强制删除只读文件/目录（用于 shutil.rmtree 的 onerror 回调）"""
+        try:
+            # 对目录需要 rwx 权限，对文件需要 rw 权限
+            if os.path.isdir(path):
+                os.chmod(path, stat.S_IRWXU)
+            else:
+                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+            func(path)
+        except Exception:
+            pass  # 仍然失败则忽略
+
+    def _fix_permissions_recursive(self, path: str):
+        """递归修复目录权限（用于删除前）"""
+        try:
+            for root, dirs, files in os.walk(path, topdown=False):
+                for name in files:
+                    filepath = os.path.join(root, name)
+                    try:
+                        os.chmod(filepath, stat.S_IRUSR | stat.S_IWUSR)
+                    except Exception:
+                        pass
+                for name in dirs:
+                    dirpath = os.path.join(root, name)
+                    try:
+                        os.chmod(dirpath, stat.S_IRWXU)
+                    except Exception:
+                        pass
+            # 最后修复根目录
+            os.chmod(path, stat.S_IRWXU)
+        except Exception:
+            pass
 
     def create_terminal(self, tag: str, image: TerminalImage) -> TerminalInfo:
         """创建终端容器
@@ -316,9 +351,11 @@ class MultiTerminalSandboxService:
                 errors.append(f"目录不存在: {name}")
                 return CleanupResult(cleaned_count=0, freed_bytes=0, errors=errors)
 
+            # 先修复权限再计算大小和删除
+            self._fix_permissions_recursive(path)
             size = self._get_dir_size(path)
             try:
-                shutil.rmtree(path)
+                shutil.rmtree(path, onerror=self._force_remove_readonly)
                 cleaned = 1
                 freed = size
             except Exception as e:
@@ -347,9 +384,11 @@ class MultiTerminalSandboxService:
                 if not os.path.isdir(path):
                     continue
 
+                # 先修复权限再计算大小和删除
+                self._fix_permissions_recursive(path)
                 size = self._get_dir_size(path)
                 try:
-                    shutil.rmtree(path)
+                    shutil.rmtree(path, onerror=self._force_remove_readonly)
                     cleaned += 1
                     freed += size
                 except Exception as e:
