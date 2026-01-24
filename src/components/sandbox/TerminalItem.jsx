@@ -40,7 +40,7 @@ export const TerminalItem = ({
   return (
     <div
       className={`
-        relative flex items-center gap-2 px-3 py-2 rounded
+        relative flex items-center gap-2 px-2 py-1.5 rounded
         transition-all duration-150
         ${isLockedByOther
           ? 'bg-slate-800/30 border border-orange-500/30 cursor-not-allowed opacity-60'
@@ -54,28 +54,23 @@ export const TerminalItem = ({
       title={lockTooltip}
     >
       {/* 镜像图标 */}
-      <span className="text-base" title={imageInfo.label}>{imageInfo.icon}</span>
+      <span className="text-sm" title={imageInfo.label}>{imageInfo.icon}</span>
 
-      {/* 终端信息 */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className={`font-mono text-sm truncate ${isLockedByOther ? 'text-slate-400' : 'text-white'}`}>
-            {terminal.tag}
-          </span>
-          {/* 锁定图标 */}
-          {isLockedByOther && (
-            <span className="text-orange-400 text-xs">🔒</span>
-          )}
-          {isLockedByMe && (
-            <span className="text-cyan-400 text-xs" title="你正在使用">✓</span>
-          )}
-        </div>
-        <div className="text-xs text-slate-500">
-          {isLockedByOther
-            ? `被 ${lockInfo.holder?.slice(0, 12)}... 占用`
-            : formatTimeAgo(terminal.created_at)}
-        </div>
-      </div>
+      {/* tag */}
+      <span className={`font-mono text-sm truncate ${isLockedByOther ? 'text-slate-400' : 'text-white'}`}>
+        {terminal.tag}
+      </span>
+
+      {/* 锁定图标 */}
+      {isLockedByOther && <span className="text-orange-400 text-xs">🔒</span>}
+      {isLockedByMe && <span className="text-cyan-400 text-xs">✓</span>}
+
+      {/* 创建时间 / 占用信息 */}
+      <span className="text-xs text-slate-500 ml-auto">
+        {isLockedByOther
+          ? `${lockInfo.holder?.slice(0, 8)}...`
+          : formatTimeAgo(terminal.created_at)}
+      </span>
 
       {/* 状态指示器 */}
       <div className={`
@@ -87,21 +82,19 @@ export const TerminalItem = ({
             : 'bg-gray-400'}
       `} />
 
-      {/* Hover 操作按钮 - 只保留查看和删除 */}
+      {/* Hover 操作按钮 */}
       {isSelected && isHovered && (
-        <div className="absolute right-2 flex gap-1 bg-slate-800/95 rounded px-1.5 py-1">
-          {/* 查看文件 */}
+        <div className="absolute right-1 flex gap-0.5 bg-slate-800/95 rounded px-1 py-0.5">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onShowFiles(terminal.tag);
             }}
-            className="w-7 h-7 flex items-center justify-center rounded text-sm bg-slate-600 hover:bg-slate-500 text-slate-300 hover:text-white transition-all"
+            className="w-6 h-6 flex items-center justify-center rounded text-xs bg-slate-600 hover:bg-slate-500 text-slate-300 hover:text-white transition-all"
             title="浏览文件"
           >
             □
           </button>
-          {/* 删除 */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -109,7 +102,7 @@ export const TerminalItem = ({
                 onDestroy(terminal.tag);
               }
             }}
-            className="w-7 h-7 flex items-center justify-center rounded text-lg font-bold bg-slate-600 hover:bg-red-600 text-slate-300 hover:text-white transition-all"
+            className="w-6 h-6 flex items-center justify-center rounded text-base font-bold bg-slate-600 hover:bg-red-600 text-slate-300 hover:text-white transition-all"
             title="销毁终端"
           >
             ✕

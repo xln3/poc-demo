@@ -1829,41 +1829,37 @@ print('\\n'.join(all_text))
 
           {sandboxAvailable ? (
             <>
-              {/* 创建新终端 */}
-              <div className="mb-2 p-2 bg-slate-800 rounded">
-                <div className="text-xs text-slate-500 mb-1">创建新终端</div>
-                <div className="flex gap-1 mb-1">
-                  <input
-                    type="text"
-                    value={newTerminalTag}
-                    onChange={(e) => setNewTerminalTag(e.target.value)}
-                    placeholder="输入 tag (如: luna)"
-                    className="flex-1 bg-slate-600 text-white text-xs px-2 py-1 rounded border border-slate-500 focus:outline-none focus:border-blue-500"
-                    disabled={creatingTerminal}
-                  />
-                  <select
-                    value={newTerminalImage}
-                    onChange={(e) => setNewTerminalImage(e.target.value)}
-                    className="w-8 bg-slate-600 text-white text-sm text-center py-1 rounded border border-slate-500 focus:outline-none cursor-pointer appearance-none"
-                    disabled={creatingTerminal}
-                    title={newTerminalImage.includes('python') ? 'Python 3.11' : newTerminalImage.includes('ubuntu') ? 'Ubuntu 22.04' : 'Node 20'}
-                    style={{ backgroundImage: 'none' }}
-                  >
-                    <option value={TerminalImage.PYTHON} title="Python 3.11">🐍</option>
-                    <option value={TerminalImage.UBUNTU} title="Ubuntu 22.04">🐧</option>
-                    <option value={TerminalImage.NODE} title="Node 20">⬢</option>
-                  </select>
-                </div>
+              {/* 创建终端 */}
+              <div className="mb-2 flex gap-1">
+                <input
+                  type="text"
+                  value={newTerminalTag}
+                  onChange={(e) => setNewTerminalTag(e.target.value)}
+                  placeholder="tag"
+                  className="flex-1 min-w-0 bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-cyan-500"
+                  disabled={creatingTerminal}
+                  onKeyDown={(e) => e.key === 'Enter' && newTerminalTag.trim() && createTerminal(newTerminalTag, newTerminalImage)}
+                />
+                <select
+                  value={newTerminalImage}
+                  onChange={(e) => setNewTerminalImage(e.target.value)}
+                  className="w-16 bg-slate-700 text-white text-xs py-1 rounded border border-slate-600 focus:outline-none cursor-pointer"
+                  disabled={creatingTerminal}
+                >
+                  <option value={TerminalImage.PYTHON}>Python</option>
+                  <option value={TerminalImage.UBUNTU}>Ubuntu</option>
+                  <option value={TerminalImage.NODE}>Node</option>
+                </select>
                 <button
                   onClick={() => createTerminal(newTerminalTag, newTerminalImage)}
                   disabled={creatingTerminal || !newTerminalTag.trim()}
-                  className={`w-full py-1.5 rounded text-xs transition ${
+                  className={`px-2 py-1 rounded text-xs transition ${
                     creatingTerminal || !newTerminalTag.trim()
-                      ? 'bg-slate-600 cursor-not-allowed'
-                      : 'bg-emerald-600 hover:bg-emerald-500'
+                      ? 'bg-slate-600 cursor-not-allowed text-slate-400'
+                      : 'bg-cyan-600 hover:bg-cyan-500 text-white'
                   }`}
                 >
-                  {creatingTerminal ? '⏳ 创建中...' : '➕ 创建终端'}
+                  {creatingTerminal ? '...' : '+'}
                 </button>
               </div>
 

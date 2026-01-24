@@ -156,20 +156,32 @@ class ContainerManager:
 
     def destroy_container(self, session_id: str) -> bool:
         """Destroy a container and clean up session."""
-        if session_id not in self._sessions:
-            return False
+        destroyed = False
 
-        container_id = self._sessions[session_id]
+        # 方式1: 通过 session 字典查找
+        if session_id in self._sessions:
+            container_id = self._sessions[session_id]
+            try:
+                container = self.client.containers.get(container_id)
+                container.remove(force=True)
+                destroyed = True
+            except docker.errors.NotFound:
+                pass
+
+            del self._sessions[session_id]
+            self._session_images.pop(session_id, None)
+            self._session_created.pop(session_id, None)
+
+        # 方式2: 通过容器名称查找（后端重启后 session 字典为空的情况）
+        container_name = f"{self.CONTAINER_PREFIX}{session_id}"
         try:
-            container = self.client.containers.get(container_id)
+            container = self.client.containers.get(container_name)
             container.remove(force=True)
+            destroyed = True
         except docker.errors.NotFound:
             pass
 
-        del self._sessions[session_id]
-        del self._session_images[session_id]
-        del self._session_created[session_id]
-        return True
+        return destroyed
 
     def _ensure_session(self, session_id: str):
         """确保会话存在，如需要则恢复
@@ -290,6 +302,9 @@ class ContainerManager:
             filename = path.split('/')[-1]
             tarinfo = tarfile.TarInfo(name=filename)
             tarinfo.size = len(content)
+            tarinfo.mode = 0o644  # rw-r--r--
+            tarinfo.uid = 0  # root
+            tarinfo.gid = 0  # root
             tar.addfile(tarinfo, io.BytesIO(content))
 
         tar_stream.seek(0)
