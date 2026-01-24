@@ -474,9 +474,9 @@ export const useSandbox = ({ addLog }) => {
       await sandboxClient.runCommand(`rm -f "${path}"`);
       setSandboxFiles(prev => prev.filter(f => f.path !== path));
       addLog({
-        type: 'data',
+        type: 'toast_tester',
         content: `文件已删除: ${path}`,
-        status: 'normal'
+        status: 'success'
       });
     } catch (error) {
       addLog({
@@ -816,7 +816,7 @@ export const useSandbox = ({ addLog }) => {
 
     // 上传完成提示
     addLog({
-      type: 'data',
+      type: 'toast_tester',
       content: `已上传 ${files.length} 个文件到 ${basePath}`,
       status: 'success',
     });
@@ -864,7 +864,7 @@ export const useSandbox = ({ addLog }) => {
       URL.revokeObjectURL(url);
 
       addLog({
-        type: 'data',
+        type: 'toast_tester',
         content: `已下载: ${downloadName}`,
         status: 'success',
       });
@@ -910,6 +910,15 @@ export const useSandbox = ({ addLog }) => {
         if (event.type === 'file_change') {
           console.log('[FileWatch] File changed:', event);
 
+          // 显示 Toast 通知（来源未知 - 无法追踪是谁触发的）
+          const eventName = { 'CREATE': '新建', 'DELETE': '删除', 'MODIFY': '修改', 'MOVE': '移动' }[event.event] || event.event;
+          const fileName = event.path.split('/').pop();
+          addLog({
+            type: 'toast_unknown',
+            content: `${eventName}: ${fileName}`,
+            status: 'normal',
+          });
+
           // 防抖：避免短时间内多次刷新
           if (fileWatchRefreshRef.current) {
             clearTimeout(fileWatchRefreshRef.current);
@@ -919,7 +928,25 @@ export const useSandbox = ({ addLog }) => {
             if (onRefresh) {
               onRefresh();
             }
-          }, 300);
+          }, 100);  // 从 300 减小到 100
+        } else if (event.type === 'file_changes') {
+          // 批量事件摘要
+          console.log('[FileWatch] Batch file changes:', event.count);
+          addLog({
+            type: 'toast_unknown',
+            content: `${event.count} 个文件变化`,
+            status: 'normal',
+          });
+
+          // 刷新文件列表
+          if (fileWatchRefreshRef.current) {
+            clearTimeout(fileWatchRefreshRef.current);
+          }
+          fileWatchRefreshRef.current = setTimeout(() => {
+            if (onRefresh) {
+              onRefresh();
+            }
+          }, 100);
         } else if (event.type === 'watching') {
           console.log('[FileWatch] Started watching:', event.path);
         }

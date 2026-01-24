@@ -20,7 +20,7 @@ TRANSFER_CONFIG = {
     # 下载超时 (5分钟)
     'download_timeout': 300,
     # 允许的路径前缀 (安全限制)
-    'allowed_paths': ['/workspace/', '/tmp/'],
+    'allowed_paths': ['/workspace', '/tmp'],
 }
 
 # 终端锁配置
@@ -35,8 +35,8 @@ LOCK_CONFIG = {
 
 # 文件监控配置
 FILE_WATCHER_CONFIG = {
-    # 事件批处理间隔 (1秒)
-    'batch_interval': 1.0,
+    # 事件批处理间隔 (0.3秒)
+    'batch_interval': 0.3,
     # 批处理阈值（超过此数量发送摘要）
     'batch_threshold': 10,
     # 忽略的文件模式

@@ -407,7 +407,7 @@ class ToolExecutor:
         depth_arg = "" if recursive else "-maxdepth 1"
         # 对路径进行转义，处理特殊字符
         escaped_path = path.replace("'", "'\\''")
-        cmd = f"/bin/sh -c \"find '{escaped_path}' {depth_arg} -printf '%p\\0%y\\0%s\\0%TY-%Tm-%Td %TH:%TM:%TS\\0%m\\0' 2>/dev/null\""
+        cmd = f"/bin/sh -c \"find '{escaped_path}' {depth_arg} -printf '%p\\0%y\\0%s\\0%TY-%Tm-%Td %TH:%TM:%TS\\0%m\\0'\""
 
         exit_code, stdout, stderr = await asyncio.to_thread(
             container_manager.exec_in_container_binary,
@@ -416,8 +416,9 @@ class ToolExecutor:
         )
 
         if exit_code != 0:
-            # 目录不存在时返回空列表
-            if b"No such file" in stderr:
+            # 目录不存在时返回空列表（检查 stderr 中的错误信息）
+            stderr_str = stderr.decode('utf-8', errors='replace').lower() if stderr else ''
+            if b"No such file" in stderr or "no such file" in stderr_str or not stdout:
                 return {"path": path, "entries": [], "total": 0}
             raise RuntimeError(f"Failed to list directory: {stderr.decode('utf-8', errors='replace')}")
 

@@ -79,7 +79,10 @@ export default function App() {
   const { toasts, addToast, removeToast } = useToast();
 
   // Types that show as toast (operation status)
-  const TOAST_LOG_TYPES = new Set(['container', 'error', 'info']);
+  const TOAST_LOG_TYPES = new Set([
+    'container', 'error', 'info',
+    'toast_tester', 'toast_testee', 'toast_unknown'
+  ]);
 
   // Map log status to toast type
   const getToastType = (log) => {

@@ -683,5 +683,22 @@ export const LOG_TYPES = {
   success: { label: "成功", color: "text-green-400" },
   failure: { label: "防御", color: "text-blue-400" },
   thinking: { label: "思考", color: "text-pink-400" },
-  round: { label: "轮次", color: "text-teal-400" }
+  round: { label: "轮次", color: "text-teal-400" },
+  // Toast 日志类型 - 按触发角色分类
+  // - toast_tester: 人类测试者通过前端 UI 操作触发（上传/下载/删除按钮）
+  // - toast_testee: 被测智能体通过工具调用执行（预留，待实现）
+  // - toast_unknown: 文件监视检测到的变化，无法追踪来源
+  //
+  // 扩展指南（添加 testee 操作支持）：
+  // 1. 确定 Agent 的操作路径：
+  //    - 如果通过 /sandbox/tool API → 在 executeCommand 中添加来源参数
+  //    - 如果通过 /sandbox/terminals/{tag}/tool → 在 executeToolInTerminal 中添加
+  // 2. 在工具执行函数中传递 source='testee' 参数
+  // 3. 调用 addLog 时使用 type: 'toast_testee'
+  //
+  // 示例：
+  // addLog({ type: 'toast_testee', content: '执行命令: ls', status: 'normal' });
+  toast_tester: { label: "测试者", color: "text-blue-400" },
+  toast_testee: { label: "智能体", color: "text-purple-400" },
+  toast_unknown: { label: "未知", color: "text-gray-400" },
 };
