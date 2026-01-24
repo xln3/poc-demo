@@ -45,6 +45,130 @@ const getGroupedData = () => {
   return grouped;
 };
 
+// JSON 树形折叠组件（VSCode 风格）
+function JsonTree({ data }) {
+  const [collapsed, setCollapsed] = useState(new Set(['root'])); // 默认全部折叠
+
+  const toggle = (path) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
+
+  const renderValue = (value, path, isLast = true) => {
+    const comma = isLast ? '' : ',';
+
+    if (value === null) {
+      return <span className="text-blue-400">null{comma}</span>;
+    }
+    if (typeof value === 'boolean') {
+      return <span className="text-blue-400">{value.toString()}{comma}</span>;
+    }
+    if (typeof value === 'number') {
+      return <span className="text-green-300">{value}{comma}</span>;
+    }
+    if (typeof value === 'string') {
+      return <span className="text-amber-200 break-all">"{value}"{comma}</span>;
+    }
+    if (Array.isArray(value)) {
+      return renderArray(value, path, isLast);
+    }
+    if (typeof value === 'object') {
+      return renderObject(value, path, isLast);
+    }
+    return <span>{String(value)}{comma}</span>;
+  };
+
+  const renderObject = (obj, path, isLast = true) => {
+    const keys = Object.keys(obj);
+    const isCollapsed = collapsed.has(path);
+    const comma = isLast ? '' : ',';
+
+    if (keys.length === 0) {
+      return <span className="text-slate-400">{'{}'}{comma}</span>;
+    }
+
+    return (
+      <span>
+        <span
+          className="cursor-pointer hover:bg-slate-700/50 select-none"
+          onClick={() => toggle(path)}
+        >
+          <span className="text-slate-500 text-[10px] mr-1">{isCollapsed ? '▶' : '▼'}</span>
+          <span className="text-slate-400">{'{'}</span>
+          {isCollapsed && <span className="text-slate-500">...{keys.length}</span>}
+          {isCollapsed && <span className="text-slate-400">{'}'}{comma}</span>}
+        </span>
+        {!isCollapsed && (
+          <>
+            <div className="pl-4">
+              {keys.map((key, i) => (
+                <div key={key}>
+                  <span className="text-sky-300">"{key}"</span>
+                  <span className="text-slate-400">: </span>
+                  {renderValue(obj[key], `${path}.${key}`, i === keys.length - 1)}
+                </div>
+              ))}
+            </div>
+            <span className="text-slate-400">{'}'}{comma}</span>
+          </>
+        )}
+      </span>
+    );
+  };
+
+  const renderArray = (arr, path, isLast = true) => {
+    const isCollapsed = collapsed.has(path);
+    const comma = isLast ? '' : ',';
+
+    if (arr.length === 0) {
+      return <span className="text-slate-400">{'[]'}{comma}</span>;
+    }
+
+    return (
+      <span>
+        <span
+          className="cursor-pointer hover:bg-slate-700/50 select-none"
+          onClick={() => toggle(path)}
+        >
+          <span className="text-slate-500 text-[10px] mr-1">{isCollapsed ? '▶' : '▼'}</span>
+          <span className="text-slate-400">{'['}</span>
+          {isCollapsed && <span className="text-slate-500">{arr.length}</span>}
+          {isCollapsed && <span className="text-slate-400">{']'}{comma}</span>}
+        </span>
+        {!isCollapsed && (
+          <>
+            <div className="pl-4">
+              {arr.map((item, i) => (
+                <div key={i}>
+                  {renderValue(item, `${path}[${i}]`, i === arr.length - 1)}
+                </div>
+              ))}
+            </div>
+            <span className="text-slate-400">{']'}{comma}</span>
+          </>
+        )}
+      </span>
+    );
+  };
+
+  if (data === null || data === undefined) {
+    return <span className="text-slate-500">null</span>;
+  }
+
+  return (
+    <div className="font-mono text-xs leading-relaxed">
+      {renderValue(data, 'root')}
+    </div>
+  );
+}
+
 export default function App() {
   // 状态
   const [mode, setMode] = useState('real'); // 'mock' | 'real'
@@ -4023,7 +4147,7 @@ print('\\n'.join(all_text))
                       : msg.isDangerous ? 'bg-orange-900/50 border border-orange-500/40'
                         : msg.isStreaming ? 'bg-slate-700/70 border border-blue-500/40' : 'bg-slate-700'
                   }`}>
-                    <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+                    <pre className="whitespace-pre-wrap break-all font-sans leading-relaxed">
                       {msg.content}
                       {msg.isStreaming && <span className="animate-pulse text-blue-400">▋</span>}
                     </pre>
@@ -4039,7 +4163,7 @@ print('\\n'.join(all_text))
                       ? typingMsg.isInjection ? 'bg-red-900/30 border border-red-500/30' : 'bg-blue-600/70'
                       : 'bg-slate-700/70'
                   }`}>
-                    <span className="whitespace-pre-wrap font-sans leading-relaxed">{typingMsg.content}<span className="animate-pulse">▋</span></span>
+                    <span className="whitespace-pre-wrap break-all font-sans leading-relaxed">{typingMsg.content}<span className="animate-pulse">▋</span></span>
                   </div>
                 </div>
               )}
@@ -4166,7 +4290,7 @@ print('\\n'.join(all_text))
                                     <span className="text-slate-300">
                                       模型正在思考中... ({entry.chars} 字符)
                                     </span>
-                                    <pre className="mt-2 p-2 bg-slate-900/50 rounded text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
+                                    <pre className="mt-2 text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
                                       {entry.content}<span className="animate-pulse text-pink-400">▋</span>
                                     </pre>
                                   </>
@@ -4182,7 +4306,7 @@ print('\\n'.join(all_text))
                                       <span className="text-slate-500 ml-1">(点击{isExpanded ? '折叠' : '展开'})</span>
                                     </span>
                                     {isExpanded && (
-                                      <pre className="mt-2 p-2 bg-slate-900/50 rounded text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
+                                      <pre className="mt-2 text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
                                         {entry.content}
                                       </pre>
                                     )}
@@ -4236,19 +4360,19 @@ print('\\n'.join(all_text))
                                           <div className="text-xs text-slate-400">API 调用 #{j + 1}</div>
                                         )}
                                         {interaction.request && (
-                                          <div>
-                                            <div className="text-xs text-cyan-400 mb-1">📤 请求:</div>
-                                            <pre className="p-2 bg-slate-900/50 rounded text-cyan-300/80 text-xs whitespace-pre-wrap break-all max-h-48 overflow-auto custom-scroll">
-                                              {JSON.stringify(interaction.request, null, 2)}
-                                            </pre>
+                                          <div className="flex items-start -ml-12">
+                                            <span className="inline-block w-12 flex-shrink-0 text-xs text-cyan-400">call</span>
+                                            <div className="flex-1 min-w-0">
+                                              <JsonTree data={interaction.request} />
+                                            </div>
                                           </div>
                                         )}
                                         {interaction.response && (
-                                          <div>
-                                            <div className="text-xs text-blue-400 mb-1">📥 响应:</div>
-                                            <pre className="p-2 bg-slate-900/50 rounded text-blue-300/80 text-xs whitespace-pre-wrap break-all max-h-48 overflow-auto custom-scroll">
-                                              {JSON.stringify(interaction.response, null, 2)}
-                                            </pre>
+                                          <div className="flex items-start -ml-12">
+                                            <span className="inline-block w-12 flex-shrink-0 text-xs text-blue-400">res</span>
+                                            <div className="flex-1 min-w-0">
+                                              <JsonTree data={interaction.response} />
+                                            </div>
                                           </div>
                                         )}
                                       </div>
