@@ -360,6 +360,96 @@ export const CONFIG = {
     }
   },
 
+  // 流式调用模型 API
+  // onDelta: (deltaContent, deltaThinking) => void - 每次收到增量时的回调
+  // 返回: { content, thinking, timing, raw } - 累积后的完整结果
+  async callModelStream(messages, systemPrompt = '', modelId = null, llmParams = {}, thinkingConfig = null, onDelta = null) {
+    const startTime = Date.now();
+    const params = { ...this.llmParams, ...llmParams };
+    const requestBody = {
+      model: modelId || this.api.model,
+      messages: [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        ...messages
+      ],
+      temperature: params.temperature,
+      max_tokens: params.max_tokens,
+      top_p: params.top_p,
+      thinking: thinkingConfig || { type: 'disabled' },
+      stream: true
+    };
+
+    try {
+      const response = await fetch(this.api.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.api.apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // 累积器
+      let accumulatedContent = '';
+      let accumulatedThinking = '';
+      let rawChunks = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          if (!trimmed.startsWith('data: ')) continue;
+
+          try {
+            const json = JSON.parse(trimmed.slice(6));
+            rawChunks.push(json);
+
+            const delta = json.choices?.[0]?.delta;
+            if (delta) {
+              const deltaContent = delta.content || '';
+              const deltaThinking = delta.thinking || delta.reasoning_content || '';
+
+              accumulatedContent += deltaContent;
+              accumulatedThinking += deltaThinking;
+
+              if (onDelta && (deltaContent || deltaThinking)) {
+                onDelta(deltaContent, deltaThinking);
+              }
+            }
+          } catch (e) {
+            // 解析失败，跳过
+          }
+        }
+      }
+
+      const totalTime = Date.now() - startTime;
+      return {
+        content: accumulatedContent || '(无响应)',
+        thinking: accumulatedThinking || null,
+        timing: { totalTime },
+        raw: { chunks: rawChunks, stream: true }
+      };
+    } catch (error) {
+      console.error('API 流式调用失败:', error);
+      throw error;
+    }
+  },
+
   // 调用模型 API（带工具支持）
   // 返回：{ content, tool_calls, finish_reason, thinking, timing }
   async callModelWithTools(messages, systemPrompt = '', modelId = null, llmParams = {}, toolDefinitions = [], thinkingConfig = null) {
@@ -422,6 +512,143 @@ export const CONFIG = {
       };
     } catch (error) {
       console.error('API 调用失败:', error);
+      throw error;
+    }
+  },
+
+  // 流式调用模型 API（带工具支持）
+  // onDelta: (deltaContent, deltaThinking) => void - 每次收到增量时的回调
+  // 返回: { content, tool_calls, finish_reason, thinking, timing, raw }
+  async callModelWithToolsStream(messages, systemPrompt = '', modelId = null, llmParams = {}, toolDefinitions = [], thinkingConfig = null, onDelta = null) {
+    const startTime = Date.now();
+    const params = { ...this.llmParams, ...llmParams };
+    const requestBody = {
+      model: modelId || this.api.model,
+      messages: [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        ...messages
+      ],
+      temperature: params.temperature,
+      max_tokens: params.max_tokens,
+      top_p: params.top_p,
+      thinking: thinkingConfig || { type: 'disabled' },
+      stream: true
+    };
+
+    // 添加工具定义（如果有）
+    if (toolDefinitions && toolDefinitions.length > 0) {
+      requestBody.tools = toolDefinitions.map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+      requestBody.tool_choice = 'auto';
+    }
+
+    try {
+      const response = await fetch(this.api.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.api.apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error: ${response.status} - ${errorText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // 累积器
+      let accumulatedContent = '';
+      let accumulatedThinking = '';
+      let rawChunks = [];
+      let finishReason = null;
+
+      // 工具调用累积器 - 流式 tool_calls 按 index 分组
+      const toolCallsMap = new Map();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          if (!trimmed.startsWith('data: ')) continue;
+
+          try {
+            const json = JSON.parse(trimmed.slice(6));
+            rawChunks.push(json);
+
+            const choice = json.choices?.[0];
+            if (choice?.finish_reason) {
+              finishReason = choice.finish_reason;
+            }
+
+            const delta = choice?.delta;
+            if (delta) {
+              // 内容增量
+              const deltaContent = delta.content || '';
+              const deltaThinking = delta.thinking || delta.reasoning_content || '';
+
+              accumulatedContent += deltaContent;
+              accumulatedThinking += deltaThinking;
+
+              if (onDelta && (deltaContent || deltaThinking)) {
+                onDelta(deltaContent, deltaThinking);
+              }
+
+              // 工具调用增量
+              if (delta.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index;
+                  if (!toolCallsMap.has(idx)) {
+                    toolCallsMap.set(idx, {
+                      id: tc.id || '',
+                      type: 'function',
+                      function: { name: '', arguments: '' }
+                    });
+                  }
+                  const entry = toolCallsMap.get(idx);
+                  if (tc.id) entry.id = tc.id;
+                  if (tc.function?.name) entry.function.name += tc.function.name;
+                  if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+                }
+              }
+            }
+          } catch (e) {
+            // 解析失败，跳过
+          }
+        }
+      }
+
+      // 将 Map 转换为数组
+      const toolCalls = Array.from(toolCallsMap.values()).filter(tc => tc.function.name);
+
+      const totalTime = Date.now() - startTime;
+      return {
+        content: accumulatedContent || '',
+        tool_calls: toolCalls,
+        finish_reason: finishReason,
+        thinking: accumulatedThinking || null,
+        timing: { totalTime },
+        raw: { chunks: rawChunks, stream: true }
+      };
+    } catch (error) {
+      console.error('API 流式调用失败:', error);
       throw error;
     }
   },

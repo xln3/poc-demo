@@ -72,10 +72,19 @@ export default function App() {
   const [payloadFiles, setPayloadFiles] = useState([]);
   const [lastTestResult, setLastTestResult] = useState(null); // 存储最后一次测试结果
 
-  // Thinking 面板状态
-  const [thinkingContent, setThinkingContent] = useState('');
-  const [rawApiResponse, setRawApiResponse] = useState(null);
+  // Thinking 面板状态 - 改为数组支持多条记录
+  const [thinkingEntries, setThinkingEntries] = useState([]);
+  // 结构: [{ content: string, chars: number, timestamp: number, isStreaming?: boolean }, ...]
+  // isStreaming: true 表示正在流式输出中
+
+  const [apiInteractions, setApiInteractions] = useState([]);
+  // 结构: [{ request: { messages, model, ... }, response: object, timestamp: number }, ...]
+
   const [thinkingTab, setThinkingTab] = useState('thinking'); // 'thinking' | 'raw'
+
+  // 展开/折叠状态
+  const [expandedThinking, setExpandedThinking] = useState(new Set());
+  const [expandedApiInteraction, setExpandedApiInteraction] = useState(new Set());
 
   // Toast notifications
   const { toasts, addToast, removeToast } = useToast();
@@ -449,8 +458,10 @@ export default function App() {
     setExpandedLogs(new Set());
 
     // 重置 thinking 面板
-    setThinkingContent('');
-    setRawApiResponse(null);
+    setThinkingEntries([]);
+    setApiInteractions([]);
+    setExpandedThinking(new Set());
+    setExpandedApiInteraction(new Set());
     setThinkingTab('thinking');
 
     // 构建实际发送的 payload
@@ -796,26 +807,36 @@ export default function App() {
     return { type: 'enabled', budget_tokens: thinkingBudget };
   };
 
-  // 更新 thinking 面板和日志
-  const updateThinkingPanel = (response) => {
-    // 更新思考内容面板
-    if (response.thinking) {
-      setThinkingContent(response.thinking);
-    }
-    // 更新原始响应面板
-    if (response.raw) {
-      setRawApiResponse(response.raw);
-    }
-    // 保留日志记录
-    if (response.thinking) {
-      setLogs(prev => [...prev, {
-        type: 'thinking',
-        content: `💭 模型思考过程 (${response.thinking.length} 字符)`,
-        status: 'normal',
-        expandable: true,
-        fullContent: response.thinking
-      }]);
-    }
+  // 追加 API 交互到最后一条记录（流式模式下累积到同一条）
+  const appendApiInteraction = (requestInfo, responseRaw) => {
+    setApiInteractions(prev => {
+      const newList = [...prev];
+      // 找到最后一条 isStreaming 的记录并追加
+      for (let i = newList.length - 1; i >= 0; i--) {
+        if (newList[i].isStreaming) {
+          newList[i] = {
+            ...newList[i],
+            interactions: [...newList[i].interactions, { request: requestInfo, response: responseRaw }]
+          };
+          break;
+        }
+      }
+      return newList;
+    });
+  };
+
+  // 标记 API 交互记录完成
+  const finalizeApiInteraction = () => {
+    setApiInteractions(prev => {
+      const newList = [...prev];
+      for (let i = newList.length - 1; i >= 0; i--) {
+        if (newList[i].isStreaming) {
+          newList[i] = { ...newList[i], isStreaming: false };
+          break;
+        }
+      }
+      return newList;
+    });
   };
 
   // 开始多轮对话
@@ -833,8 +854,10 @@ export default function App() {
     setConversationMode('active');
 
     // 重置 thinking 面板
-    setThinkingContent('');
-    setRawApiResponse(null);
+    setThinkingEntries([]);
+    setApiInteractions([]);
+    setExpandedThinking(new Set());
+    setExpandedApiInteraction(new Set());
     setThinkingTab('thinking');
 
     // 构建实际发送的 payload
@@ -949,34 +972,94 @@ export default function App() {
       let totalApiTime = 0;
       let allToolCalls = [];
 
+      // 流式输出：在循环外创建一个 thinking entry（一轮对话共用一个）
+      if (thinkingConfig) {
+        setThinkingEntries(prev => [...prev, {
+          content: '',
+          chars: 0,
+          timestamp: Date.now(),
+          isStreaming: true
+        }]);
+      }
+
+      // 流式输出：在循环外创建一个 agent message（一轮对话共用一个）
+      setMessages(prev => [...prev, { role: 'agent', content: '', isStreaming: true }]);
+
+      // 流式输出：在循环外创建一条 API 交互记录（一轮对话共用一条）
+      setApiInteractions(prev => [...prev, {
+        interactions: [],
+        timestamp: Date.now(),
+        isStreaming: true
+      }]);
+
+      // 流式回调：实时更新 thinking 和 message
+      const onDelta = (deltaContent, deltaThinking) => {
+        if (deltaContent) {
+          setMessages(prev => {
+            const newMsgs = [...prev];
+            for (let i = newMsgs.length - 1; i >= 0; i--) {
+              if (newMsgs[i].isStreaming) {
+                newMsgs[i] = { ...newMsgs[i], content: newMsgs[i].content + deltaContent };
+                break;
+              }
+            }
+            return newMsgs;
+          });
+        }
+        if (deltaThinking && thinkingConfig) {
+          setThinkingEntries(prev => {
+            const newEntries = [...prev];
+            for (let i = newEntries.length - 1; i >= 0; i--) {
+              if (newEntries[i].isStreaming) {
+                newEntries[i] = {
+                  ...newEntries[i],
+                  content: newEntries[i].content + deltaThinking,
+                  chars: newEntries[i].content.length + deltaThinking.length
+                };
+                break;
+              }
+            }
+            return newEntries;
+          });
+        }
+      };
+
       // 工具调用循环（第一轮）
       while (true) {
         let response;
 
         if (useToolCalling && enabledToolNames.length > 0) {
           const toolDefinitions = CONFIG.buildToolDefinitions(enabledToolNames);
-          response = await CONFIG.callModelWithTools(
+          response = await CONFIG.callModelWithToolsStream(
             messageHistory,
             activeSystemPrompt,
             selectedModel,
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
             toolDefinitions,
-            thinkingConfig
+            thinkingConfig,
+            onDelta
           );
         } else {
-          response = await CONFIG.callModel(
+          response = await CONFIG.callModelStream(
             messageHistory,
             activeSystemPrompt,
             selectedModel,
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
-            thinkingConfig
+            thinkingConfig,
+            onDelta
           );
         }
 
         totalApiTime += response.timing?.totalTime || 0;
 
-        // 显示 thinking（如有）
-        updateThinkingPanel(response);
+        // 构造请求信息并追加到 API 交互记录
+        const requestInfo = {
+          messages: [...messageHistory],
+          model: selectedModel,
+          systemPrompt: activeSystemPrompt,
+          params: { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP }
+        };
+        appendApiInteraction(requestInfo, response.raw);
 
         // 检查是否有工具调用
         const toolCalls = response.tool_calls || [];
@@ -1043,24 +1126,56 @@ export default function App() {
             });
           }
 
-          // 显示中间状态
-          if (response.content) {
-            setMessages(prev => [...prev, { role: 'agent', content: response.content, isToolThinking: true }]);
-          }
+          // 重置 agent message 内容，准备下一轮流式
+          setMessages(prev => {
+            const newMsgs = [...prev];
+            for (let i = newMsgs.length - 1; i >= 0; i--) {
+              if (newMsgs[i].isStreaming) {
+                newMsgs[i] = { ...newMsgs[i], content: '' };
+                break;
+              }
+            }
+            return newMsgs;
+          });
 
           continue;
         }
 
         // 没有工具调用，获取最终响应
+        // 流式完成：标记 agent message 完成
+        setMessages(prev => {
+          const newMsgs = [...prev];
+          for (let i = newMsgs.length - 1; i >= 0; i--) {
+            if (newMsgs[i].isStreaming) {
+              newMsgs[i] = { ...newMsgs[i], isStreaming: false };
+              break;
+            }
+          }
+          return newMsgs;
+        });
+
         finalResponse = response.content || '(无响应)';
         break;
       }
 
-      setRealResponse(finalResponse);
+      // 流式完成：标记 thinking entry 完成（一轮对话结束）
+      if (thinkingConfig) {
+        setThinkingEntries(prev => {
+          const newEntries = [...prev];
+          for (let i = newEntries.length - 1; i >= 0; i--) {
+            if (newEntries[i].isStreaming) {
+              newEntries[i] = { ...newEntries[i], isStreaming: false };
+              break;
+            }
+          }
+          return newEntries;
+        });
+      }
 
-      // 显示模型响应
-      const agentMsg = { role: 'agent', content: finalResponse };
-      setMessages(prev => [...prev.filter(m => !m.isToolThinking), agentMsg]);
+      // 流式完成：标记 API 交互记录完成
+      finalizeApiInteraction();
+
+      setRealResponse(finalResponse);
 
       // 保存对话历史（用于后续轮次）
       setConversationHistory([
@@ -1142,34 +1257,94 @@ export default function App() {
       let finalResponse = '';
       let totalApiTime = 0;
 
+      // 流式输出：在循环外创建一个 thinking entry（一轮对话共用一个）
+      if (thinkingConfig) {
+        setThinkingEntries(prev => [...prev, {
+          content: '',
+          chars: 0,
+          timestamp: Date.now(),
+          isStreaming: true
+        }]);
+      }
+
+      // 流式输出：在循环外创建一个 agent message（一轮对话共用一个）
+      setMessages(prev => [...prev, { role: 'agent', content: '', isStreaming: true }]);
+
+      // 流式输出：在循环外创建一条 API 交互记录（一轮对话共用一条）
+      setApiInteractions(prev => [...prev, {
+        interactions: [],
+        timestamp: Date.now(),
+        isStreaming: true
+      }]);
+
+      // 流式回调：实时更新 thinking 和 message
+      const onDelta = (deltaContent, deltaThinking) => {
+        if (deltaContent) {
+          setMessages(prev => {
+            const newMsgs = [...prev];
+            for (let i = newMsgs.length - 1; i >= 0; i--) {
+              if (newMsgs[i].isStreaming) {
+                newMsgs[i] = { ...newMsgs[i], content: newMsgs[i].content + deltaContent };
+                break;
+              }
+            }
+            return newMsgs;
+          });
+        }
+        if (deltaThinking && thinkingConfig) {
+          setThinkingEntries(prev => {
+            const newEntries = [...prev];
+            for (let i = newEntries.length - 1; i >= 0; i--) {
+              if (newEntries[i].isStreaming) {
+                newEntries[i] = {
+                  ...newEntries[i],
+                  content: newEntries[i].content + deltaThinking,
+                  chars: newEntries[i].content.length + deltaThinking.length
+                };
+                break;
+              }
+            }
+            return newEntries;
+          });
+        }
+      };
+
       // 工具调用循环
       while (true) {
         let response;
 
         if (useToolCalling && enabledToolNames.length > 0) {
           const toolDefinitions = CONFIG.buildToolDefinitions(enabledToolNames);
-          response = await CONFIG.callModelWithTools(
+          response = await CONFIG.callModelWithToolsStream(
             messageHistory,
             activeSystemPrompt,
             selectedModel,
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
             toolDefinitions,
-            thinkingConfig
+            thinkingConfig,
+            onDelta
           );
         } else {
-          response = await CONFIG.callModel(
+          response = await CONFIG.callModelStream(
             messageHistory,
             activeSystemPrompt,
             selectedModel,
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
-            thinkingConfig
+            thinkingConfig,
+            onDelta
           );
         }
 
         totalApiTime += response.timing?.totalTime || 0;
 
-        // 显示 thinking（如有）
-        updateThinkingPanel(response);
+        // 构造请求信息并追加到 API 交互记录
+        const requestInfo = {
+          messages: [...messageHistory],
+          model: selectedModel,
+          systemPrompt: activeSystemPrompt,
+          params: { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP }
+        };
+        appendApiInteraction(requestInfo, response.raw);
 
         // 检查是否有工具调用
         const toolCalls = response.tool_calls || [];
@@ -1222,22 +1397,56 @@ export default function App() {
             });
           }
 
-          if (response.content) {
-            setMessages(prev => [...prev, { role: 'agent', content: response.content, isToolThinking: true }]);
-          }
+          // 重置 agent message 内容，准备下一轮流式
+          setMessages(prev => {
+            const newMsgs = [...prev];
+            for (let i = newMsgs.length - 1; i >= 0; i--) {
+              if (newMsgs[i].isStreaming) {
+                newMsgs[i] = { ...newMsgs[i], content: '' };
+                break;
+              }
+            }
+            return newMsgs;
+          });
 
           continue;
         }
+
+        // 流式完成：标记 agent message 完成
+        setMessages(prev => {
+          const newMsgs = [...prev];
+          for (let i = newMsgs.length - 1; i >= 0; i--) {
+            if (newMsgs[i].isStreaming) {
+              newMsgs[i] = { ...newMsgs[i], isStreaming: false };
+              break;
+            }
+          }
+          return newMsgs;
+        });
 
         finalResponse = response.content || '(无响应)';
         break;
       }
 
+      // 流式完成：标记 thinking entry 完成（一轮对话结束）
+      if (thinkingConfig) {
+        setThinkingEntries(prev => {
+          const newEntries = [...prev];
+          for (let i = newEntries.length - 1; i >= 0; i--) {
+            if (newEntries[i].isStreaming) {
+              newEntries[i] = { ...newEntries[i], isStreaming: false };
+              break;
+            }
+          }
+          return newEntries;
+        });
+      }
+
+      // 流式完成：标记 API 交互记录完成
+      finalizeApiInteraction();
+
       // 更新对话历史
       setConversationHistory(prev => [...prev, { role: 'user', content }, { role: 'assistant', content: finalResponse }]);
-
-      // 显示响应
-      setMessages(prev => [...prev.filter(m => !m.isToolThinking), { role: 'agent', content: finalResponse }]);
 
       setLogs(prev => [...prev,
         { type: 'data', content: `收到响应 (${finalResponse.length} 字符)`, status: 'normal', expandable: true, fullContent: finalResponse },
@@ -3811,9 +4020,13 @@ print('\\n'.join(all_text))
                   <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs ${
                     msg.role === 'user'
                       ? msg.isInjection ? 'bg-red-900/50 border border-red-500/40' : 'bg-blue-600'
-                      : msg.isDangerous ? 'bg-orange-900/50 border border-orange-500/40' : 'bg-slate-700'
+                      : msg.isDangerous ? 'bg-orange-900/50 border border-orange-500/40'
+                        : msg.isStreaming ? 'bg-slate-700/70 border border-blue-500/40' : 'bg-slate-700'
                   }`}>
-                    <pre className="whitespace-pre-wrap font-sans leading-relaxed">{msg.content}</pre>
+                    <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+                      {msg.content}
+                      {msg.isStreaming && <span className="animate-pulse text-blue-400">▋</span>}
+                    </pre>
                     {msg.isInjection && <div className="mt-1 text-red-300 text-xs">⚠️ 恶意注入</div>}
                     {msg.isDangerous && <div className="mt-1 text-orange-300 text-xs">⚠️ 危险输出</div>}
                   </div>
@@ -3911,7 +4124,12 @@ print('\\n'.join(all_text))
                   </button>
                 </div>
                 <button
-                  onClick={() => { setThinkingContent(''); setRawApiResponse(null); }}
+                  onClick={() => {
+                    setThinkingEntries([]);
+                    setApiInteractions([]);
+                    setExpandedThinking(new Set());
+                    setExpandedApiInteraction(new Set());
+                  }}
                   className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded transition"
                 >
                   清空
@@ -3921,20 +4139,128 @@ print('\\n'.join(all_text))
               {/* 内容区 */}
               <div className="flex-1 overflow-y-auto custom-scroll font-mono text-xs pr-1">
                 {thinkingTab === 'thinking' ? (
-                  thinkingContent ? (
-                    <pre className="whitespace-pre-wrap text-purple-300/80 leading-relaxed">
-                      {thinkingContent}
-                    </pre>
+                  thinkingEntries.length > 0 ? (
+                    <div className="space-y-1">
+                      {thinkingEntries.map((entry, i) => {
+                        // 流式中强制展开，完成后默认折叠（可点击展开）
+                        const isExpanded = entry.isStreaming || expandedThinking.has(i);
+                        const toggleExpand = () => {
+                          if (entry.isStreaming) return; // 流式中不可折叠
+                          setExpandedThinking(prev => {
+                            const next = new Set(prev);
+                            if (next.has(i)) next.delete(i);
+                            else next.add(i);
+                            return next;
+                          });
+                        };
+                        return (
+                          <div key={i} className={`p-2 rounded border-l-2 bg-slate-700/50 ${entry.isStreaming ? 'border-pink-500' : 'border-purple-500'}`}>
+                            <div className="flex items-start">
+                              <span className={`inline-block w-12 flex-shrink-0 ${entry.isStreaming ? 'text-pink-400 animate-pulse' : 'text-pink-400'}`}>
+                                {entry.isStreaming ? '[流式]' : '[思考]'}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                {entry.isStreaming ? (
+                                  // 流式中：显示打字机效果
+                                  <>
+                                    <span className="text-slate-300">
+                                      模型正在思考中... ({entry.chars} 字符)
+                                    </span>
+                                    <pre className="mt-2 p-2 bg-slate-900/50 rounded text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
+                                      {entry.content}<span className="animate-pulse text-pink-400">▋</span>
+                                    </pre>
+                                  </>
+                                ) : (
+                                  // 完成后：可折叠
+                                  <>
+                                    <span
+                                      onClick={toggleExpand}
+                                      className="text-slate-300 cursor-pointer hover:text-white transition"
+                                    >
+                                      <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
+                                      模型思考过程 ({entry.chars} 字符)
+                                      <span className="text-slate-500 ml-1">(点击{isExpanded ? '折叠' : '展开'})</span>
+                                    </span>
+                                    {isExpanded && (
+                                      <pre className="mt-2 p-2 bg-slate-900/50 rounded text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
+                                        {entry.content}
+                                      </pre>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="text-slate-500 text-center py-8">
                       {apiStatus === 'loading' ? '等待模型思考...' : '暂无思考内容'}
                     </div>
                   )
                 ) : (
-                  rawApiResponse ? (
-                    <pre className="whitespace-pre-wrap text-blue-300/80 leading-relaxed">
-                      {JSON.stringify(rawApiResponse, null, 2)}
-                    </pre>
+                  apiInteractions.length > 0 ? (
+                    <div className="space-y-1">
+                      {apiInteractions.map((entry, i) => {
+                        const isExpanded = expandedApiInteraction.has(i);
+                        const toggleExpand = () => {
+                          setExpandedApiInteraction(prev => {
+                            const next = new Set(prev);
+                            if (next.has(i)) next.delete(i);
+                            else next.add(i);
+                            return next;
+                          });
+                        };
+                        const interactionCount = entry.interactions?.length || 0;
+                        return (
+                          <div key={i} className={`p-2 rounded border-l-2 bg-slate-700/50 ${entry.isStreaming ? 'border-yellow-500' : 'border-blue-500'}`}>
+                            <div className="flex items-start">
+                              <span className="inline-block w-12 flex-shrink-0 text-blue-400">[API]</span>
+                              <div className="flex-1 min-w-0">
+                                <span
+                                  onClick={toggleExpand}
+                                  className="text-slate-300 cursor-pointer hover:text-white transition"
+                                >
+                                  <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
+                                  对话轮次 #{i + 1}
+                                  {interactionCount > 1 && <span className="text-slate-500 ml-1">({interactionCount} 次 API 调用)</span>}
+                                  {entry.isStreaming && <span className="text-yellow-400 ml-1 animate-pulse">▋</span>}
+                                  <span className="text-slate-500 ml-1">(点击{isExpanded ? '折叠' : '展开'})</span>
+                                </span>
+                                {isExpanded && entry.interactions && (
+                                  <div className="mt-2 space-y-3">
+                                    {entry.interactions.map((interaction, j) => (
+                                      <div key={j} className={`space-y-2 ${j > 0 ? 'pt-2 border-t border-slate-600' : ''}`}>
+                                        {interactionCount > 1 && (
+                                          <div className="text-xs text-slate-400">API 调用 #{j + 1}</div>
+                                        )}
+                                        {interaction.request && (
+                                          <div>
+                                            <div className="text-xs text-cyan-400 mb-1">📤 请求:</div>
+                                            <pre className="p-2 bg-slate-900/50 rounded text-cyan-300/80 text-xs whitespace-pre-wrap break-all max-h-48 overflow-auto custom-scroll">
+                                              {JSON.stringify(interaction.request, null, 2)}
+                                            </pre>
+                                          </div>
+                                        )}
+                                        {interaction.response && (
+                                          <div>
+                                            <div className="text-xs text-blue-400 mb-1">📥 响应:</div>
+                                            <pre className="p-2 bg-slate-900/50 rounded text-blue-300/80 text-xs whitespace-pre-wrap break-all max-h-48 overflow-auto custom-scroll">
+                                              {JSON.stringify(interaction.response, null, 2)}
+                                            </pre>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="text-slate-500 text-center py-8">
                       {apiStatus === 'loading' ? '等待 API 响应...' : '暂无 API 响应'}
