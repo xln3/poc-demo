@@ -104,8 +104,8 @@ export const TerminalItem = ({
             : formatTimeAgo(terminal.created_at)}
       </span>
 
-      {/* Hover 操作按钮 */}
-      {isHovered && !isBlocked && (
+      {/* Hover 操作按钮 - 只有当前选中的终端才能操作 */}
+      {isHovered && isSelected && (
         <div className="absolute right-1 flex gap-1">
           <button
             onClick={(e) => {
