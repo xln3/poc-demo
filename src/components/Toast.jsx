@@ -1,11 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { ENTITY_EMOJI } from '../hooks/useToast';
 
 /**
  * Toast notification item
+ *
+ * 两个分类维度：
+ * - type (消息类型): success/error/warning/info - 决定背景颜色和状态图标
+ * - entity (实体类型): tester/testee/world - 决定来源标识 emoji
  */
 const ToastItem = ({ toast, onClose }) => {
   const [isExiting, setIsExiting] = useState(false);
 
+  // 消息类型样式（仅颜色区分）
   const typeStyles = {
     success: 'bg-emerald-600 border-emerald-500',
     error: 'bg-red-600 border-red-500',
@@ -13,17 +19,13 @@ const ToastItem = ({ toast, onClose }) => {
     info: 'bg-blue-600 border-blue-500',
   };
 
-  const icons = {
-    success: '✓',
-    error: '✕',
-    warning: '⚠',
-    info: 'ℹ',
-  };
-
   const handleClose = () => {
     setIsExiting(true);
     setTimeout(() => onClose(toast.id), 200);
   };
+
+  // 实体类型 emoji（仅 emoji 区分）
+  const entityEmoji = toast.entity ? ENTITY_EMOJI[toast.entity] : null;
 
   return (
     <div
@@ -34,7 +36,8 @@ const ToastItem = ({ toast, onClose }) => {
         min-w-[200px] max-w-[400px]
       `}
     >
-      <span className="text-white font-bold">{icons[toast.type] || icons.info}</span>
+      {/* 实体类型 emoji */}
+      {entityEmoji && <span className="text-base">{entityEmoji}</span>}
       <span className="text-white text-sm flex-1">{toast.message}</span>
       <button
         onClick={handleClose}

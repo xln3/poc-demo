@@ -684,21 +684,22 @@ export const LOG_TYPES = {
   failure: { label: "防御", color: "text-blue-400" },
   thinking: { label: "思考", color: "text-pink-400" },
   round: { label: "轮次", color: "text-teal-400" },
-  // Toast 日志类型 - 按触发角色分类
-  // - toast_tester: 人类测试者通过前端 UI 操作触发（上传/下载/删除按钮）
-  // - toast_testee: 被测智能体通过工具调用执行（预留，待实现）
-  // - toast_unknown: 文件监视检测到的变化，无法追踪来源
+  // Toast 日志类型 - 按实体类型分类 (entity type)
   //
-  // 扩展指南（添加 testee 操作支持）：
-  // 1. 确定 Agent 的操作路径：
-  //    - 如果通过 /sandbox/tool API → 在 executeCommand 中添加来源参数
-  //    - 如果通过 /sandbox/terminals/{tag}/tool → 在 executeToolInTerminal 中添加
-  // 2. 在工具执行函数中传递 source='testee' 参数
-  // 3. 调用 addLog 时使用 type: 'toast_testee'
+  // 两个维度:
+  // 1. 消息类型 (message type): 由 log.status 决定 → success/error/warning/info
+  // 2. 实体类型 (entity type): 由 log.type 前缀决定 → tester/testee/world
   //
-  // 示例：
-  // addLog({ type: 'toast_testee', content: '执行命令: ls', status: 'normal' });
+  // 实体类型语义（主动/被动句式）:
+  // - tester 🧐 主观操作: 测试人员（红队）通过 UI 触发，主动句 "上传文件"
+  // - testee 🤖 主观操作: 被测智能体通过工具调用执行，主动句 "执行命令"
+  // - world  🌏 客观变化: 环境变化，被动句 "327 个文件变化"
+  //
+  // 示例:
+  // - 🧐 上传 3 个文件到 /workspace [绿色背景] (tester + success)
+  // - 🤖 执行命令: pip install [蓝色背景] (testee + info)
+  // - 🌏 327 个文件变化 [蓝色背景] (world + info)
   toast_tester: { label: "测试者", color: "text-blue-400" },
   toast_testee: { label: "智能体", color: "text-purple-400" },
-  toast_unknown: { label: "未知", color: "text-gray-400" },
+  toast_world: { label: "环境", color: "text-gray-400" },
 };

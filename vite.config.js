@@ -8,11 +8,20 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    host: '0.0.0.0',  // 监听所有接口，允许局域网访问
     proxy: {
       '/sandbox': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        ws: true,  // 支持 WebSocket
+        ws: true,
+        // 转发客户端真实 IP
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            const clientIp = req.socket.remoteAddress?.replace('::ffff:', '') || '127.0.0.1';
+            proxyReq.setHeader('X-Forwarded-For', clientIp);
+            proxyReq.setHeader('X-Real-IP', clientIp);
+          });
+        },
       },
       '/health': {
         target: 'http://127.0.0.1:8000',

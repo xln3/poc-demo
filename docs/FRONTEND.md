@@ -22,14 +22,16 @@ src/
 │   ├── useMCP.js        # MCP 配置管理
 │   ├── useConversation.js # 对话状态管理
 │   ├── useLLMConfig.js  # LLM 参数配置
-│   └── usePlayback.js   # 用例回放
+│   ├── usePlayback.js   # 用例回放
+│   └── useToast.js      # Toast 通知管理
 ├── schemas/             # 数据结构定义
 │   └── testCase.js      # 测试用例 v1.0.0 Schema
 ├── utils/               # 工具函数
 │   ├── index.js         # 工具导出入口
 │   └── export.js        # 导出功能
-├── components/          # UI 组件 (预留)
-│   └── index.js         # 组件导出入口
+├── components/          # UI 组件
+│   ├── index.js         # 组件导出入口
+│   └── Toast.jsx        # Toast 通知组件
 └── scenarios/           # 攻击场景定义
 ```
 
@@ -223,6 +225,82 @@ playback.exitPlayback()          // 退出回放模式
 playback.skipToEnd()             // 跳过动画直接显示结果
 playback.restoreEnvironment(testCase) // 恢复环境配置
 ```
+
+### useToast
+
+管理 Toast 通知，支持两个维度分类。
+
+```javascript
+import { useToast, ENTITY_EMOJI } from './hooks/useToast.js';
+
+const { toasts, addToast, removeToast, clearToasts } = useToast();
+
+// 添加通知
+addToast(message, type, entity, duration);
+// - message: 消息内容
+// - type: 消息类型 'success'|'error'|'warning'|'info'（决定背景颜色）
+// - entity: 实体类型 'tester'|'testee'|'world'（决定 emoji）
+// - duration: 持续时间 ms（默认 3000）
+
+// 实体类型 emoji
+ENTITY_EMOJI = {
+  tester: '🧐',  // 测试人员操作
+  testee: '🤖',  // 被测智能体操作
+  world: '🌏',   // 客观环境变化
+}
+```
+
+#### 两个分类维度
+
+| 维度 | 决定因素 | 可选值 | UI 表现 |
+|------|---------|--------|--------|
+| 消息类型 | `type` 参数 | success/error/warning/info | 背景颜色 |
+| 实体类型 | `entity` 参数 | tester/testee/world | 前置 emoji |
+
+#### 实体类型语义
+
+| 实体 | emoji | 句式 | 含义 |
+|------|-------|------|------|
+| tester | 🧐 | 主动 | 测试人员（红队）的 UI 操作 |
+| testee | 🤖 | 主动 | 被测智能体的工具调用 |
+| world | 🌏 | 被动 | 客观环境变化（文件监视等） |
+
+#### 使用示例
+
+```javascript
+// 测试人员上传文件
+addLog({ type: 'toast_tester', content: '上传 3 个文件', status: 'success' });
+// → 🧐 上传 3 个文件 [绿色背景]
+
+// 智能体执行命令
+addLog({ type: 'toast_testee', content: '执行: pip install', status: 'normal' });
+// → 🤖 执行: pip install [蓝色背景]
+
+// 文件监视检测到变化
+addLog({ type: 'toast_world', content: '327 个文件变化', status: 'normal' });
+// → 🌏 327 个文件变化 [蓝色背景]
+```
+
+---
+
+## Toast 组件
+
+`src/components/Toast.jsx` 显示 Toast 通知列表。
+
+```javascript
+import Toast from './components/Toast.jsx';
+
+<Toast toasts={toasts} removeToast={removeToast} />
+```
+
+### 消息类型颜色
+
+| type | 背景色 |
+|------|--------|
+| success | emerald-600 (绿) |
+| error | red-600 (红) |
+| warning | amber-600 (黄) |
+| info | blue-600 (蓝) |
 
 ---
 
