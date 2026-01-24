@@ -993,6 +993,7 @@ class TerminalInfo(BaseModel):
     status: ContainerStatus
     created_at: str
     mount_path: str
+    size_bytes: Optional[int] = None  # 占用体积
 
 
 class DeletedTerminalInfo(BaseModel):

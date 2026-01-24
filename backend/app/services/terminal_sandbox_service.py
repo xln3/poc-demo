@@ -229,8 +229,17 @@ class MultiTerminalSandboxService:
         if state is None:
             return False
 
-        # 2. 停止容器（终端锁）
+        # 2. 修复权限并停止容器（终端锁）
         with tag_lock:
+            # 在容器还运行时，用容器内的 root 修复文件权限
+            # 这样宿主机用户删除时不会遇到权限问题
+            try:
+                container_manager.exec_in_container(
+                    state.session_id,
+                    "chmod -R a+rwX /workspace 2>/dev/null || true"
+                )
+            except Exception:
+                pass  # 容器可能已异常，忽略错误
             container_manager.destroy_container(state.session_id)
 
         # 3. 重命名目录到 deleted/（文件系统锁）
@@ -261,6 +270,9 @@ class MultiTerminalSandboxService:
         # 获取容器最新状态
         container_info = container_manager.get_container_status(state.session_id)
 
+        # 计算占用体积
+        size_bytes = self._get_dir_size(state.mount_path)
+
         return TerminalInfo(
             tag=state.tag,
             session_id=state.session_id,
@@ -269,6 +281,7 @@ class MultiTerminalSandboxService:
             status=container_info.status,
             created_at=state.created_at,
             mount_path=state.mount_path,
+            size_bytes=size_bytes,
         )
 
     def list_terminals(self) -> List[TerminalInfo]:

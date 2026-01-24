@@ -4,7 +4,8 @@ import io
 import json
 import tarfile
 from typing import List, Optional
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query, File, UploadFile, Form, Header, Body
+from urllib.parse import quote
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query, File, UploadFile, Form, Header, Body, Request
 from fastapi.responses import StreamingResponse
 from datetime import datetime
 from ..models.schemas import (
@@ -308,17 +309,35 @@ async def download_file(
 
         filename = path.split('/')[-1]
 
-        # 检查是否是目录 - stat['mode'] 是八进制字符串
-        mode = int(stat.get('mode', '0'), 8) if isinstance(stat.get('mode'), str) else stat.get('mode', 0)
+        # 检测是否是目录
+        # Docker SDK 返回的 stat['mode'] 是整数 (十进制)
+        # S_IFDIR = 0o040000 = 16384
+        # 目录的 mode 格式: 0o40xxx (如 0o40755 = 16877)
+        mode = stat.get('mode', 0)
+        if isinstance(mode, str):
+            # 兼容可能的字符串格式
+            mode = int(mode, 8) if mode.startswith('0') or mode.isdigit() else 0
         is_dir = (mode & 0o170000) == 0o040000  # S_IFDIR
+
+        # 备选检测：通过 tar 内容判断
+        if not is_dir:
+            tar_io = io.BytesIO(tar_data)
+            with tarfile.open(fileobj=tar_io, mode='r') as tar:
+                members = tar.getmembers()
+                # 如果 tar 包含多个成员，或者第一个成员是目录，则认为是目录下载
+                if len(members) > 1 or (members and members[0].isdir()):
+                    is_dir = True
+            tar_io.seek(0)
 
         if is_dir:
             # 目录返回 tar
+            encoded_filename = quote(f"{filename}.tar")
             return StreamingResponse(
                 io.BytesIO(tar_data),
                 media_type="application/x-tar",
                 headers={
-                    "Content-Disposition": f"attachment; filename=\"{filename}.tar\""
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                    "Content-Length": str(len(tar_data))
                 }
             )
         else:
@@ -329,11 +348,12 @@ async def download_file(
                 f = tar.extractfile(member)
                 file_content = f.read() if f else b''
 
+            encoded_filename = quote(filename)
             return StreamingResponse(
                 io.BytesIO(file_content),
                 media_type="application/octet-stream",
                 headers={
-                    "Content-Disposition": f"attachment; filename=\"{filename}\"",
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
                     "Content-Length": str(len(file_content))
                 }
             )
@@ -348,6 +368,7 @@ async def download_file(
 @router.post("/terminals/{tag}/lock")
 async def acquire_lock(
     tag: str,
+    request: Request,
     user_id: str = Body(..., embed=True),
 ):
     """获取终端独占锁
@@ -357,14 +378,24 @@ async def acquire_lock(
         user_id: 用户标识（前端生成的 UUID）
 
     Returns:
-        {"success": bool, "holder": str|None, "message": str}
+        {"success": bool, "holder": str|None, "holder_ip": str|None, "message": str}
     """
     # 验证终端存在
     info = await asyncio.to_thread(terminal_sandbox_service.get_terminal, tag)
     if info is None:
         raise HTTPException(status_code=404, detail=f"终端 '{tag}' 不存在")
 
-    result = await asyncio.to_thread(terminal_lock.acquire, tag, user_id)
+    # 获取客户端 IP（支持多层代理转发）
+    client_ip = (
+        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or request.headers.get("X-Real-IP", "").strip()
+        or (request.client.host if request.client else None)
+    )
+    # 去除 IPv6 前缀
+    if client_ip and client_ip.startswith("::ffff:"):
+        client_ip = client_ip[7:]
+
+    result = await asyncio.to_thread(terminal_lock.acquire, tag, user_id, client_ip)
     return result
 
 
@@ -397,13 +428,22 @@ async def lock_heartbeat(
 
 
 @router.get("/terminals/{tag}/lock")
-async def get_lock_status(tag: str):
+async def get_lock_status(tag: str, request: Request):
     """获取锁状态
 
     Returns:
-        {"locked": bool, "holder": str|None, "acquired_at": str|None, "expired": bool}
+        {"locked": bool, "holder": str|None, "acquired_at": str|None, "expired": bool, "is_same_ip": bool}
     """
     result = await asyncio.to_thread(terminal_lock.get_status, tag)
+
+    # 获取请求者 IP，判断是否同 IP
+    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    if not client_ip:
+        client_ip = request.client.host if request.client else None
+
+    holder_ip = result.get("holder_ip")
+    result["is_same_ip"] = bool(client_ip and holder_ip and client_ip == holder_ip)
+
     return result
 
 

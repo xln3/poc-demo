@@ -53,6 +53,8 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [logs, setLogs] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState(new Set()); // 跟踪展开的日志索引
+  const [runningTerminalsExpanded, setRunningTerminalsExpanded] = useState(false); // 运行中终端列表展开状态（默认折叠）
+  const [deletedTerminalsExpanded, setDeletedTerminalsExpanded] = useState(false); // 已删除终端列表展开状态（默认折叠）
   const [isPlaying, setIsPlaying] = useState(false);
   const [typingMsg, setTypingMsg] = useState(null);
   const [showExport, setShowExport] = useState(false);
@@ -79,12 +81,13 @@ export default function App() {
   const { toasts, addToast, removeToast } = useToast();
 
   // Types that show as toast (operation status)
+  // 格式: toast_{entity} 其中 entity 是 tester/testee/world
   const TOAST_LOG_TYPES = new Set([
     'container', 'error', 'info',
-    'toast_tester', 'toast_testee', 'toast_unknown'
+    'toast_tester', 'toast_testee', 'toast_world'
   ]);
 
-  // Map log status to toast type
+  // Map log status to toast type (消息类型)
   const getToastType = (log) => {
     if (log.status === 'danger') return 'error';
     if (log.status === 'success') return 'success';
@@ -92,11 +95,20 @@ export default function App() {
     return 'info';
   };
 
+  // Extract entity from log type (实体类型)
+  // toast_tester -> 'tester', toast_testee -> 'testee', toast_world -> 'world'
+  const getToastEntity = (logType) => {
+    if (logType?.startsWith('toast_')) {
+      return logType.substring(6); // 'toast_tester' -> 'tester'
+    }
+    return null;
+  };
+
   // Log helper for hooks - routes to toast or log panel
   const addLog = useCallback((log) => {
     if (TOAST_LOG_TYPES.has(log.type)) {
-      // Route to toast notification
-      addToast(log.content, getToastType(log));
+      // Route to toast notification (消息类型 + 实体类型)
+      addToast(log.content, getToastType(log), getToastEntity(log.type));
     } else {
       // Route to log panel
       setLogs(prev => [...prev, log]);
@@ -1821,13 +1833,21 @@ print('\\n'.join(all_text))
         <div className="mb-3 p-2 bg-slate-700 rounded">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400">🐳 终端沙箱</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded ${
-              !sandboxAvailable ? 'bg-slate-600 text-slate-400' :
-              terminals.length > 0 ? 'bg-green-600 text-white' :
-              'bg-slate-600 text-slate-300'
-            }`}>
-              {!sandboxAvailable ? '离线' : `${terminals.length} 运行中`}
-            </span>
+            {!sandboxAvailable ? (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-slate-600 text-slate-400">离线</span>
+            ) : currentTag ? (
+              <button
+                onClick={() => openFileTree(currentTag)}
+                className="text-xs text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-1"
+                title="浏览文件"
+              >
+                <span>当前:</span>
+                <span className="font-mono text-white">{currentTag}</span>
+                <span>📂</span>
+              </button>
+            ) : (
+              <span className="text-xs text-slate-500">未连接终端</span>
+            )}
           </div>
 
           {sandboxAvailable ? (
@@ -1871,20 +1891,28 @@ print('\\n'.join(all_text))
               {/* 运行中的终端列表 */}
               {terminals.length > 0 && (
                 <div className="mb-2">
-                  <div className="text-xs text-slate-500 mb-1">运行中 ({terminals.length})</div>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {terminals.map(t => (
-                      <TerminalItem
-                        key={t.tag}
-                        terminal={t}
-                        isSelected={t.tag === currentTag}
-                        lockInfo={lockStatus?.[t.tag]}
-                        onSelect={switchTerminal}
-                        onDestroy={destroyTerminal}
-                        onShowFiles={openFileTree}
-                      />
-                    ))}
-                  </div>
+                  <button
+                    onClick={() => setRunningTerminalsExpanded(!runningTerminalsExpanded)}
+                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-400 mb-1 w-full"
+                  >
+                    <span className={`transition-transform ${runningTerminalsExpanded ? 'rotate-90' : ''}`}>▶</span>
+                    <span>运行中 ({terminals.length})</span>
+                  </button>
+                  {runningTerminalsExpanded && (
+                    <div className="space-y-1 max-h-32 overflow-y-auto custom-scroll">
+                      {terminals.map(t => (
+                        <TerminalItem
+                          key={t.tag}
+                          terminal={t}
+                          isSelected={t.tag === currentTag}
+                          lockInfo={lockStatus?.[t.tag]}
+                          onSelect={switchTerminal}
+                          onDestroy={destroyTerminal}
+                          onShowFiles={openFileTree}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1896,23 +1924,9 @@ print('\\n'.join(all_text))
                 setShowCleanupConfirm={setShowCleanupConfirm}
                 onCleanupDeleted={cleanupDeleted}
                 onCleanupAllDeleted={cleanupAllDeleted}
+                isExpanded={deletedTerminalsExpanded}
+                setIsExpanded={setDeletedTerminalsExpanded}
               />
-
-              {/* 当前终端操作区 */}
-              {currentTag && sandboxStatus === 'running' && (
-                <div className="mt-2 pt-2 border-t border-slate-600">
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span>当前: <span className="font-mono text-white">{currentTag}</span></span>
-                    <button
-                      onClick={() => openFileTree(currentTag)}
-                      className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white"
-                      title="浏览文件"
-                    >
-                      📁
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           ) : (
             <div className="text-xs text-slate-500 text-center py-2">

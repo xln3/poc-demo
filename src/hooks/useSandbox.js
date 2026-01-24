@@ -52,6 +52,7 @@ export const useSandbox = ({ addLog }) => {
   const terminalPollRef = useRef(null);
   const deletedPollRef = useRef(null);
   const fileWatchRefreshRef = useRef(null);
+  const fileWatchOnRefreshRef = useRef(null);  // 存储文件监视的刷新回调
   const lockHeartbeatRef = useRef(null);
 
   // Check sandbox service availability
@@ -475,7 +476,7 @@ export const useSandbox = ({ addLog }) => {
       setSandboxFiles(prev => prev.filter(f => f.path !== path));
       addLog({
         type: 'toast_tester',
-        content: `文件已删除: ${path}`,
+        content: `删除文件: ${path}`,
         status: 'success'
       });
     } catch (error) {
@@ -817,12 +818,18 @@ export const useSandbox = ({ addLog }) => {
     // 上传完成提示
     addLog({
       type: 'toast_tester',
-      content: `已上传 ${files.length} 个文件到 ${basePath}`,
+      content: `上传 ${files.length} 个文件到 ${basePath}`,
       status: 'success',
     });
 
     // Refresh file list after upload
     refreshSandboxFiles();
+
+    // 如果文件浏览器打开着，触发其刷新回调
+    // （Docker put_archive 不触发 inotifywait，需要主动刷新）
+    if (fileWatchOnRefreshRef.current) {
+      fileWatchOnRefreshRef.current();
+    }
   }, [fileTreeTag, currentTag, addLog, refreshSandboxFiles, closeUploadDialog]);
 
   // Download file with progress tracking
@@ -865,7 +872,7 @@ export const useSandbox = ({ addLog }) => {
 
       addLog({
         type: 'toast_tester',
-        content: `已下载: ${downloadName}`,
+        content: `下载文件: ${downloadName}`,
         status: 'success',
       });
 
@@ -902,6 +909,9 @@ export const useSandbox = ({ addLog }) => {
       clearTimeout(fileWatchRefreshRef.current);
     }
 
+    // 存储刷新回调，供上传完成后调用
+    fileWatchOnRefreshRef.current = onRefresh;
+
     const conn = sandboxClient.connectFileWatch(
       tag,
       path,
@@ -910,11 +920,11 @@ export const useSandbox = ({ addLog }) => {
         if (event.type === 'file_change') {
           console.log('[FileWatch] File changed:', event);
 
-          // 显示 Toast 通知（来源未知 - 无法追踪是谁触发的）
+          // 显示 Toast 通知（world - 客观环境变化，无法追踪来源）
           const eventName = { 'CREATE': '新建', 'DELETE': '删除', 'MODIFY': '修改', 'MOVE': '移动' }[event.event] || event.event;
           const fileName = event.path.split('/').pop();
           addLog({
-            type: 'toast_unknown',
+            type: 'toast_world',
             content: `${eventName}: ${fileName}`,
             status: 'normal',
           });
@@ -930,10 +940,10 @@ export const useSandbox = ({ addLog }) => {
             }
           }, 100);  // 从 300 减小到 100
         } else if (event.type === 'file_changes') {
-          // 批量事件摘要
+          // 批量事件摘要（world - 客观环境变化）
           console.log('[FileWatch] Batch file changes:', event.count);
           addLog({
-            type: 'toast_unknown',
+            type: 'toast_world',
             content: `${event.count} 个文件变化`,
             status: 'normal',
           });
@@ -974,6 +984,7 @@ export const useSandbox = ({ addLog }) => {
       clearTimeout(fileWatchRefreshRef.current);
       fileWatchRefreshRef.current = null;
     }
+    fileWatchOnRefreshRef.current = null;
   }, [fileWatchConnection]);
 
   // Check if file watch is active
@@ -990,6 +1001,7 @@ export const useSandbox = ({ addLog }) => {
       if (fileWatchRefreshRef.current) {
         clearTimeout(fileWatchRefreshRef.current);
       }
+      fileWatchOnRefreshRef.current = null;
     };
   }, []);
 
