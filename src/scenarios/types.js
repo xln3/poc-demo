@@ -24,11 +24,11 @@ export const CapabilityLevel = {
 
 // 能力层级中文名（前端显示用）
 export const CapabilityLevelNames = {
-  'F1-conversation': '文本对话',
-  'F2-file-injection': '文件注入',
-  'F3-tool-use': '工具调用',
-  'F4-rag': 'RAG检索',
-  'F5-mcp': 'MCP工具'
+  'F1-conversation': '文字对话',
+  'F2-file-injection': '文件解析',
+  'F3-tool-use': '终端运行',
+  'F4-rag': 'RAG知识',
+  'F5-mcp': 'MCP连接'
 };
 
 // @deprecated 旧枚举，保留向后兼容
