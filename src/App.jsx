@@ -8,6 +8,13 @@ import { mcpClient } from './mcp.js';
 import { exportReport, exportHTML } from './utils/index.js';
 import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast } from './hooks/index.js';
 import Toast from './components/Toast.jsx';
+import {
+  TerminalItem,
+  DeletedTerminalsPanel,
+  FileTreeBrowser,
+  FileUploadDialog,
+  FileTransferProgress,
+} from './components/sandbox';
 
 // 能力层级图标
 const LEVEL_ICONS = {
@@ -99,7 +106,7 @@ export default function App() {
     // Multi-terminal state
     terminals, currentTag, setCurrentTag, newTerminalTag, setNewTerminalTag,
     newTerminalImage, setNewTerminalImage, deletedTerminals, deletedTotalSize,
-    creatingTerminal, showCleanupConfirm, setShowCleanupConfirm,
+    creatingTerminal, showCleanupConfirm, setShowCleanupConfirm, lockStatus,
     // UI state
     sandboxEnabled, setSandboxEnabled, sandboxStatus, setSandboxStatus,
     sandboxAvailable, toolCommand, setToolCommand, toolResult, setToolResult,
@@ -113,7 +120,14 @@ export default function App() {
     handleSandboxLog, isSandboxAvailable,
     // Legacy compatibility
     sandboxImage, setSandboxImage, containerInfo, setContainerInfo,
-    startContainer, stopContainer, isFileParserReady
+    startContainer, stopContainer, isFileParserReady,
+    // File tree browser state
+    fileTreeOpen, fileTreeTag, uploadDialogOpen, uploadTargetPath, transferState,
+    // File tree browser functions
+    openFileTree, closeFileTree, openUploadDialog, openUploadForTerminal, closeUploadDialog,
+    uploadFilesWithProgress, downloadFileWithProgress, cancelTransfer,
+    // File watch functions
+    startFileWatch, stopFileWatch,
   } = sandbox;
 
   // RAG hook
@@ -1859,169 +1873,44 @@ print('\\n'.join(all_text))
                   <div className="text-xs text-slate-500 mb-1">运行中 ({terminals.length})</div>
                   <div className="space-y-1 max-h-32 overflow-y-auto">
                     {terminals.map(t => (
-                      <div
+                      <TerminalItem
                         key={t.tag}
-                        className={`flex items-center text-xs px-2 py-1.5 rounded cursor-pointer ${
-                          t.tag === currentTag
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-slate-600 hover:bg-slate-500'
-                        }`}
-                        onClick={() => switchTerminal(t.tag)}
-                      >
-                        <span className="mr-1.5">
-                          {t.image.includes('python') ? '🐍' :
-                           t.image.includes('ubuntu') ? '🐧' : '📦'}
-                        </span>
-                        <span className="flex-1 truncate font-mono">{t.tag}</span>
-                        <span className="text-xs opacity-70 mr-2">
-                          {formatTimeAgo(t.created_at)}
-                        </span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); destroyTerminal(t.tag); }}
-                          className="text-red-400 hover:text-red-300"
-                          title="销毁终端"
-                        >
-                          ✕
-                        </button>
-                      </div>
+                        terminal={t}
+                        isSelected={t.tag === currentTag}
+                        lockInfo={lockStatus?.[t.tag]}
+                        onSelect={switchTerminal}
+                        onDestroy={destroyTerminal}
+                        onShowFiles={openFileTree}
+                      />
                     ))}
                   </div>
                 </div>
               )}
 
               {/* 已删除终端列表 */}
-              {deletedTerminals.length > 0 && (
-                <div className="mb-2 p-2 bg-slate-800 rounded">
-                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                    <span>已删除 ({deletedTerminals.length}) {formatBytes(deletedTotalSize)}</span>
-                    <button
-                      onClick={() => setShowCleanupConfirm(true)}
-                      className="text-red-400 hover:text-red-300 text-xs"
-                      title="清理全部"
-                    >
-                      清理全部
-                    </button>
-                  </div>
-                  <div className="space-y-1 max-h-20 overflow-y-auto">
-                    {deletedTerminals.map(d => {
-                      const name = `${d.original_tag}-${d.deleted_at.replace(/[-:T]/g, '').slice(0, 14)}`;
-                      return (
-                        <div key={d.path} className="flex items-center text-xs text-slate-400">
-                          <span className="flex-1 truncate font-mono">{d.original_tag}</span>
-                          <span className="mr-2">{formatBytes(d.size_bytes)}</span>
-                          <button
-                            onClick={() => cleanupDeleted(name)}
-                            className="text-red-400 hover:text-red-300"
-                            title="清理"
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* 清理确认对话框 */}
-              {showCleanupConfirm && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                  <div className="bg-slate-800 p-4 rounded-lg max-w-sm mx-4">
-                    <div className="text-sm font-medium mb-2">确认永久删除？</div>
-                    <div className="text-xs text-slate-400 mb-4">
-                      将删除所有已删除终端的文件（不可恢复）
-                      <br />共 {deletedTerminals.length} 个，{formatBytes(deletedTotalSize)}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowCleanupConfirm(false)}
-                        className="flex-1 py-1.5 rounded text-xs bg-slate-600 hover:bg-slate-500"
-                      >
-                        取消
-                      </button>
-                      <button
-                        onClick={cleanupAllDeleted}
-                        className="flex-1 py-1.5 rounded text-xs bg-red-600 hover:bg-red-500"
-                      >
-                        确认清理
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <DeletedTerminalsPanel
+                deletedTerminals={deletedTerminals}
+                deletedTotalSize={deletedTotalSize}
+                showCleanupConfirm={showCleanupConfirm}
+                setShowCleanupConfirm={setShowCleanupConfirm}
+                onCleanupDeleted={cleanupDeleted}
+                onCleanupAllDeleted={cleanupAllDeleted}
+              />
 
               {/* 当前终端操作区 */}
               {currentTag && sandboxStatus === 'running' && (
-                <>
-                  <div className="mt-2 pt-2 border-t border-slate-600">
-                    <div className="text-xs text-slate-500 mb-1">当前: <span className="font-mono text-white">{currentTag}</span></div>
-
-                    {/* 上传文件 */}
-                    <input
-                      type="file"
-                      id="sandbox-file-input"
-                      className="hidden"
-                      multiple
-                      onChange={handleUploadToSandbox}
-                    />
-                    <div className="flex gap-1 mb-2">
-                      <button
-                        onClick={() => document.getElementById('sandbox-file-input').click()}
-                        disabled={uploadingSandboxFile}
-                        className="flex-1 py-1.5 rounded text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 transition"
-                        title="上传文件到沙箱容器的 /workspace 目录"
-                      >
-                        {uploadingSandboxFile ? '⏳ 上传中...' : '📤 上传'}
-                      </button>
-                      <button
-                        onClick={refreshSandboxFiles}
-                        className="px-3 py-1.5 rounded text-xs bg-slate-600 hover:bg-slate-500 transition"
-                        title="刷新文件列表"
-                      >
-                        🔄
-                      </button>
-                    </div>
-
-                    {/* 文件列表 */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>文件 ({sandboxFiles.length})</span>
-                      </div>
-                      {sandboxFiles.length === 0 ? (
-                        <div className="text-xs text-slate-600 text-center py-2">
-                          点击 🔄 刷新文件列表
-                        </div>
-                      ) : (
-                        sandboxFiles.map(f => (
-                          <div key={f.path} className="flex items-center text-xs bg-slate-600 px-2 py-1 rounded group">
-                            <span className="truncate flex-1" title={f.path}>
-                              {f.preset && <span className="text-emerald-400 mr-1">⚙️</span>}
-                              {f.isDir ? `📁 ${f.name}` : f.name}
-                            </span>
-                            <div className="flex gap-1 ml-1 flex-shrink-0">
-                              {!f.isDir && (
-                                <button
-                                  onClick={() => handleDownloadSandboxFile(f.path, f.name)}
-                                  className="text-blue-400 hover:text-blue-300 opacity-60 group-hover:opacity-100"
-                                  title="下载文件"
-                                >
-                                  📥
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleRemoveSandboxFile(f.path)}
-                                className="text-red-400 hover:text-red-300 opacity-60 group-hover:opacity-100"
-                                title="删除文件"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                <div className="mt-2 pt-2 border-t border-slate-600">
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>当前: <span className="font-mono text-white">{currentTag}</span></span>
+                    <button
+                      onClick={() => openFileTree(currentTag)}
+                      className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white"
+                      title="浏览文件"
+                    >
+                      📁
+                    </button>
                   </div>
-                </>
+                </div>
               )}
             </>
           ) : (
@@ -4161,6 +4050,36 @@ print('\\n'.join(all_text))
           </div>
         </div>
         </>
+        )}
+
+        {/* 文件浏览器 Modal */}
+        <FileTreeBrowser
+          tag={fileTreeTag}
+          isOpen={fileTreeOpen}
+          onClose={closeFileTree}
+          onDownload={downloadFileWithProgress}
+          onUpload={openUploadDialog}
+          startFileWatch={startFileWatch}
+          stopFileWatch={stopFileWatch}
+        />
+
+        {/* 文件上传对话框 */}
+        <FileUploadDialog
+          isOpen={uploadDialogOpen}
+          targetPath={uploadTargetPath}
+          onClose={closeUploadDialog}
+          onUpload={uploadFilesWithProgress}
+        />
+
+        {/* 文件传输进度条 */}
+        {transferState && (
+          <FileTransferProgress
+            type={transferState.type}
+            fileName={transferState.fileName}
+            loaded={transferState.loaded}
+            total={transferState.total}
+            onCancel={cancelTransfer}
+          />
         )}
       </div>
     </div>

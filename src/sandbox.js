@@ -287,10 +287,20 @@ class SandboxClient {
     const contentLength = response.headers.get('Content-Length');
     const total = contentLength ? parseInt(contentLength, 10) : 0;
 
-    // 获取文件名
+    // 获取文件名（支持 UTF-8 编码）
     const disposition = response.headers.get('Content-Disposition');
-    const match = disposition?.match(/filename="?([^";\n]+)"?/);
-    const fileName = match ? match[1] : filePath.split('/').pop();
+    let fileName = filePath.split('/').pop();
+    if (disposition) {
+      // 优先匹配 filename*=UTF-8'' 格式
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;\n]+)/i);
+      if (utf8Match) {
+        fileName = decodeURIComponent(utf8Match[1]);
+      } else {
+        // 降级匹配普通 filename
+        const match = disposition.match(/filename="?([^";\n]+)"?/);
+        if (match) fileName = match[1];
+      }
+    }
 
     // 流式读取
     const reader = response.body.getReader();
@@ -434,6 +444,127 @@ class SandboxClient {
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  // ============ File Watch WebSocket ============
+
+  // 连接文件监控 WebSocket
+  connectFileWatch(tag, path = '/workspace', onEvent, onError = null) {
+    const wsUrl = `${SANDBOX_CONFIG.wsUrl}/sandbox/terminals/${encodeURIComponent(tag)}/watch?path=${encodeURIComponent(path)}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'heartbeat') return;
+        onEvent(data);
+      } catch (e) {
+        console.error('Failed to parse file watch message:', e);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('File watch WebSocket error:', error);
+      if (onError) onError(error);
+    };
+
+    ws.onclose = () => {
+      if (onError) onError(new Error('Connection closed'));
+    };
+
+    return {
+      close: () => ws.close(),
+      readyState: () => ws.readyState,
+    };
+  }
+
+  // ============ Terminal Lock API ============
+
+  // 生成或获取用户 ID（浏览器标识）
+  getUserId() {
+    if (!this._userId) {
+      let stored = localStorage.getItem('sandbox_user_id');
+      if (!stored) {
+        stored = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('sandbox_user_id', stored);
+      }
+      this._userId = stored;
+    }
+    return this._userId;
+  }
+
+  // 获取终端锁
+  async acquireLock(tag) {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: this.getUserId() }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `获取锁失败: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 释放终端锁
+  async releaseLock(tag) {
+    const response = await fetch(
+      `${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock?user_id=${encodeURIComponent(this.getUserId())}`,
+      { method: 'DELETE' }
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `释放锁失败: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 锁心跳续期
+  async lockHeartbeat(tag) {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock/heartbeat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: this.getUserId() }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `心跳失败: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 获取锁状态
+  async getLockStatus(tag) {
+    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `获取锁状态失败: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // 批量获取所有终端的锁状态
+  async getAllLockStatus(tags) {
+    const results = {};
+    await Promise.all(
+      tags.map(async (tag) => {
+        try {
+          results[tag] = await this.getLockStatus(tag);
+        } catch {
+          results[tag] = { locked: false, holder: null };
+        }
+      })
+    );
+    return results;
   }
 
   // ============ Health Check ============

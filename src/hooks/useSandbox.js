@@ -41,9 +41,18 @@ export const useSandbox = ({ addLog }) => {
   // Transfer progress state
   const [transferState, setTransferState] = useState(null); // { type: 'upload'|'download', fileName, loaded, total }
 
+  // File watch state
+  const [fileWatchConnection, setFileWatchConnection] = useState(null);
+  const [fileWatchPath, setFileWatchPath] = useState('/workspace');
+
+  // Lock state
+  const [lockStatus, setLockStatus] = useState({}); // { [tag]: { locked, holder, isMe } }
+
   // Refs for intervals
   const terminalPollRef = useRef(null);
   const deletedPollRef = useRef(null);
+  const fileWatchRefreshRef = useRef(null);
+  const lockHeartbeatRef = useRef(null);
 
   // Check sandbox service availability
   useEffect(() => {
@@ -56,14 +65,32 @@ export const useSandbox = ({ addLog }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch terminals list
+  // Fetch terminals list and lock status
   const fetchTerminals = useCallback(async () => {
     try {
       const response = await sandboxClient.listTerminals();
-      setTerminals(response.terminals || []);
+      const terminalList = response.terminals || [];
+      setTerminals(terminalList);
+
+      // Fetch lock status for all terminals
+      if (terminalList.length > 0) {
+        const myUserId = sandboxClient.getUserId();
+        const tags = terminalList.map(t => t.tag);
+        const locks = await sandboxClient.getAllLockStatus(tags);
+
+        // Add isMe flag
+        const lockWithMe = {};
+        for (const [tag, status] of Object.entries(locks)) {
+          lockWithMe[tag] = {
+            ...status,
+            isMe: status.holder === myUserId,
+          };
+        }
+        setLockStatus(lockWithMe);
+      }
 
       // If current terminal is gone, clear selection
-      if (currentTag && !response.terminals.find(t => t.tag === currentTag)) {
+      if (currentTag && !terminalList.find(t => t.tag === currentTag)) {
         setCurrentTag('');
         setSandboxStatus('disconnected');
         setSandboxEnabled(false);
@@ -131,7 +158,23 @@ export const useSandbox = ({ addLog }) => {
 
     setCreatingTerminal(true);
     try {
+      // Release lock for current terminal if any
+      if (currentTag) {
+        await sandboxClient.releaseLock(currentTag).catch(() => {});
+        if (lockHeartbeatRef.current) {
+          clearInterval(lockHeartbeatRef.current);
+          lockHeartbeatRef.current = null;
+        }
+      }
+
       const info = await sandboxClient.createTerminal(tag.trim(), image);
+
+      // Acquire lock for new terminal
+      try {
+        await sandboxClient.acquireLock(info.tag);
+      } catch (lockError) {
+        console.warn('Failed to acquire lock for new terminal:', lockError);
+      }
 
       addLog({
         type: 'container',
@@ -144,6 +187,18 @@ export const useSandbox = ({ addLog }) => {
       setSandboxStatus('running');
       setSandboxEnabled(true);
       setNewTerminalTag('');
+
+      // Start heartbeat for lock
+      if (lockHeartbeatRef.current) {
+        clearInterval(lockHeartbeatRef.current);
+      }
+      lockHeartbeatRef.current = setInterval(async () => {
+        try {
+          await sandboxClient.lockHeartbeat(info.tag);
+        } catch (error) {
+          console.warn('Lock heartbeat failed:', error);
+        }
+      }, 30000);
 
       // Connect WebSocket for logs
       sandboxClient.connectLogs(handleSandboxLog, (error) => {
@@ -166,12 +221,46 @@ export const useSandbox = ({ addLog }) => {
     }
   };
 
-  // Switch to a terminal
+  // Release lock for current terminal
+  const releaseLock = useCallback(async (tag) => {
+    if (!tag) return;
+    try {
+      await sandboxClient.releaseLock(tag);
+    } catch (error) {
+      console.warn('Failed to release lock:', error);
+    }
+    // Stop heartbeat
+    if (lockHeartbeatRef.current) {
+      clearInterval(lockHeartbeatRef.current);
+      lockHeartbeatRef.current = null;
+    }
+  }, []);
+
+  // Start heartbeat for locked terminal
+  const startHeartbeat = useCallback((tag) => {
+    // Clear existing heartbeat
+    if (lockHeartbeatRef.current) {
+      clearInterval(lockHeartbeatRef.current);
+    }
+    // Send heartbeat every 30 seconds
+    lockHeartbeatRef.current = setInterval(async () => {
+      try {
+        await sandboxClient.lockHeartbeat(tag);
+      } catch (error) {
+        console.warn('Lock heartbeat failed:', error);
+        // Lock lost, clear state
+        addLog({
+          type: 'error',
+          content: `终端 ${tag} 的锁已丢失`,
+          status: 'danger',
+        });
+      }
+    }, 30000);
+  }, [addLog]);
+
+  // Switch to a terminal (with lock)
   const switchTerminal = useCallback(async (tag) => {
     if (tag === currentTag) return;
-
-    // Disconnect from current terminal
-    sandboxClient.disconnectLogs();
 
     const terminal = terminals.find(t => t.tag === tag);
     if (!terminal) {
@@ -183,12 +272,43 @@ export const useSandbox = ({ addLog }) => {
       return;
     }
 
+    // Try to acquire lock
+    try {
+      const lockResult = await sandboxClient.acquireLock(tag);
+      if (!lockResult.success) {
+        addLog({
+          type: 'error',
+          content: `无法选中终端: ${lockResult.message}`,
+          status: 'danger',
+        });
+        return;
+      }
+    } catch (error) {
+      addLog({
+        type: 'error',
+        content: `获取终端锁失败: ${error.message}`,
+        status: 'danger',
+      });
+      return;
+    }
+
+    // Release lock for previous terminal
+    if (currentTag) {
+      await releaseLock(currentTag);
+    }
+
+    // Disconnect from current terminal
+    sandboxClient.disconnectLogs();
+
     // Switch to new terminal
     sandboxClient.switchTerminal(tag, terminal.session_id);
     setCurrentTag(tag);
     setSandboxStatus('running');
     setSandboxEnabled(true);
     setSandboxFiles([]);
+
+    // Start heartbeat
+    startHeartbeat(tag);
 
     // Connect WebSocket for logs
     sandboxClient.connectLogs(handleSandboxLog, (error) => {
@@ -201,13 +321,19 @@ export const useSandbox = ({ addLog }) => {
       status: 'normal',
     });
 
-    // Refresh files
+    // Refresh files and lock status
     refreshSandboxFiles();
-  }, [currentTag, terminals, handleSandboxLog, addLog]);
+    fetchTerminals();
+  }, [currentTag, terminals, handleSandboxLog, addLog, releaseLock, startHeartbeat, fetchTerminals]);
 
   // Destroy a terminal
   const destroyTerminal = async (tag) => {
     try {
+      // Release lock if we hold it
+      if (tag === currentTag) {
+        await releaseLock(tag);
+      }
+
       await sandboxClient.destroyTerminal(tag);
 
       addLog({
@@ -506,12 +632,33 @@ export const useSandbox = ({ addLog }) => {
     return terminals.find(t => t.tag === currentTag) || null;
   }, [terminals, currentTag]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount - release lock
   useEffect(() => {
     return () => {
       sandboxClient.disconnectLogs();
+      // Stop heartbeat
+      if (lockHeartbeatRef.current) {
+        clearInterval(lockHeartbeatRef.current);
+        lockHeartbeatRef.current = null;
+      }
     };
   }, []);
+
+  // Release lock when page unloads
+  useEffect(() => {
+    const handleUnload = () => {
+      if (currentTag) {
+        // Use fetch with keepalive for reliability on page unload
+        const userId = sandboxClient.getUserId();
+        fetch(
+          `/sandbox/terminals/${encodeURIComponent(currentTag)}/lock?user_id=${encodeURIComponent(userId)}`,
+          { method: 'DELETE', keepalive: true }
+        ).catch(() => {}); // Ignore errors on unload
+      }
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [currentTag]);
 
   // Check if sandbox is available for use
   const isSandboxAvailable = () => {
@@ -565,6 +712,13 @@ export const useSandbox = ({ addLog }) => {
     setUploadDialogOpen(true);
   }, []);
 
+  // Open upload dialog for a specific terminal
+  const openUploadForTerminal = useCallback((tag) => {
+    setFileTreeTag(tag);
+    setUploadTargetPath('/workspace');
+    setUploadDialogOpen(true);
+  }, []);
+
   // Close upload dialog
   const closeUploadDialog = useCallback(() => {
     setUploadDialogOpen(false);
@@ -586,8 +740,56 @@ export const useSandbox = ({ addLog }) => {
 
     closeUploadDialog();
 
+    // 检查是否为文件夹上传（有 webkitRelativePath）
+    const hasRelativePath = files.some(f => f.webkitRelativePath);
+
+    // 统一使用 targetPath（用户当前浏览的目录）
+    const basePath = targetPath;
+
+    if (hasRelativePath) {
+      // 文件夹上传：先创建目录结构
+      const dirsToCreate = new Set();
+      for (const file of files) {
+        const relativePath = file.webkitRelativePath;
+        if (relativePath) {
+          const pathParts = relativePath.split('/');
+          for (let i = 1; i < pathParts.length; i++) {
+            dirsToCreate.add(pathParts.slice(0, i).join('/'));
+          }
+        }
+      }
+
+      // 按路径长度排序，先创建父目录
+      const sortedDirs = Array.from(dirsToCreate).sort((a, b) => a.length - b.length);
+      if (sortedDirs.length > 0) {
+        // 一次性创建所有目录
+        const mkdirCmd = sortedDirs.map(d => `"${basePath}/${d}"`).join(' ');
+        try {
+          await sandboxClient.executeToolInTerminal(tag, 'run_command', {
+            command: `mkdir -p ${mkdirCmd}`
+          });
+        } catch (error) {
+          console.warn('创建目录失败:', error);
+        }
+      }
+    }
+
+    // 上传文件
     for (const file of files) {
       try {
+        const relativePath = file.webkitRelativePath || file.name;
+
+        // 计算目标路径
+        let actualTargetPath = basePath;
+        if (file.webkitRelativePath) {
+          // 文件夹上传：webkitRelativePath 包含完整相对路径，取其目录部分
+          const pathParts = relativePath.split('/');
+          if (pathParts.length > 1) {
+            const dirPart = pathParts.slice(0, -1).join('/');
+            actualTargetPath = `${basePath}/${dirPart}`;
+          }
+        }
+
         setTransferState({
           type: 'upload',
           fileName: file.name,
@@ -595,14 +797,8 @@ export const useSandbox = ({ addLog }) => {
           total: file.size,
         });
 
-        await sandboxClient.uploadFile(tag, file, targetPath, (progress) => {
+        await sandboxClient.uploadFile(tag, file, actualTargetPath, (progress) => {
           setTransferState(prev => prev ? { ...prev, ...progress } : null);
-        });
-
-        addLog({
-          type: 'data',
-          content: `文件已上传: ${targetPath}/${file.name}`,
-          status: 'success',
         });
 
       } catch (error) {
@@ -618,9 +814,16 @@ export const useSandbox = ({ addLog }) => {
       }
     }
 
+    // 上传完成提示
+    addLog({
+      type: 'data',
+      content: `已上传 ${files.length} 个文件到 ${basePath}`,
+      status: 'success',
+    });
+
     // Refresh file list after upload
     refreshSandboxFiles();
-  }, [fileTreeTag, currentTag, addLog, refreshSandboxFiles]);
+  }, [fileTreeTag, currentTag, addLog, refreshSandboxFiles, closeUploadDialog]);
 
   // Download file with progress tracking
   const downloadFileWithProgress = useCallback(async (filePath, fileName) => {
@@ -685,6 +888,84 @@ export const useSandbox = ({ addLog }) => {
     setTransferState(null);
   }, []);
 
+  // ============ File Watch Functions ============
+
+  // Start file watch for a terminal
+  const startFileWatch = useCallback((tag, path = '/workspace', onRefresh = null) => {
+    // 停止现有连接
+    if (fileWatchConnection) {
+      fileWatchConnection.close();
+    }
+
+    // 清除之前的刷新防抖定时器
+    if (fileWatchRefreshRef.current) {
+      clearTimeout(fileWatchRefreshRef.current);
+    }
+
+    const conn = sandboxClient.connectFileWatch(
+      tag,
+      path,
+      (event) => {
+        // 处理文件变化事件
+        if (event.type === 'file_change') {
+          console.log('[FileWatch] File changed:', event);
+
+          // 防抖：避免短时间内多次刷新
+          if (fileWatchRefreshRef.current) {
+            clearTimeout(fileWatchRefreshRef.current);
+          }
+
+          fileWatchRefreshRef.current = setTimeout(() => {
+            if (onRefresh) {
+              onRefresh();
+            }
+          }, 300);
+        } else if (event.type === 'watching') {
+          console.log('[FileWatch] Started watching:', event.path);
+        }
+      },
+      (error) => {
+        console.warn('[FileWatch] Error:', error);
+        // 连接断开时清理状态
+        setFileWatchConnection(null);
+      }
+    );
+
+    setFileWatchConnection(conn);
+    setFileWatchPath(path);
+
+    return conn;
+  }, [fileWatchConnection]);
+
+  // Stop file watch
+  const stopFileWatch = useCallback(() => {
+    if (fileWatchConnection) {
+      fileWatchConnection.close();
+      setFileWatchConnection(null);
+    }
+    if (fileWatchRefreshRef.current) {
+      clearTimeout(fileWatchRefreshRef.current);
+      fileWatchRefreshRef.current = null;
+    }
+  }, [fileWatchConnection]);
+
+  // Check if file watch is active
+  const isFileWatchActive = useCallback(() => {
+    return fileWatchConnection !== null;
+  }, [fileWatchConnection]);
+
+  // Cleanup file watch on unmount
+  useEffect(() => {
+    return () => {
+      if (fileWatchConnection) {
+        fileWatchConnection.close();
+      }
+      if (fileWatchRefreshRef.current) {
+        clearTimeout(fileWatchRefreshRef.current);
+      }
+    };
+  }, []);
+
   return {
     // Multi-terminal state
     terminals,
@@ -699,6 +980,7 @@ export const useSandbox = ({ addLog }) => {
     creatingTerminal,
     showCleanupConfirm,
     setShowCleanupConfirm,
+    lockStatus,
 
     // UI state
     sandboxEnabled,
@@ -746,10 +1028,17 @@ export const useSandbox = ({ addLog }) => {
     openFileTree,
     closeFileTree,
     openUploadDialog,
+    openUploadForTerminal,
     closeUploadDialog,
     uploadFilesWithProgress,
     downloadFileWithProgress,
     cancelTransfer,
+
+    // File watch functions
+    startFileWatch,
+    stopFileWatch,
+    isFileWatchActive,
+    fileWatchPath,
 
     // Helper functions
     isSandboxAvailable,
