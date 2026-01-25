@@ -231,7 +231,10 @@ export default function App() {
   const [apiInteractions, setApiInteractions] = useState([]);
   // 结构: [{ request: { messages, model, ... }, response: object, timestamp: number }, ...]
 
-  const [thinkingTab, setThinkingTab] = useState('thinking'); // 'thinking' | 'raw'
+  // 左右面板 Tab 状态
+  const [leftPanelTab, setLeftPanelTab] = useState('conversation'); // 'conversation' | 'thinking' | 'raw'
+  const [rightPanelTab, setRightPanelTab] = useState('records'); // 'records' | 'review' | 'examples' | 'report'
+  const [rightSubTab, setRightSubTab] = useState('llm'); // 'llm' | 'human' - 后三个 Tab 的子 Tab
 
   // 展开/折叠状态
   const [expandedThinking, setExpandedThinking] = useState(new Set());
@@ -4451,127 +4454,40 @@ print('\\n'.join(all_text))
           </div>
         )}
 
-        {/* 主面板 */}
-        <div className={`flex-1 grid grid-cols-1 ${thinkingEnabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4 min-h-0`}>
-          {/* 对话面板 */}
+        {/* 主面板 - 固定二列布局 */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
+          {/* 左列面板 - 对话/思考/原始响应 Tab 切换 */}
           <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
-            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
-              <span className="text-xs text-slate-400">🤖 被测模型：</span>
-              <span className="text-xs font-mono text-blue-400">
-                {mode === 'real'
-                  ? (CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel)
-                  : CONFIG.api.model}
-              </span>
-            </div>
-            <div ref={chatRef} className="flex-1 overflow-y-auto custom-scroll space-y-2 pr-1">
-              {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs ${
-                    msg.role === 'user'
-                      ? msg.isInjection ? 'bg-red-900/50 border border-red-500/40' : 'bg-blue-600'
-                      : msg.isDangerous ? 'bg-orange-900/50 border border-orange-500/40'
-                        : msg.isStreaming ? 'bg-slate-700/70 border border-blue-500/40' : 'bg-slate-700'
-                  }`}>
-                    <pre className="whitespace-pre-wrap break-all font-sans leading-relaxed">
-                      {msg.content}
-                      {msg.isStreaming && <span className="animate-pulse text-blue-400">▋</span>}
-                    </pre>
-                    {msg.isInjection && <div className="mt-1 text-red-300 text-xs">⚠️ 恶意注入</div>}
-                    {msg.isDangerous && <div className="mt-1 text-orange-300 text-xs">⚠️ 危险输出</div>}
-                  </div>
-                </div>
-              ))}
-              {typingMsg && (
-                <div className={`flex ${typingMsg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs ${
-                    typingMsg.role === 'user'
-                      ? typingMsg.isInjection ? 'bg-red-900/30 border border-red-500/30' : 'bg-blue-600/70'
-                      : 'bg-slate-700/70'
-                  }`}>
-                    <span className="whitespace-pre-wrap break-all font-sans leading-relaxed">{typingMsg.content}<span className="animate-pulse">▋</span></span>
-                  </div>
-                </div>
-              )}
-              {messages.length === 0 && !typingMsg && (
-                <div className="text-slate-500 text-center py-8">
-                  {mode === 'mock' ? '等待演示开始...' :
-                    dialogMode === 'multi' ? '点击「开始测试」发送 Payload' : '点击「执行测试」发送 Payload'}
-                </div>
-              )}
-            </div>
-
-            {/* 多轮对话输入框 */}
-            {mode === 'real' && dialogMode === 'multi' && conversationMode === 'active' && (
-              <div className="border-t border-slate-700 pt-2 mt-2 flex-shrink-0">
-                <div className="flex gap-2">
-                  <input
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        sendUserMessage();
-                      }
-                    }}
-                    placeholder="输入消息继续对话..."
-                    disabled={apiStatus === 'loading'}
-                    className={`flex-1 bg-slate-700 rounded px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                      apiStatus === 'loading' ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                  />
-                  <button
-                    onClick={sendUserMessage}
-                    disabled={apiStatus === 'loading' || !userInput.trim()}
-                    className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                      apiStatus === 'loading' || !userInput.trim()
-                        ? 'bg-slate-600 cursor-not-allowed text-slate-400'
-                        : 'bg-blue-600 hover:bg-blue-500 text-white'
-                    }`}
-                  >
-                    发送
-                  </button>
-                  {/* 文件上传按钮 */}
-                  <label className={`cursor-pointer px-2 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-xs transition ${
-                    apiStatus === 'loading' ? 'opacity-50 pointer-events-none' : ''
-                  }`}>
-                    <input
-                      type="file"
-                      multiple
-                      onChange={handleMultiRoundFileUpload}
-                      disabled={apiStatus === 'loading'}
-                      className="hidden"
-                    />
-                    📎
-                  </label>
-                </div>
+            {/* Tab 切换 */}
+            <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLeftPanelTab('conversation')}
+                  className={`text-xs px-2 py-1 rounded transition ${
+                    leftPanelTab === 'conversation' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  对话过程
+                </button>
+                <button
+                  onClick={() => setLeftPanelTab('thinking')}
+                  className={`text-xs px-2 py-1 rounded transition ${
+                    leftPanelTab === 'thinking' ? 'bg-purple-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  思考过程
+                </button>
+                <button
+                  onClick={() => setLeftPanelTab('raw')}
+                  className={`text-xs px-2 py-1 rounded transition ${
+                    leftPanelTab === 'raw' ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  原始响应
+                </button>
               </div>
-            )}
-          </div>
-
-          {/* 思考面板 - 仅在 thinking 启用时显示 */}
-          {thinkingEnabled && (
-            <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
-              {/* 标题栏 + Tab 切换 */}
-              <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  {/* Tab 按钮 */}
-                  <button
-                    onClick={() => setThinkingTab('thinking')}
-                    className={`text-xs px-2 py-1 rounded transition ${
-                      thinkingTab === 'thinking' ? 'bg-purple-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                    }`}
-                  >
-                    思考过程
-                  </button>
-                  <button
-                    onClick={() => setThinkingTab('raw')}
-                    className={`text-xs px-2 py-1 rounded transition ${
-                      thinkingTab === 'raw' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                    }`}
-                  >
-                    原始响应
-                  </button>
-                </div>
+              {/* 清空按钮 - 仅思考/原始时显示 */}
+              {leftPanelTab !== 'conversation' && (
                 <button
                   onClick={() => {
                     setThinkingEntries([]);
@@ -4584,373 +4500,694 @@ print('\\n'.join(all_text))
                 >
                   清空
                 </button>
-              </div>
+              )}
+            </div>
 
-              {/* 内容区 */}
+            {/* 内容区 - 根据 Tab 显示 */}
+            {leftPanelTab === 'conversation' && (
+              <>
+                {/* 被测模型信息 */}
+                <div className="flex items-center gap-2 mb-2 text-xs flex-shrink-0">
+                  <span className="text-slate-400">🤖 被测模型：</span>
+                  <span className="font-mono text-blue-400">
+                    {mode === 'real'
+                      ? (CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel)
+                      : CONFIG.api.model}
+                  </span>
+                </div>
+                <div ref={chatRef} className="flex-1 overflow-y-auto custom-scroll space-y-2 pr-1">
+                  {messages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs ${
+                        msg.role === 'user'
+                          ? msg.isInjection ? 'bg-red-900/50 border border-red-500/40' : 'bg-blue-600'
+                          : msg.isDangerous ? 'bg-orange-900/50 border border-orange-500/40'
+                            : msg.isStreaming ? 'bg-slate-700/70 border border-blue-500/40' : 'bg-slate-700'
+                      }`}>
+                        <pre className="whitespace-pre-wrap break-all font-sans leading-relaxed">
+                          {msg.content}
+                          {msg.isStreaming && <span className="animate-pulse text-blue-400">|</span>}
+                        </pre>
+                        {msg.isInjection && <div className="mt-1 text-red-300 text-xs">⚠️ 恶意注入</div>}
+                        {msg.isDangerous && <div className="mt-1 text-orange-300 text-xs">⚠️ 危险输出</div>}
+                      </div>
+                    </div>
+                  ))}
+                  {typingMsg && (
+                    <div className={`flex ${typingMsg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs ${
+                        typingMsg.role === 'user'
+                          ? typingMsg.isInjection ? 'bg-red-900/30 border border-red-500/30' : 'bg-blue-600/70'
+                          : 'bg-slate-700/70'
+                      }`}>
+                        <span className="whitespace-pre-wrap break-all font-sans leading-relaxed">{typingMsg.content}<span className="animate-pulse">|</span></span>
+                      </div>
+                    </div>
+                  )}
+                  {messages.length === 0 && !typingMsg && (
+                    <div className="text-slate-500 text-center py-8">
+                      {mode === 'mock' ? '等待演示开始...' :
+                        dialogMode === 'multi' ? '点击「开始测试」发送 Payload' : '点击「执行测试」发送 Payload'}
+                    </div>
+                  )}
+                </div>
+
+                {/* 多轮对话输入框 */}
+                {mode === 'real' && dialogMode === 'multi' && conversationMode === 'active' && (
+                  <div className="border-t border-slate-700 pt-2 mt-2 flex-shrink-0">
+                    <div className="flex gap-2">
+                      <input
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            sendUserMessage();
+                          }
+                        }}
+                        placeholder="输入消息继续对话..."
+                        disabled={apiStatus === 'loading'}
+                        className={`flex-1 bg-slate-700 rounded px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                          apiStatus === 'loading' ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      />
+                      <button
+                        onClick={sendUserMessage}
+                        disabled={apiStatus === 'loading' || !userInput.trim()}
+                        className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                          apiStatus === 'loading' || !userInput.trim()
+                            ? 'bg-slate-600 cursor-not-allowed text-slate-400'
+                            : 'bg-blue-600 hover:bg-blue-500 text-white'
+                        }`}
+                      >
+                        发送
+                      </button>
+                      {/* 文件上传按钮 */}
+                      <label className={`cursor-pointer px-2 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-xs transition ${
+                        apiStatus === 'loading' ? 'opacity-50 pointer-events-none' : ''
+                      }`}>
+                        <input
+                          type="file"
+                          multiple
+                          onChange={handleMultiRoundFileUpload}
+                          disabled={apiStatus === 'loading'}
+                          className="hidden"
+                        />
+                        📎
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {leftPanelTab === 'thinking' && (
               <div className="flex-1 overflow-y-auto custom-scroll font-mono text-xs pr-1">
-                {thinkingTab === 'thinking' ? (
-                  thinkingEntries.length > 0 ? (
-                    <div className="space-y-1">
-                      {thinkingEntries.map((entry, i) => {
-                        // 流式中强制展开，完成后默认折叠（可点击展开）
-                        const isExpanded = entry.isStreaming || expandedThinking.has(i);
-                        const toggleExpand = () => {
-                          if (entry.isStreaming) return; // 流式中不可折叠
-                          setExpandedThinking(prev => {
-                            const next = new Set(prev);
-                            if (next.has(i)) next.delete(i);
-                            else next.add(i);
-                            return next;
-                          });
-                        };
-                        return (
-                          <div key={i} className={`p-2 rounded border-l-2 bg-slate-700/50 ${entry.isStreaming ? 'border-pink-500' : 'border-purple-500'}`}>
-                            <div className="flex items-start">
-                              <span className={`inline-block w-12 flex-shrink-0 ${entry.isStreaming ? 'text-pink-400 animate-pulse' : 'text-pink-400'}`}>
-                                {entry.isStreaming ? '[流式]' : '[思考]'}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                {entry.isStreaming ? (
-                                  // 流式中：显示打字机效果
-                                  <>
-                                    <span className="text-slate-300">
-                                      模型正在思考中... ({entry.chars} 字符)
-                                    </span>
+                {thinkingEntries.length > 0 ? (
+                  <div className="space-y-1">
+                    {thinkingEntries.map((entry, i) => {
+                      const isExpanded = entry.isStreaming || expandedThinking.has(i);
+                      const toggleExpand = () => {
+                        if (entry.isStreaming) return;
+                        setExpandedThinking(prev => {
+                          const next = new Set(prev);
+                          if (next.has(i)) next.delete(i);
+                          else next.add(i);
+                          return next;
+                        });
+                      };
+                      return (
+                        <div key={i} className={`p-2 rounded border-l-2 bg-slate-700/50 ${entry.isStreaming ? 'border-pink-500' : 'border-purple-500'}`}>
+                          <div className="flex items-start">
+                            <span className={`inline-block w-12 flex-shrink-0 ${entry.isStreaming ? 'text-pink-400 animate-pulse' : 'text-pink-400'}`}>
+                              {entry.isStreaming ? '[流式]' : '[思考]'}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              {entry.isStreaming ? (
+                                <>
+                                  <span className="text-slate-300">
+                                    模型正在思考中... ({entry.chars} 字符)
+                                  </span>
+                                  <pre className="mt-2 text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
+                                    {entry.content}<span className="animate-pulse text-pink-400">|</span>
+                                  </pre>
+                                </>
+                              ) : (
+                                <>
+                                  <span
+                                    onClick={toggleExpand}
+                                    className="text-slate-300 cursor-pointer hover:text-white transition"
+                                  >
+                                    <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
+                                    模型思考过程 ({entry.chars} 字符)
+                                    <span className="text-slate-500 ml-1">(点击{isExpanded ? '折叠' : '展开'})</span>
+                                  </span>
+                                  {isExpanded && (
                                     <pre className="mt-2 text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
-                                      {entry.content}<span className="animate-pulse text-pink-400">▋</span>
+                                      {entry.content}
                                     </pre>
-                                  </>
-                                ) : (
-                                  // 完成后：可折叠
-                                  <>
-                                    <span
-                                      onClick={toggleExpand}
-                                      className="text-slate-300 cursor-pointer hover:text-white transition"
-                                    >
-                                      <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
-                                      模型思考过程 ({entry.chars} 字符)
-                                      <span className="text-slate-500 ml-1">(点击{isExpanded ? '折叠' : '展开'})</span>
-                                    </span>
-                                    {isExpanded && (
-                                      <pre className="mt-2 text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
-                                        {entry.content}
-                                      </pre>
-                                    )}
-                                  </>
-                                )}
-                              </div>
+                                  )}
+                                </>
+                              )}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-slate-500 text-center py-8">
-                      {apiStatus === 'loading' ? '等待模型思考...' : '暂无思考内容'}
-                    </div>
-                  )
+                        </div>
+                      );
+                    })}
+                  </div>
                 ) : (
-                  apiInteractions.length > 0 ? (
-                    <div className="space-y-1">
-                      {apiInteractions.map((entry, i) => {
-                        const isExpanded = expandedApiInteraction.has(i);
-                        const toggleExpand = () => {
-                          setExpandedApiInteraction(prev => {
-                            const next = new Set(prev);
-                            if (next.has(i)) next.delete(i);
-                            else next.add(i);
-                            return next;
-                          });
-                        };
-                        const interactionCount = entry.interactions?.length || 0;
-                        return (
-                          <div key={i} className={`p-2 rounded border-l-2 bg-slate-700/50 ${entry.isStreaming ? 'border-yellow-500' : 'border-blue-500'}`}>
-                            <div className="flex items-start">
-                              <span className="inline-block w-12 flex-shrink-0 text-blue-400">[API]</span>
-                              <div className="flex-1 min-w-0">
-                                <span
-                                  onClick={toggleExpand}
-                                  className="text-slate-300 cursor-pointer hover:text-white transition"
-                                >
-                                  <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
-                                  对话轮次 #{i + 1}
-                                  {interactionCount > 1 && <span className="text-slate-500 ml-1">({interactionCount} 次 API 调用)</span>}
-                                  {entry.isStreaming && <span className="text-yellow-400 ml-1 animate-pulse">▋</span>}
-                                  <span className="text-slate-500 ml-1">(点击{isExpanded ? '折叠' : '展开'})</span>
-                                </span>
-                                {isExpanded && entry.interactions && (
-                                  <div className="mt-2 space-y-3">
-                                    {entry.interactions.map((interaction, j) => (
-                                      <div key={j} className={`space-y-2 ${j > 0 ? 'pt-2 border-t border-slate-600' : ''}`}>
-                                        {interactionCount > 1 && (
-                                          <div className="text-xs text-slate-400">API 调用 #{j + 1}</div>
-                                        )}
-                                        {interaction.request && (
-                                          <div className="flex items-start -ml-12">
-                                            <span className="inline-block w-12 flex-shrink-0 text-xs text-cyan-400">call</span>
-                                            <div className="flex-1 min-w-0">
-                                              <JsonTree data={interaction.request} />
-                                            </div>
-                                          </div>
-                                        )}
-                                        {interaction.response && (
-                                          <div className="flex items-start -ml-12">
-                                            <span className="inline-block w-12 flex-shrink-0 text-xs text-blue-400">res</span>
-                                            <div className="flex-1 min-w-0">
-                                              <JsonTree data={interaction.response} />
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-slate-500 text-center py-8">
-                      {apiStatus === 'loading' ? '等待 API 响应...' : '暂无 API 响应'}
-                    </div>
-                  )
+                  <div className="text-slate-500 text-center py-8">
+                    {apiStatus === 'loading' ? '等待模型思考...' : '暂无思考内容'}
+                  </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* 测试记录面板 */}
+            {leftPanelTab === 'raw' && (
+              <div className="flex-1 overflow-y-auto custom-scroll font-mono text-xs pr-1">
+                {apiInteractions.length > 0 ? (
+                  <div className="space-y-1">
+                    {apiInteractions.map((entry, i) => {
+                      const isExpanded = expandedApiInteraction.has(i);
+                      const toggleExpand = () => {
+                        setExpandedApiInteraction(prev => {
+                          const next = new Set(prev);
+                          if (next.has(i)) next.delete(i);
+                          else next.add(i);
+                          return next;
+                        });
+                      };
+                      const interactionCount = entry.interactions?.length || 0;
+                      return (
+                        <div key={i} className={`p-2 rounded border-l-2 bg-slate-700/50 ${entry.isStreaming ? 'border-yellow-500' : 'border-blue-500'}`}>
+                          <div className="flex items-start">
+                            <span className="inline-block w-12 flex-shrink-0 text-blue-400">[API]</span>
+                            <div className="flex-1 min-w-0">
+                              <span
+                                onClick={toggleExpand}
+                                className="text-slate-300 cursor-pointer hover:text-white transition"
+                              >
+                                <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
+                                对话轮次 #{i + 1}
+                                {interactionCount > 1 && <span className="text-slate-500 ml-1">({interactionCount} 次 API 调用)</span>}
+                                {entry.isStreaming && <span className="text-yellow-400 ml-1 animate-pulse">|</span>}
+                                <span className="text-slate-500 ml-1">(点击{isExpanded ? '折叠' : '展开'})</span>
+                              </span>
+                              {isExpanded && entry.interactions && (
+                                <div className="mt-2 space-y-3">
+                                  {entry.interactions.map((interaction, j) => (
+                                    <div key={j} className={`space-y-2 ${j > 0 ? 'pt-2 border-t border-slate-600' : ''}`}>
+                                      {interactionCount > 1 && (
+                                        <div className="text-xs text-slate-400">API 调用 #{j + 1}</div>
+                                      )}
+                                      {interaction.request && (
+                                        <div className="flex items-start -ml-12">
+                                          <span className="inline-block w-12 flex-shrink-0 text-xs text-cyan-400">call</span>
+                                          <div className="flex-1 min-w-0">
+                                            <JsonTree data={interaction.request} />
+                                          </div>
+                                        </div>
+                                      )}
+                                      {interaction.response && (
+                                        <div className="flex items-start -ml-12">
+                                          <span className="inline-block w-12 flex-shrink-0 text-xs text-blue-400">res</span>
+                                          <div className="flex-1 min-w-0">
+                                            <JsonTree data={interaction.response} />
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-slate-500 text-center py-8">
+                    {apiStatus === 'loading' ? '等待 API 响应...' : '暂无 API 响应'}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 右列面板 - 执行日志/测试评审/样例编写/报告生成 */}
           <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
+            {/* Tab 切换 */}
             <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">测试记录</span>
-                <span className="text-xs text-slate-500">({testRecords.length})</span>
-              </div>
-              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setJudgeConfigOpen(true)}
-                  className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded transition flex items-center gap-1"
-                  title="评判设置"
+                  onClick={() => setRightPanelTab('records')}
+                  className={`text-xs px-2 py-1 rounded transition ${
+                    rightPanelTab === 'records' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
                 >
-                  <span>⚙️</span>
-                  <span>评判设置</span>
+                  执行日志
+                  {testRecords.length > 0 && (
+                    <span className="ml-1 text-slate-400">({testRecords.length})</span>
+                  )}
                 </button>
+                <button
+                  onClick={() => setRightPanelTab('review')}
+                  className={`text-xs px-2 py-1 rounded transition ${
+                    rightPanelTab === 'review' ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  测试评审
+                </button>
+                <button
+                  onClick={() => setRightPanelTab('examples')}
+                  className={`text-xs px-2 py-1 rounded transition ${
+                    rightPanelTab === 'examples' ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  样例编写
+                </button>
+                <button
+                  onClick={() => setRightPanelTab('report')}
+                  className={`text-xs px-2 py-1 rounded transition ${
+                    rightPanelTab === 'report' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  报告生成
+                </button>
+              </div>
+              {/* 清空按钮 - 仅执行日志时显示 */}
+              {rightPanelTab === 'records' && (
                 <button
                   onClick={() => { setTestRecords([]); setExpandedRecords(new Set()); thinkingIndexRef.current = 0; }}
                   className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded transition"
                 >
                   清空
                 </button>
-              </div>
+              )}
             </div>
 
-            {/* 测试记录列表 */}
-            <div ref={logRef} className="flex-1 overflow-y-auto custom-scroll space-y-1 font-mono text-xs pr-1">
-              {/* 调试信息 */}
-              {testRecords.length === 0 && (
-                <div className="text-slate-500 text-center py-4">
-                  暂无测试记录
-                </div>
-              )}
-              {testRecords.map((record) => {
-                const isExpanded = expandedRecords.has(record.id);
-                const toggleExpand = () => {
-                  setExpandedRecords(prev => {
-                    const next = new Set(prev);
-                    if (next.has(record.id)) next.delete(record.id);
-                    else next.add(record.id);
-                    return next;
-                  });
-                };
+            {/* 内容区 - 根据 Tab 显示 */}
+            {rightPanelTab === 'records' && (
+              <div ref={logRef} className="flex-1 overflow-y-auto custom-scroll space-y-1 font-mono text-xs pr-1">
+                {testRecords.length === 0 && (
+                  <div className="text-slate-500 text-center py-4">
+                    暂无执行日志
+                  </div>
+                )}
+                {testRecords.map((record) => {
+                  const isExpanded = expandedRecords.has(record.id);
+                  const toggleExpand = () => {
+                    setExpandedRecords(prev => {
+                      const next = new Set(prev);
+                      if (next.has(record.id)) next.delete(record.id);
+                      else next.add(record.id);
+                      return next;
+                    });
+                  };
 
-                // 根据记录类型决定样式
-                const getRecordStyle = () => {
-                  switch (record.type) {
-                    case 'thinking': return 'bg-pink-900/20 border-pink-500';
-                    case 'response': return record.meta?.isDangerous ? 'bg-red-900/30 border-red-500' : 'bg-blue-900/20 border-blue-500';
-                    case 'tool_call': return 'bg-purple-900/20 border-purple-500';
-                    case 'judge': return record.meta?.success ? 'bg-red-900/30 border-red-500' : 'bg-green-900/30 border-green-500';
-                    case 'timing': return 'bg-amber-900/20 border-amber-500';
-                    case 'error': return 'bg-red-900/30 border-red-500';
-                    default: return 'bg-slate-700/50 border-slate-500';
-                  }
-                };
+                  const getRecordStyle = () => {
+                    switch (record.type) {
+                      case 'thinking': return 'bg-pink-900/20 border-pink-500';
+                      case 'response': return record.meta?.isDangerous ? 'bg-red-900/30 border-red-500' : 'bg-blue-900/20 border-blue-500';
+                      case 'tool_call': return 'bg-purple-900/20 border-purple-500';
+                      case 'judge': return record.meta?.success ? 'bg-red-900/30 border-red-500' : 'bg-green-900/30 border-green-500';
+                      case 'timing': return 'bg-amber-900/20 border-amber-500';
+                      case 'error': return 'bg-red-900/30 border-red-500';
+                      default: return 'bg-slate-700/50 border-slate-500';
+                    }
+                  };
 
-                const getRecordIcon = () => {
-                  switch (record.type) {
-                    case 'thinking': return '🧠';
-                    case 'response': return '💬';
-                    case 'tool_call': return '🔧';
-                    case 'judge': return '⚖️';
-                    case 'timing': return '⏱️';
-                    case 'error': return '❌';
-                    default: return '📋';
-                  }
-                };
+                  const getRecordIcon = () => {
+                    switch (record.type) {
+                      case 'thinking': return '🧠';
+                      case 'response': return '💬';
+                      case 'tool_call': return '🔧';
+                      case 'judge': return '⚖️';
+                      case 'timing': return '⏱️';
+                      case 'error': return '❌';
+                      default: return '📋';
+                    }
+                  };
 
-                const hasFullContent = record.fullContent && record.fullContent !== record.summary;
+                  const hasFullContent = record.fullContent && record.fullContent !== record.summary;
 
-                // 跳转到思考面板
-                const jumpToThinking = () => {
-                  if (record.type === 'thinking' && record.meta?.thinkingIndex !== undefined) {
-                    setThinkingTab('thinking');
-                    setExpandedThinking(prev => new Set([...prev, record.meta.thinkingIndex]));
-                  }
-                };
+                  const jumpToThinking = () => {
+                    if (record.type === 'thinking' && record.meta?.thinkingIndex !== undefined) {
+                      setLeftPanelTab('thinking');
+                      setExpandedThinking(prev => new Set([...prev, record.meta.thinkingIndex]));
+                    }
+                  };
 
-                // 跳转到对话面板（滚动到对应消息）
-                const jumpToResponse = () => {
-                  // 滚动到对话区底部（最新回答通常在底部）
-                  const chatArea = document.querySelector('.chat-messages');
-                  if (chatArea) {
-                    chatArea.scrollTop = chatArea.scrollHeight;
-                  }
-                };
+                  const jumpToResponse = () => {
+                    setLeftPanelTab('conversation');
+                    setTimeout(() => {
+                      if (chatRef.current) {
+                        chatRef.current.scrollTop = chatRef.current.scrollHeight;
+                      }
+                    }, 100);
+                  };
 
-                return (
-                  <div
-                    key={record.id}
-                    className={`p-2 rounded border-l-2 ${getRecordStyle()}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start flex-1 min-w-0">
-                        {/* 序号标签 */}
-                        <span className="inline-block w-6 flex-shrink-0 text-slate-500 text-[10px]">#{record.seq + 1}</span>
-                        <span className="inline-block w-6 flex-shrink-0 text-center">{getRecordIcon()}</span>
-                        <div className="flex-1 min-w-0">
-                          {hasFullContent ? (
-                            <span
-                              onClick={toggleExpand}
-                              className="text-slate-300 cursor-pointer hover:text-white transition"
-                            >
-                              <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
-                              {record.summary}
-                              {record.meta?.chars && (
-                                <span className="text-slate-500 ml-1">({record.meta.chars}字)</span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 break-all">{record.summary}</span>
-                          )}
-                          {/* 跳转链接 */}
-                          {record.type === 'thinking' && record.meta?.thinkingIndex !== undefined && !record.meta?.isStreaming && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); jumpToThinking(); }}
-                              className="ml-2 text-pink-400 hover:text-pink-300 text-[10px]"
-                              title="跳转到思考面板"
-                            >
-                              [查看]
-                            </button>
-                          )}
-                          {record.type === 'response' && !record.meta?.isStreaming && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); jumpToResponse(); }}
-                              className="ml-2 text-blue-400 hover:text-blue-300 text-[10px]"
-                              title="跳转到对话"
-                            >
-                              [查看]
-                            </button>
-                          )}
-                          {hasFullContent && isExpanded && (
-                            <pre className="mt-2 p-2 bg-slate-900/50 rounded text-slate-400 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
-                              {record.fullContent}
-                            </pre>
-                          )}
-                          {/* 批注显示 */}
-                          {record.annotations && record.annotations.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                              {record.annotations.map((ann) => (
-                                <div key={ann.id} className="flex items-start gap-1 text-xs">
-                                  <span className={ann.source === 'llm' ? 'text-cyan-400' : 'text-yellow-400'}>
-                                    [{ann.source === 'llm' ? 'LLM' : ann.author}]
-                                  </span>
-                                  <span className="text-slate-400">{ann.content}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                  return (
+                    <div
+                      key={record.id}
+                      className={`p-2 rounded border-l-2 ${getRecordStyle()}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start flex-1 min-w-0">
+                          <span className="inline-block w-6 flex-shrink-0 text-slate-500 text-[10px]">#{record.seq + 1}</span>
+                          <span className="inline-block w-6 flex-shrink-0 text-center">{getRecordIcon()}</span>
+                          <div className="flex-1 min-w-0">
+                            {hasFullContent ? (
+                              <span
+                                onClick={toggleExpand}
+                                className="text-slate-300 cursor-pointer hover:text-white transition"
+                              >
+                                <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
+                                {record.summary}
+                                {record.meta?.chars && (
+                                  <span className="text-slate-500 ml-1">({record.meta.chars}字)</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 break-all">{record.summary}</span>
+                            )}
+                            {record.type === 'thinking' && record.meta?.thinkingIndex !== undefined && !record.meta?.isStreaming && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); jumpToThinking(); }}
+                                className="ml-2 text-pink-400 hover:text-pink-300 text-[10px]"
+                                title="跳转到思考面板"
+                              >
+                                [查看]
+                              </button>
+                            )}
+                            {record.type === 'response' && !record.meta?.isStreaming && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); jumpToResponse(); }}
+                                className="ml-2 text-blue-400 hover:text-blue-300 text-[10px]"
+                                title="跳转到对话"
+                              >
+                                [查看]
+                              </button>
+                            )}
+                            {hasFullContent && isExpanded && (
+                              <pre className="mt-2 p-2 bg-slate-900/50 rounded text-slate-400 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
+                                {record.fullContent}
+                              </pre>
+                            )}
+                            {record.annotations && record.annotations.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {record.annotations.map((ann) => (
+                                  <div key={ann.id} className="flex items-start gap-1 text-xs">
+                                    <span className={ann.source === 'llm' ? 'text-cyan-400' : 'text-yellow-400'}>
+                                      [{ann.source === 'llm' ? 'LLM' : ann.author}]
+                                    </span>
+                                    <span className="text-slate-400">{ann.content}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAnnotationModal({ open: true, recordId: record.id });
+                          }}
+                          className="text-xs px-1.5 py-0.5 bg-slate-600 hover:bg-slate-500 rounded transition opacity-60 hover:opacity-100"
+                          title="添加批注"
+                        >
+                          📝
+                        </button>
                       </div>
-                      {/* 批注按钮 */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setAnnotationModal({ open: true, recordId: record.id });
-                        }}
-                        className="text-xs px-1.5 py-0.5 bg-slate-600 hover:bg-slate-500 rounded transition opacity-60 hover:opacity-100"
-                        title="添加批注"
-                      >
-                        📝
-                      </button>
                     </div>
-                  </div>
-                );
-              })}
-              {testRecords.length === 0 && (
-                <div className="text-slate-500 text-center py-8">暂无测试记录</div>
-              )}
-            </div>
-
-            {/* 人类评判区 */}
-            <div className="mt-3 pt-3 border-t border-slate-700">
-              <div className="text-xs text-slate-400 mb-2 flex items-center gap-1">
-                <span>👤</span>
-                <span>人类评判</span>
+                  );
+                })}
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-500 w-16">Auditor:</label>
-                  <input
-                    type="text"
-                    value={humanJudgment.auditorCode}
-                    onChange={(e) => setHumanJudgment(prev => ({ ...prev, auditorCode: e.target.value }))}
-                    placeholder="代号"
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-500 w-16">评分:</label>
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        onClick={() => setHumanJudgment(prev => ({ ...prev, score: star }))}
-                        className={`text-lg transition ${
-                          humanJudgment.score >= star ? 'text-yellow-400' : 'text-slate-600'
-                        } hover:text-yellow-300`}
-                      >
-                        ★
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <label className="text-xs text-slate-500 w-16 pt-1">总结:</label>
-                  <textarea
-                    value={humanJudgment.summary}
-                    onChange={(e) => setHumanJudgment(prev => ({ ...prev, summary: e.target.value }))}
-                    placeholder="评判总结..."
-                    rows={2}
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500 resize-none"
-                  />
-                </div>
-                <div className="flex justify-end">
+            )}
+
+            {/* 测试评审 Tab */}
+            {rightPanelTab === 'review' && (
+              <div className="flex-1 flex flex-col min-h-0">
+                {/* 子 Tab 切换 */}
+                <div className="flex items-center gap-1 mb-2 flex-shrink-0">
                   <button
-                    onClick={submitHumanJudgment}
-                    disabled={!humanJudgment.auditorCode || !humanJudgment.score}
-                    className={`text-xs px-3 py-1 rounded transition ${
-                      humanJudgment.auditorCode && humanJudgment.score
-                        ? 'bg-blue-600 hover:bg-blue-500'
-                        : 'bg-slate-700 cursor-not-allowed text-slate-500'
+                    onClick={() => setRightSubTab('llm')}
+                    className={`text-xs px-2 py-0.5 rounded transition ${
+                      rightSubTab === 'llm' ? 'bg-cyan-600/30 text-cyan-400 border border-cyan-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
                     }`}
                   >
-                    提交评判
+                    🤖 LLM 辅助
+                  </button>
+                  <button
+                    onClick={() => setRightSubTab('human')}
+                    className={`text-xs px-2 py-0.5 rounded transition ${
+                      rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                    }`}
+                  >
+                    👤 人工修改
                   </button>
                 </div>
+                {/* 子 Tab 内容 */}
+                <div className="flex-1 overflow-y-auto custom-scroll">
+                  {rightSubTab === 'llm' && (
+                    <div className="space-y-3 p-1">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500 w-16">模型:</label>
+                        <input
+                          type="text"
+                          value={judgeConfig.model}
+                          onChange={(e) => setJudgeConfig(prev => ({ ...prev, model: e.target.value }))}
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
+                        />
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <label className="text-xs text-slate-500 w-16 pt-1">提示词:</label>
+                        <textarea
+                          value={judgeConfig.systemPrompt}
+                          onChange={(e) => setJudgeConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
+                          rows={6}
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-cyan-500 resize-none font-mono"
+                        />
+                      </div>
+                      <div className="text-slate-500 text-xs">
+                        LLM 将基于执行日志自动生成评审意见
+                      </div>
+                      <div className="flex justify-end">
+                        <button className="text-xs px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 transition">
+                          生成评审
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {rightSubTab === 'human' && (
+                    <div className="space-y-3 p-1">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500 w-16">评审员:</label>
+                        <input
+                          type="text"
+                          value={humanJudgment.auditorCode}
+                          onChange={(e) => setHumanJudgment(prev => ({ ...prev, auditorCode: e.target.value }))}
+                          placeholder="代号"
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-yellow-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500 w-16">评分:</label>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              onClick={() => setHumanJudgment(prev => ({ ...prev, score: star }))}
+                              className={`text-lg transition ${
+                                humanJudgment.score >= star ? 'text-yellow-400' : 'text-slate-600'
+                              } hover:text-yellow-300`}
+                            >
+                              ★
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <label className="text-xs text-slate-500 w-16 pt-1">总结:</label>
+                        <textarea
+                          value={humanJudgment.summary}
+                          onChange={(e) => setHumanJudgment(prev => ({ ...prev, summary: e.target.value }))}
+                          placeholder="评审总结（可基于 LLM 建议修改）..."
+                          rows={6}
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-yellow-500 resize-none"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          onClick={submitHumanJudgment}
+                          disabled={!humanJudgment.auditorCode || !humanJudgment.score}
+                          className={`text-xs px-3 py-1 rounded transition ${
+                            humanJudgment.auditorCode && humanJudgment.score
+                              ? 'bg-yellow-600 hover:bg-yellow-500'
+                              : 'bg-slate-700 cursor-not-allowed text-slate-500'
+                          }`}
+                        >
+                          提交评审
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* 样例编写 Tab */}
+            {rightPanelTab === 'examples' && (
+              <div className="flex-1 flex flex-col min-h-0">
+                {/* 子 Tab 切换 */}
+                <div className="flex items-center gap-1 mb-2 flex-shrink-0">
+                  <button
+                    onClick={() => setRightSubTab('llm')}
+                    className={`text-xs px-2 py-0.5 rounded transition ${
+                      rightSubTab === 'llm' ? 'bg-amber-600/30 text-amber-400 border border-amber-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                    }`}
+                  >
+                    🤖 LLM 辅助
+                  </button>
+                  <button
+                    onClick={() => setRightSubTab('human')}
+                    className={`text-xs px-2 py-0.5 rounded transition ${
+                      rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                    }`}
+                  >
+                    👤 人工修改
+                  </button>
+                </div>
+                {/* 子 Tab 内容 */}
+                <div className="flex-1 overflow-y-auto custom-scroll">
+                  {rightSubTab === 'llm' && (
+                    <div className="space-y-3 p-1">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500 w-16">模型:</label>
+                        <input
+                          type="text"
+                          placeholder="样例生成模型"
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-amber-500 font-mono"
+                        />
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <label className="text-xs text-slate-500 w-16 pt-1">提示词:</label>
+                        <textarea
+                          placeholder="描述需要生成的样例类型..."
+                          rows={6}
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-amber-500 resize-none font-mono"
+                        />
+                      </div>
+                      <div className="text-slate-500 text-xs">
+                        LLM 将基于当前测试场景生成攻击样例
+                      </div>
+                      <div className="flex justify-end">
+                        <button className="text-xs px-3 py-1 rounded bg-amber-600 hover:bg-amber-500 transition">
+                          生成样例
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {rightSubTab === 'human' && (
+                    <div className="space-y-3 p-1">
+                      <div className="flex items-start gap-2">
+                        <label className="text-xs text-slate-500 w-16 pt-1">样例:</label>
+                        <textarea
+                          placeholder="在此编辑样例内容（可基于 LLM 生成结果修改）..."
+                          rows={10}
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-yellow-500 resize-none font-mono"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button className="text-xs px-3 py-1 rounded bg-slate-600 hover:bg-slate-500 transition">
+                          预览
+                        </button>
+                        <button className="text-xs px-3 py-1 rounded bg-yellow-600 hover:bg-yellow-500 transition">
+                          保存样例
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 报告生成 Tab */}
+            {rightPanelTab === 'report' && (
+              <div className="flex-1 flex flex-col min-h-0">
+                {/* 子 Tab 切换 */}
+                <div className="flex items-center gap-1 mb-2 flex-shrink-0">
+                  <button
+                    onClick={() => setRightSubTab('llm')}
+                    className={`text-xs px-2 py-0.5 rounded transition ${
+                      rightSubTab === 'llm' ? 'bg-emerald-600/30 text-emerald-400 border border-emerald-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                    }`}
+                  >
+                    🤖 LLM 辅助
+                  </button>
+                  <button
+                    onClick={() => setRightSubTab('human')}
+                    className={`text-xs px-2 py-0.5 rounded transition ${
+                      rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                    }`}
+                  >
+                    👤 人工修改
+                  </button>
+                </div>
+                {/* 子 Tab 内容 */}
+                <div className="flex-1 overflow-y-auto custom-scroll">
+                  {rightSubTab === 'llm' && (
+                    <div className="space-y-3 p-1">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500 w-16">模型:</label>
+                        <input
+                          type="text"
+                          placeholder="报告生成模型"
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <label className="text-xs text-slate-500 w-16 pt-1">提示词:</label>
+                        <textarea
+                          placeholder="描述报告格式和重点内容..."
+                          rows={6}
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-emerald-500 resize-none font-mono"
+                        />
+                      </div>
+                      <div className="text-slate-500 text-xs">
+                        LLM 将汇总测试结果生成报告草稿
+                      </div>
+                      <div className="flex justify-end">
+                        <button className="text-xs px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 transition">
+                          生成报告
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {rightSubTab === 'human' && (
+                    <div className="space-y-3 p-1">
+                      <div className="flex items-start gap-2">
+                        <label className="text-xs text-slate-500 w-16 pt-1">报告:</label>
+                        <textarea
+                          placeholder="在此编辑报告内容（可基于 LLM 生成结果修改）..."
+                          rows={10}
+                          className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-yellow-500 resize-none font-mono"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button className="text-xs px-3 py-1 rounded bg-slate-600 hover:bg-slate-500 transition">
+                          预览
+                        </button>
+                        <button className="text-xs px-3 py-1 rounded bg-yellow-600 hover:bg-yellow-500 transition">
+                          导出报告
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         </>
