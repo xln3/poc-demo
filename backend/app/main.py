@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import sandbox, mcp, rag, cases
+from .routers import sandbox, mcp, rag, cases, datasets, test_results
 from .services.container import container_manager
 
 
@@ -39,6 +39,8 @@ app.include_router(sandbox.router)
 app.include_router(mcp.router)
 app.include_router(rag.router)
 app.include_router(cases.router)
+app.include_router(datasets.router)
+app.include_router(test_results.router)
 
 
 @app.get("/")

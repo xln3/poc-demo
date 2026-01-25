@@ -75,6 +75,7 @@ cd backend && ./run.sh
 | [TERMINAL.md](./TERMINAL.md) | F3 终端运行模块：架构、API、安全、扩展展望 | 后端/安全开发者 |
 | [SCENARIOS.md](./SCENARIOS.md) | 场景数据结构、Builder 模式、扩展指南 | 场景开发者 |
 | [TEST-CASE-SCHEMA.md](./TEST-CASE-SCHEMA.md) | 测试用例 JSON 格式规范、回放功能 | 所有开发者/外行 |
+| [BATCH-TESTING.md](./BATCH-TESTING.md) | 批量测试模块：执行流程、状态管理、API | 前后端开发者 |
 | [CONFIG.md](./CONFIG.md) | 配置项完整参考、环境变量说明 | 运维/配置人员 |
 | [API-REFERENCE.md](./API-REFERENCE.md) | API 接口文档、请求响应示例 | 前后端开发者 |
 | [CHANGELOG.md](./CHANGELOG.md) | 变更日志、文档维护规范 | 所有贡献者 |

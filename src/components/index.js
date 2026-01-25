@@ -7,5 +7,14 @@
 // - DocumentViewer: Document tabs and content
 // - ConfigPanels: MCP, RAG, Tools configuration panels
 
-// Currently empty - components remain in App.jsx
-// This file serves as a placeholder for future component extraction
+// Dataset management components
+export { CapabilityTabs } from './CapabilityTabs.jsx';
+export { DatasetList } from './DatasetList.jsx';
+export { DatasetDetailModal } from './DatasetDetailModal.jsx';
+export { CaseBrowser } from './CaseBrowser.jsx';
+
+// Batch testing
+export { BatchTestModal } from './BatchTestModal.jsx';
+
+// Toast notification
+export { default as Toast } from './Toast.jsx';

@@ -1,13 +1,25 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { CONFIG, ATTACK_TYPES, RISK_LEVELS, LOG_TYPES } from './config';
 import { SCENARIOS, SCENARIOS_BY_LEVEL, CapabilityLevelNames } from './scenarios/index.js';
 import { sandboxClient, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
 import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
+import { listTestResults, getTestResult, saveTestResult, deleteTestResult } from './testResultsApi.js';
 import { mcpClient } from './mcp.js';
 import { exportReport, exportHTML } from './utils/index.js';
-import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast } from './hooks/index.js';
+import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast, useDatasets, CAPABILITY_CONFIG, useTestExecution, ExecutionMode } from './hooks/index.js';
+import {
+  buildTestInput,
+  buildRecordingSession,
+  createStandaloneTestCase,
+  downloadAsJSON,
+  importFromFileDialog,
+  detectSchemaVersion,
+  SCHEMA_VERSION,
+} from './schemas/testCase.js';
 import Toast from './components/Toast.jsx';
+import { CapabilityTabs, DatasetList, DatasetDetailModal, BatchTestModal } from './components/index.js';
 import {
   TerminalItem,
   DeletedTerminalsPanel,
@@ -558,6 +570,26 @@ export default function App() {
   const [toolsConfigCollapsed, setToolsConfigCollapsed] = useState(true);
   const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false);
 
+  // 录制相关状态
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState(null);
+  const [lastRecording, setLastRecording] = useState(null); // 最近一次录制结果
+  const [showImportMenu, setShowImportMenu] = useState(false); // 导入测试下拉菜单
+  const [showSaveDialog, setShowSaveDialog] = useState(false); // 保存对话框
+  const [showBatchTestModal, setShowBatchTestModal] = useState(false); // 批量测试弹窗
+
+  // 批量测试状态
+  const [batchTestQueue, setBatchTestQueue] = useState([]); // 待测试用例队列
+  const [batchTestIndex, setBatchTestIndex] = useState(-1); // 当前索引，-1 表示未开始
+  const [batchTestResults, setBatchTestResults] = useState([]); // 测试结果
+  const [batchTestPaused, setBatchTestPaused] = useState(false);
+  const batchTestStopRef = useRef(false);
+  const batchTestPausedRef = useRef(false);
+
+  // 已保存的测试结果列表
+  const [savedTestResults, setSavedTestResults] = useState([]);
+  const [selectedTestResult, setSelectedTestResult] = useState(null);
+
   // API 请求计时器
   const [apiStartTime, setApiStartTime] = useState(null);
   const [apiElapsedTime, setApiElapsedTime] = useState(0);
@@ -683,6 +715,387 @@ export default function App() {
     startPlayback, stopPlayback, exitPlayback, skipToEnd
   } = playback;
 
+  // Datasets hook - 数据集管理
+  const datasets = useDatasets();
+  const {
+    datasets: datasetList,
+    filteredDatasets,
+    selectedDataset,
+    selectedCapabilities,
+    isLoading: datasetsLoading,
+    error: datasetsError,
+    loadDatasets,
+    loadDatasetDetail,
+    exportDataset,
+    removeDataset,
+    importDatasetFromFile,
+    importDatasetFromJSON,
+    toggleCapability,
+    clearCapabilityFilter,
+    setSelectedDataset,
+    formatSize,
+  } = datasets;
+
+  // 数据集详情弹窗状态
+  const [showDatasetDetail, setShowDatasetDetail] = useState(false);
+
+  // 当前导入的测试用例（来自数据集）
+  const [importedTestCase, setImportedTestCase] = useState(null);
+
+  // 数据集相关操作
+  const handleViewDataset = useCallback(async (datasetId) => {
+    await loadDatasetDetail(datasetId);
+    setShowDatasetDetail(true);
+  }, [loadDatasetDetail]);
+
+  const handleSelectCaseFromDataset = useCallback((dataset, caseItem) => {
+    setImportedTestCase({
+      dataset,
+      case: caseItem,
+    });
+    setShowDatasetDetail(false);
+    addToast(`已选择用例: ${caseItem.name || '未命名'}`, 'success');
+  }, [addToast]);
+
+  // 应用导入的测试用例配置到 UI 状态
+  const applyImportedTestCase = useCallback(() => {
+    if (!importedTestCase?.case) {
+      addToast('没有选择测试用例', 'error');
+      return false;
+    }
+
+    const testCase = importedTestCase.case;
+    const input = testCase.input;
+
+    if (!input) {
+      addToast('测试用例缺少 input 配置', 'error');
+      return false;
+    }
+
+    // 应用 LLM 配置
+    if (input.llmConfig) {
+      const llm = input.llmConfig;
+      if (llm.modelId) {
+        const modelExists = CONFIG.models.some(m => m.id === llm.modelId);
+        if (modelExists) {
+          setSelectedModel(llm.modelId);
+        }
+      }
+      if (llm.temperature !== undefined) setLlmTemperature(llm.temperature);
+      if (llm.maxTokens !== undefined) setLlmMaxTokens(llm.maxTokens);
+      if (llm.topP !== undefined) setLlmTopP(llm.topP);
+      if (llm.thinking) {
+        setThinkingEnabled(llm.thinking.enabled || false);
+        setThinkingBudget(llm.thinking.budgetTokens || 10000);
+      }
+    }
+
+    // 应用系统提示词
+    if (input.systemPrompt?.active) {
+      setCustomSystemPrompt(input.systemPrompt.active);
+    } else if (input.systemPrompt?.original) {
+      setCustomSystemPrompt(input.systemPrompt.original);
+    }
+
+    // 应用 payload
+    if (input.payload?.displayText) {
+      setCustomTestPayload(input.payload.displayText);
+    } else if (input.attack?.predefinedPayload?.display) {
+      setCustomTestPayload(input.attack.predefinedPayload.display);
+    }
+
+    // 应用工具配置
+    const tools = input.capabilities?.toolCalling;
+    if (tools) {
+      setToolsEnabled(tools.enabled || false);
+      if (tools.enabledTools) {
+        setEnabledTools(tools.enabledTools);
+      }
+      if (tools.maxCalls) {
+        setMaxToolCalls(tools.maxCalls);
+      }
+    } else {
+      setToolsEnabled(false);
+    }
+
+    // 应用沙箱配置
+    const sandbox = input.capabilities?.sandbox;
+    if (sandbox) {
+      setSandboxEnabled(sandbox.enabled || false);
+      if (sandbox.image) {
+        setSandboxImage(sandbox.image);
+      }
+    } else {
+      setSandboxEnabled(false);
+    }
+
+    // 应用 RAG 配置
+    const rag = input.capabilities?.rag;
+    if (rag) {
+      setRagEnabled(rag.enabled || false);
+      setRagMode(rag.mode || 'mock');
+      if (rag.mockKnowledge) {
+        setRagKnowledge(rag.mockKnowledge);
+      }
+    } else {
+      setRagEnabled(false);
+    }
+
+    // 应用 MCP 配置
+    const mcp = input.capabilities?.mcp;
+    if (mcp) {
+      setMcpEnabled(mcp.parserEnabled || false);
+      if (mcp.selectedParsers) {
+        setMcpParsers(mcp.selectedParsers);
+      }
+      setMcpServerEnabled(mcp.serverEnabled || false);
+      if (mcp.selectedServer) {
+        setSelectedMcpServer(mcp.selectedServer);
+      }
+    } else {
+      setMcpEnabled(false);
+      setMcpServerEnabled(false);
+    }
+
+    // 清空消息和日志
+    setMessages([]);
+    setLogs([]);
+    setToolCallHistory([]);
+    setApiStatus('idle');
+    setRealResponse('');
+    setLastTestResult(null);
+
+    addToast(`已加载用例配置: ${testCase.name || '未命名'}`, 'success');
+    return true;
+  }, [
+    importedTestCase, addToast,
+    setSelectedModel, setLlmTemperature, setLlmMaxTokens, setLlmTopP,
+    setThinkingEnabled, setThinkingBudget, setCustomSystemPrompt, setCustomTestPayload,
+    setToolsEnabled, setEnabledTools, setMaxToolCalls,
+    setSandboxEnabled, setSandboxImage,
+    setRagEnabled, setRagMode, setRagKnowledge,
+    setMcpEnabled, setMcpParsers, setMcpServerEnabled, setSelectedMcpServer,
+    setMessages, setLogs, setToolCallHistory, setApiStatus, setRealResponse, setLastTestResult,
+  ]);
+
+  const handleExportCaseFromDataset = useCallback(async (caseId) => {
+    if (selectedDataset) {
+      await datasets.exportCase(selectedDataset.id || selectedDataset.meta?.datasetId, caseId);
+    }
+  }, [selectedDataset, datasets]);
+
+  // 下载数据集模板
+  const handleDownloadTemplate = useCallback(() => {
+    const link = document.createElement('a');
+    link.href = '/templates/dataset-template.json';
+    link.download = 'dataset-template.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addToast('模板下载中...', 'info');
+  }, [addToast]);
+
+  // ========== 导入/导出测试功能 ==========
+
+  // 导出当前测试配置
+  const exportCurrentTest = useCallback(async () => {
+    try {
+      const input = await buildTestInput({
+        // 场景信息
+        capabilityLevel: expanded.type,
+        scenarioKey: selectedAttack.scenario,
+        attackIndex: selectedAttack.index,
+        scenario: currentScenario,
+        attack: currentAttack,
+        // LLM 配置
+        selectedModel,
+        modelName: CONFIG.models.find(m => m.id === selectedModel)?.name,
+        llmTemperature,
+        llmMaxTokens,
+        llmTopP,
+        thinkingEnabled,
+        thinkingBudget,
+        // 系统提示词
+        originalSystemPrompt: currentScenario?.systemPrompt,
+        customSystemPrompt,
+        // Payload
+        payloadSource: customTestPayload !== currentAttack?.testPayload ? 'custom_text' : 'predefined',
+        displayPayload: customTestPayload || currentAttack?.testPayload,
+        actualPayload: customTestPayload || currentAttack?.realTestPayload || currentAttack?.testPayload,
+        payloadFile: payloadFiles[0] || null,
+        // 能力配置
+        toolsEnabled,
+        enabledTools,
+        maxToolCalls,
+        sandboxEnabled,
+        sandboxImage,
+        ragEnabled,
+        ragMode,
+        ragKnowledge,
+        mcpEnabled,
+        mcpParsers,
+        mcpServerEnabled,
+        selectedMcpServer,
+      });
+
+      const filename = `test-input-${currentAttack?.name || 'case'}-${new Date().toISOString().slice(0, 10)}.json`;
+      downloadAsJSON(input, filename);
+      addToast('测试配置已导出', 'success');
+    } catch (error) {
+      console.error('导出失败:', error);
+      addToast('导出失败: ' + error.message, 'error');
+    }
+  }, [
+    expanded.type, selectedAttack, currentScenario, currentAttack,
+    selectedModel, llmTemperature, llmMaxTokens, llmTopP, thinkingEnabled, thinkingBudget,
+    customSystemPrompt, customTestPayload, payloadFiles,
+    toolsEnabled, enabledTools, maxToolCalls,
+    sandboxEnabled, sandboxImage, ragEnabled, ragMode, ragKnowledge,
+    mcpEnabled, mcpParsers, mcpServerEnabled, selectedMcpServer, addToast,
+  ]);
+
+  // 从文件导入测试
+  const importTestFromFile = useCallback(async () => {
+    try {
+      const data = await importFromFileDialog();
+      if (!data) return;
+
+      const { version, type } = detectSchemaVersion(data);
+
+      // 根据类型处理
+      if (type === 'Dataset') {
+        // 导入数据集
+        await importDatasetFromJSON(data);
+        addToast(`已导入数据集: ${data.meta?.name || '未命名'}，包含 ${data.cases?.length || 0} 个用例`, 'success');
+        setViewMode('datasets');
+      } else if (type === 'TestCase' || type === 'TestInput' || version === '1.0.0') {
+        // 导入单个测试用例
+        const testCase = type === 'TestInput' ? { input: data, criteria: {} } : data;
+        setImportedTestCase({ dataset: null, case: testCase });
+        addToast(`已导入测试用例`, 'success');
+      } else if (type === 'PlaybackSequence' || type === 'RecordingSession') {
+        // 导入录制数据 - 进入回放模式
+        await startPlayback(data);
+        addToast('已加载录制数据，开始回放', 'success');
+      } else {
+        addToast('未知的文件格式', 'error');
+      }
+    } catch (error) {
+      console.error('导入失败:', error);
+      addToast('导入失败: ' + error.message, 'error');
+    }
+  }, [importDatasetFromJSON, addToast, setViewMode, startPlayback]);
+
+  // 开始录制
+  const startRecording = useCallback(() => {
+    setIsRecording(true);
+    setRecordingStartTime(Date.now());
+    setLastRecording(null);
+    // 清空状态
+    setMessages([]);
+    setLogs([]);
+    setToolCallHistory([]);
+    setApiStatus('idle');
+    setRealResponse('');
+    setLastTestResult(null);
+    addToast('开始录制测试', 'info');
+  }, [addToast]);
+
+  // 停止录制并生成录制结果
+  const stopRecording = useCallback(async () => {
+    if (!isRecording) return null;
+
+    setIsRecording(false);
+
+    // 构建录制会话
+    const recording = await buildRecordingSession({
+      caseId: importedTestCase?.case?.id || `recording-${Date.now()}`,
+      states: [{
+        timestamp: new Date(recordingStartTime).toISOString(),
+        phase: 'completed',
+        ui: {
+          messages: [...messages],
+          logs: [...logs],
+        },
+        toolCalls: {
+          history: [...toolCallHistory],
+        },
+        result: {
+          response: realResponse,
+          judgment: lastTestResult?.judgment,
+        },
+      }],
+      result: {
+        status: lastTestResult?.judgment?.success ? 'success' : 'completed',
+        finalResponse: realResponse,
+        judgment: lastTestResult?.judgment,
+        timing: {
+          totalMs: Date.now() - recordingStartTime,
+        },
+      },
+      startedAt: new Date(recordingStartTime).toISOString(),
+      completedAt: new Date().toISOString(),
+    });
+
+    setLastRecording(recording);
+    addToast('录制完成，可保存测试', 'success');
+    return recording;
+  }, [isRecording, recordingStartTime, messages, logs, toolCallHistory, realResponse, lastTestResult, importedTestCase, addToast]);
+
+  // 保存录制结果
+  const saveRecordingToFile = useCallback(async (name) => {
+    if (!lastRecording) {
+      addToast('没有可保存的录制', 'error');
+      return;
+    }
+
+    try {
+      // 构建完整测试用例（包含录制）
+      const testCase = createStandaloneTestCase({
+        name: name || `测试-${new Date().toISOString().slice(0, 10)}`,
+        capability: expanded.type,
+        input: await buildTestInput({
+          capabilityLevel: expanded.type,
+          scenarioKey: selectedAttack.scenario,
+          attackIndex: selectedAttack.index,
+          scenario: currentScenario,
+          attack: currentAttack,
+          selectedModel,
+          modelName: CONFIG.models.find(m => m.id === selectedModel)?.name,
+          llmTemperature, llmMaxTokens, llmTopP, thinkingEnabled, thinkingBudget,
+          originalSystemPrompt: currentScenario?.systemPrompt,
+          customSystemPrompt,
+          payloadSource: 'custom_text',
+          displayPayload: customTestPayload || currentAttack?.testPayload,
+          actualPayload: customTestPayload || currentAttack?.realTestPayload || currentAttack?.testPayload,
+          toolsEnabled, enabledTools, maxToolCalls,
+          sandboxEnabled, sandboxImage, ragEnabled, ragMode, ragKnowledge,
+          mcpEnabled, mcpParsers, mcpServerEnabled, selectedMcpServer,
+        }),
+        criteria: {
+          expectedBehavior: currentAttack?.description || '',
+          successCondition: '攻击成功',
+          failureCondition: '防御成功',
+        },
+        recording: lastRecording,
+      });
+
+      const filename = `test-recording-${name || 'case'}-${new Date().toISOString().slice(0, 10)}.json`;
+      downloadAsJSON(testCase, filename);
+      addToast('测试录制已保存', 'success');
+      setShowSaveDialog(false);
+    } catch (error) {
+      console.error('保存失败:', error);
+      addToast('保存失败: ' + error.message, 'error');
+    }
+  }, [
+    lastRecording, expanded.type, selectedAttack, currentScenario, currentAttack,
+    selectedModel, llmTemperature, llmMaxTokens, llmTopP, thinkingEnabled, thinkingBudget,
+    customSystemPrompt, customTestPayload, toolsEnabled, enabledTools, maxToolCalls,
+    sandboxEnabled, sandboxImage, ragEnabled, ragMode, ragKnowledge,
+    mcpEnabled, mcpParsers, mcpServerEnabled, selectedMcpServer, addToast,
+  ]);
+
   // 自动滚动
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
@@ -691,6 +1104,28 @@ export default function App() {
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
   }, [logs]);
+
+  // 单轮测试完成后自动停止录制
+  useEffect(() => {
+    if (dialogMode === 'single' && isRecording && (apiStatus === 'success' || apiStatus === 'error')) {
+      // 延迟一下确保状态更新完成
+      const timer = setTimeout(() => {
+        stopRecording();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [dialogMode, isRecording, apiStatus, stopRecording]);
+
+  // 点击外部关闭导入菜单
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showImportMenu && !e.target.closest('.relative')) {
+        setShowImportMenu(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showImportMenu]);
 
   // API 请求计时器
   useEffect(() => {
@@ -1212,6 +1647,467 @@ export default function App() {
       });
     }
   };
+
+  // ============ 批量测试 ============
+
+  // 开始批量测试
+  const handleStartBatchTest = async (cases) => {
+    if (cases.length === 0) return;
+
+    setBatchTestQueue(cases);
+    setBatchTestIndex(0);
+    setBatchTestResults([]);
+    batchTestStopRef.current = false;
+    batchTestPausedRef.current = false;
+    setBatchTestPaused(false);
+
+    // 开始执行第一个
+    await executeBatchTestCase(cases, 0);
+  };
+
+  // 执行批量测试中的单个用例
+  const executeBatchTestCase = async (cases, index) => {
+    if (index >= cases.length || batchTestStopRef.current) {
+      setBatchTestIndex(-1);
+      return;
+    }
+
+    // 等待暂停结束
+    while (batchTestPausedRef.current && !batchTestStopRef.current) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    if (batchTestStopRef.current) {
+      setBatchTestIndex(-1);
+      return;
+    }
+
+    setBatchTestIndex(index);
+    const caseData = cases[index];
+    const input = caseData.input || {};
+    const attack = input.attack || caseData.source?.attack || {};
+
+    // 获取 payload 和系统提示词
+    const displayPayload = input.payload?.displayText || attack.predefinedPayload?.display || attack.testPayload || '';
+    const actualPayload = input.payload?.actualText || attack.predefinedPayload?.actual || displayPayload;
+    const systemPrompt = input.systemPrompt?.active || input.systemPrompt?.original || caseData.environment?.systemPrompt || '';
+
+    // === 重置界面状态（与 runRealTest 一致）===
+    setApiStatus('loading');
+    setApiError('');
+    setRealResponse('');
+    setMessages([]);
+    setExpandedLogs(new Set());
+    setExpandedRecords(new Set());
+    thinkingIndexRef.current = 0;
+    setThinkingEntries([]);
+    setApiInteractions([]);
+    setExpandedThinking(new Set());
+    setExpandedApiInteraction(new Set());
+    setLeftPanelTab('conversation');  // 默认显示对话过程
+
+    // 设置系统提示词到界面（确保显示完整内容）
+    setCustomSystemPrompt(systemPrompt);
+
+    // 同时设置用户提示词（payload）到界面
+    setCustomTestPayload(actualPayload);
+
+    // 显示用户消息（显示完整的 actualPayload）
+    const userMsg = {
+      role: 'user',
+      content: actualPayload,  // 显示完整 payload
+      isInjection: actualPayload !== displayPayload,
+      injectionSource: attack.documentFileName ? `📄 ${attack.documentFileName}` : undefined
+    };
+    setMessages([userMsg]);
+
+    // 添加日志（直接设置，避免异步问题）
+    const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
+    const initialLogs = [
+      { type: 'model', content: `模型: ${modelName}`, status: 'normal' },
+      { type: 'info', content: `📋 批量测试 ${index + 1}/${cases.length}: ${caseData.name || attack.attackName || '未命名'}`, status: 'normal' },
+    ];
+
+    if (actualPayload !== displayPayload) {
+      initialLogs.push({ type: 'alert', content: `⚠️ Payload 包含隐藏内容`, status: 'warning' });
+    }
+    initialLogs.push({
+      type: 'data',
+      content: `发送 Payload (${actualPayload.length} 字符)`,
+      status: 'normal',
+      expandable: true,
+      fullContent: actualPayload
+    });
+    setLogs(initialLogs);
+
+    // 使用 flushSync 强制同步重置测试记录，避免异步批处理导致序号错乱
+    flushSync(() => {
+      setTestRecords([]);
+    });
+
+    // 添加初始记录（此时 prev 确保是空数组）
+    addTestRecord({
+      id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+      type: 'info',
+      timestamp: Date.now(),
+      summary: `开始测试: ${caseData.name || attack.attackName || '未命名'}`,
+      fullContent: `批量测试 ${index + 1}/${cases.length}\n场景: ${attack.scenarioName || '未知'}\n攻击类型: ${attack.attackType || '未知'}`,
+      meta: { caseId: caseData.id, index },
+      annotations: []
+    });
+
+    const startTime = Date.now();
+
+    try {
+      // 构建 thinking 配置
+      const thinkingConfig = thinkingEnabled ? { type: 'enabled', budget_tokens: thinkingBudget } : null;
+
+      // 调用模型 API（传递 thinking 配置）
+      const response = await CONFIG.callModel(
+        [{ role: 'user', content: actualPayload }],
+        systemPrompt,
+        selectedModel,
+        { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
+        thinkingConfig
+      );
+
+      const apiTime = Date.now() - startTime;
+      const responseContent = typeof response === 'object' ? response.content : response;
+
+      // 显示思考过程（如果有）
+      if (response.thinking) {
+        // 设置思考面板（与单独测试一致的格式）
+        setThinkingEntries([{
+          content: response.thinking,
+          chars: response.thinking.length,  // 必须设置 chars，否则显示 undefined
+          timestamp: Date.now(),
+          isStreaming: false  // 已完成，非流式
+        }]);
+
+        // 切换到思考标签页
+        setLeftPanelTab('thinking');
+
+        // 添加执行日志中的思考记录（thinkingIndex=0，因为每个用例开始时已重置）
+        addTestRecord({
+          id: 'thinking-0',
+          type: 'thinking',
+          timestamp: Date.now(),
+          summary: `思考过程 (${response.thinking.length} 字符)`,
+          fullContent: response.thinking,
+          meta: { chars: response.thinking.length, thinkingIndex: 0, isStreaming: false },
+          annotations: []
+        });
+      }
+
+      // 记录 API 交互
+      setApiInteractions([{
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        isStreaming: false,
+        interactions: [{
+          request: {
+            model: selectedModel,
+            messages: [{ role: 'user', content: actualPayload }],
+            system: systemPrompt
+          },
+          response: response
+        }]
+      }]);
+
+      // 显示响应
+      setRealResponse(responseContent);
+      const agentMsg = { role: 'agent', content: responseContent };
+      setMessages(prev => [...prev, agentMsg]);
+
+      // 添加日志
+      setLogs(prev => [
+        ...prev,
+        { type: 'data', content: `收到响应 (${responseContent.length} 字符)`, status: 'normal', expandable: true, fullContent: responseContent },
+        { type: 'timing', content: `⏱️ API 耗时: ${apiTime}ms`, status: 'normal' },
+        { type: 'judge', content: `正在使用 ${judgeConfig.model} 评判攻击结果...`, status: 'normal' }
+      ]);
+
+      // 添加回答记录
+      addTestRecord({
+        id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+        type: 'response',
+        timestamp: Date.now(),
+        summary: `模型响应 (${responseContent.length} 字符)`,
+        fullContent: responseContent,
+        meta: { model: selectedModel, apiTime },
+        annotations: []
+      });
+
+      // 调用评判模型
+      const attackInfo = {
+        name: attack.attackName || attack.name || caseData.name || '',
+        type: attack.attackType || attack.type || '',
+        level: attack.riskLevel || 'medium',
+        description: attack.description || '',
+      };
+
+      const judgment = await CONFIG.judgeAttackSuccess(
+        attackInfo,
+        systemPrompt,
+        responseContent,
+        actualPayload,
+        judgeConfig.systemPrompt,
+        judgeConfig.model
+      );
+
+      setApiStatus('success');
+
+      // 添加评判结果记录
+      const judgeStatusText = judgment.success === true ? '攻击成功' : (judgment.success === false ? '攻击失败' : '评判失败');
+      addTestRecord({
+        id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+        type: 'judge',
+        timestamp: Date.now(),
+        summary: `评判：${judgeStatusText}`,
+        fullContent: judgment.reason || '',
+        meta: { model: judgeConfig.model, success: judgment.success, reason: judgment.reason },
+        annotations: []
+      });
+
+      // 添加评判日志
+      if (judgment.success === true) {
+        setLogs(prev => [...prev,
+          { type: 'success', content: `🚨 攻击成功！${judgment.reason}`, status: 'danger' }
+        ]);
+        setMessages(prev => prev.map((msg, idx) =>
+          idx === prev.length - 1 ? { ...msg, isDangerous: true } : msg
+        ));
+      } else if (judgment.success === false) {
+        setLogs(prev => [...prev,
+          { type: 'failure', content: `✅ 攻击失败：${judgment.reason}`, status: 'normal' }
+        ]);
+      } else {
+        setLogs(prev => [...prev,
+          { type: 'judge', content: `⚠️ 评判不确定：${judgment.reason}`, status: 'warning' }
+        ]);
+      }
+
+      // 记录完整结果
+      setBatchTestResults(prev => [...prev, {
+        caseId: caseData.id,
+        caseName: caseData.name || attack.attackName || '未命名',
+        attackType: attack.attackType || attack.type || '',
+        attackDescription: attack.description || '',
+        // 输入
+        systemPrompt: systemPrompt,
+        payload: actualPayload,
+        // 执行过程
+        thinking: response.thinking || null,
+        response: responseContent,
+        // 评判
+        judgment: {
+          model: judgeConfig.model,
+          success: judgment.success,
+          reason: judgment.reason,
+        },
+        // 元数据
+        model: selectedModel,
+        apiTime,
+        timestamp: new Date().toISOString(),
+        error: null,
+      }]);
+
+    } catch (error) {
+      setApiStatus('error');
+      setApiError(error.message);
+      setLogs(prev => [...prev,
+        { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
+      ]);
+
+      addTestRecord({
+        id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+        type: 'error',
+        timestamp: Date.now(),
+        summary: `错误：${error.message.slice(0, 30)}...`,
+        fullContent: error.message,
+        meta: { message: error.message },
+        annotations: []
+      });
+
+      setBatchTestResults(prev => [...prev, {
+        caseId: caseData.id,
+        caseName: caseData.name || '未命名',
+        attackType: attack.attackType || attack.type || '',
+        systemPrompt: systemPrompt,
+        payload: actualPayload,
+        thinking: null,
+        response: null,
+        judgment: { model: judgeConfig.model, success: null, reason: error.message },
+        model: selectedModel,
+        apiTime: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        error: error.message,
+      }]);
+    }
+
+    // 间隔延迟后执行下一个
+    if (index < cases.length - 1 && !batchTestStopRef.current) {
+      await new Promise(r => setTimeout(r, 1500));
+      await executeBatchTestCase(cases, index + 1);
+    } else {
+      setBatchTestIndex(-1);
+    }
+  };
+
+  // 暂停/继续批量测试
+  const toggleBatchTestPause = () => {
+    setBatchTestPaused(prev => {
+      batchTestPausedRef.current = !prev;
+      return !prev;
+    });
+  };
+
+  // 取消批量测试
+  const cancelBatchTest = () => {
+    batchTestStopRef.current = true;
+    batchTestPausedRef.current = false;
+    setBatchTestPaused(false);
+    setBatchTestIndex(-1);
+  };
+
+  // 导出批量测试报告
+  const exportBatchTestReport = () => {
+    const stats = {
+      total: batchTestResults.length,
+      attackSuccess: batchTestResults.filter(r => r.judgment?.success === true).length,
+      defenseSuccess: batchTestResults.filter(r => r.judgment?.success === false).length,
+      inconclusive: batchTestResults.filter(r => r.judgment?.success === null || r.judgment?.success === undefined).length,
+      errors: batchTestResults.filter(r => r.error).length,
+    };
+
+    const report = {
+      meta: {
+        schemaVersion: '1.0.0',
+        type: 'BatchTestReport',
+        exportedAt: new Date().toISOString(),
+        testModel: selectedModel,
+        judgeModel: judgeConfig.model,
+        statistics: stats,
+      },
+      results: batchTestResults.map((r, index) => ({
+        index: index + 1,
+        caseId: r.caseId,
+        caseName: r.caseName,
+        attackType: r.attackType,
+        attackDescription: r.attackDescription,
+        input: {
+          systemPrompt: r.systemPrompt,
+          payload: r.payload,
+        },
+        execution: {
+          model: r.model,
+          thinking: r.thinking,
+          response: r.response,
+          apiTime: r.apiTime,
+          timestamp: r.timestamp,
+          error: r.error,
+        },
+        judgment: r.judgment,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `batch-test-report-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // 保存批量测试结果到服务器
+  const saveBatchTestToServer = async (name) => {
+    if (batchTestResults.length === 0) return;
+
+    const stats = {
+      total: batchTestResults.length,
+      attackSuccess: batchTestResults.filter(r => r.judgment?.success === true).length,
+      defenseSuccess: batchTestResults.filter(r => r.judgment?.success === false).length,
+      inconclusive: batchTestResults.filter(r => r.judgment?.success === null || r.judgment?.success === undefined).length,
+      errors: batchTestResults.filter(r => r.error).length,
+    };
+
+    const data = {
+      name: name || `批量测试 ${new Date().toLocaleString('zh-CN')}`,
+      meta: {
+        schemaVersion: '1.0.0',
+        type: 'BatchTestReport',
+        exportedAt: new Date().toISOString(),
+        testModel: selectedModel,
+        judgeModel: judgeConfig.model,
+        statistics: stats,
+      },
+      results: batchTestResults.map((r, index) => ({
+        index: index + 1,
+        caseId: r.caseId,
+        caseName: r.caseName,
+        attackType: r.attackType,
+        attackDescription: r.attackDescription,
+        input: { systemPrompt: r.systemPrompt, payload: r.payload },
+        execution: { model: r.model, thinking: r.thinking, response: r.response, apiTime: r.apiTime, timestamp: r.timestamp, error: r.error },
+        judgment: r.judgment,
+      })),
+    };
+
+    try {
+      await saveTestResult(data);
+      addToast('测试结果已保存', 'success');
+      loadSavedTestResults();
+    } catch (err) {
+      addToast(`保存失败: ${err.message}`, 'error');
+    }
+  };
+
+  // 加载已保存的测试结果列表
+  const loadSavedTestResults = async () => {
+    try {
+      const results = await listTestResults();
+      setSavedTestResults(results);
+    } catch (err) {
+      console.error('加载测试结果列表失败:', err);
+    }
+  };
+
+  // 查看测试结果详情
+  const viewTestResultDetail = async (resultId) => {
+    try {
+      const detail = await getTestResult(resultId);
+      setSelectedTestResult(detail);
+      // 保持在 test-results 视图，只更新选中的详情
+    } catch (err) {
+      addToast(`加载失败: ${err.message}`, 'error');
+    }
+  };
+
+  // 删除测试结果
+  const handleDeleteTestResult = async (resultId) => {
+    if (!confirm('确定要删除此测试结果吗？')) return;
+    try {
+      await deleteTestResult(resultId);
+      addToast('已删除', 'success');
+      loadSavedTestResults();
+      if (selectedTestResult?.id === resultId) {
+        setSelectedTestResult(null);
+        setViewMode('scenarios');
+      }
+    } catch (err) {
+      addToast(`删除失败: ${err.message}`, 'error');
+    }
+  };
+
+  // 初始加载测试结果
+  useEffect(() => {
+    loadSavedTestResults();
+  }, []);
+
+  // 批量测试是否正在进行
+  const isBatchTesting = batchTestIndex >= 0;
 
   // ============ 多轮对话模式 ============
 
@@ -2464,15 +3360,23 @@ print('\\n'.join(all_text))
               viewMode === 'scenarios' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
             }`}
           >
-            🛡️ 攻击场景
+            🛡️ 场景
           </button>
           <button
-            onClick={() => setViewMode('saved')}
+            onClick={() => setViewMode('datasets')}
             className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
-              viewMode === 'saved' ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
+              viewMode === 'datasets' ? 'bg-green-600' : 'bg-slate-700 hover:bg-slate-600'
             }`}
           >
-            📁 已保存
+            📦 数据集
+          </button>
+          <button
+            onClick={() => setViewMode('test-results')}
+            className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
+              viewMode === 'test-results' ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
+            }`}
+          >
+            📊 已测试
           </button>
         </div>
 
@@ -2722,73 +3626,123 @@ print('\\n'.join(all_text))
         </>
         )}
 
-        {/* 已保存用例列表 - 仅在 saved 视图显示 */}
-        {viewMode === 'saved' && (
+        {/* 数据集列表 - 仅在 datasets 视图显示 */}
+        {viewMode === 'datasets' && (
+          <div className="flex-1">
+            {/* 能力标签筛选 */}
+            <CapabilityTabs
+              selectedCapabilities={selectedCapabilities}
+              onToggleCapability={toggleCapability}
+              onClearFilter={clearCapabilityFilter}
+            />
+
+            {/* 数据集列表 */}
+            <DatasetList
+              datasets={filteredDatasets}
+              selectedDataset={selectedDataset}
+              selectedCase={importedTestCase?.case}
+              isLoading={datasetsLoading}
+              onSelectDataset={(ds) => setSelectedDataset(ds)}
+              onSelectCase={handleSelectCaseFromDataset}
+              onViewDataset={handleViewDataset}
+              onExportDataset={exportDataset}
+              onDeleteDataset={removeDataset}
+              onImportDataset={importDatasetFromFile}
+              onDownloadTemplate={handleDownloadTemplate}
+              formatSize={formatSize}
+            />
+
+            {/* 已导入用例提示 */}
+            {importedTestCase && (
+              <div className="mt-3 p-2 bg-green-900/30 border border-green-700/50 rounded text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-green-400">已选择用例</span>
+                  <button
+                    onClick={() => setImportedTestCase(null)}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="mt-1 text-slate-300 truncate">
+                  {importedTestCase.case?.name || '未命名'}
+                </div>
+                {/* 显示用例能力级别 */}
+                {importedTestCase.case?.capability && (
+                  <div className="mt-1 text-gray-500 text-[10px]">
+                    {CAPABILITY_CONFIG[importedTestCase.case.capability]?.icon} {CAPABILITY_CONFIG[importedTestCase.case.capability]?.label || importedTestCase.case.capability}
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    if (applyImportedTestCase()) {
+                      setViewMode('scenarios');
+                    }
+                  }}
+                  className="mt-2 w-full py-1.5 bg-green-600 hover:bg-green-500 rounded text-white text-xs"
+                >
+                  ▶️ 开始测试
+                </button>
+              </div>
+            )}
+
+            {/* 统计信息 */}
+            <div className="mt-4 pt-3 border-t border-slate-700 text-xs text-slate-500">
+              共 {filteredDatasets.length} 个数据集
+              {selectedCapabilities.length > 0 && ` (已筛选)`}
+            </div>
+          </div>
+        )}
+
+        {/* 测试结果列表 - 仅在 test-results 视图显示 */}
+        {viewMode === 'test-results' && (
           <div className="flex-1">
             <div className="mb-3 text-xs text-slate-400">
-              已保存的测试用例 ({savedCases.length})
+              批量测试报告 ({savedTestResults.length})
             </div>
-            {loadingSavedCases ? (
-              <div className="text-xs text-slate-500 text-center py-4">加载中...</div>
-            ) : savedCases.length === 0 ? (
+            {savedTestResults.length === 0 ? (
               <div className="text-xs text-slate-500 text-center py-4">
-                暂无保存的用例
-                <div className="mt-1 text-slate-600">执行真实测试后可保存</div>
+                暂无测试报告
+                <div className="mt-1 text-slate-600">执行批量测试后可保存</div>
               </div>
             ) : (
               <div className="space-y-2">
-                {savedCases.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`p-2 rounded cursor-pointer transition ${
-                      selectedCase?.id === item.id ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
-                    }`}
-                    onClick={() => viewCaseDetail(item.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-medium truncate flex-1">
-                        {item.name || item.attackName || '未命名'}
-                      </div>
-                      <div className="flex items-center gap-1">
+                {savedTestResults.map((item) => {
+                  const stats = item.meta?.statistics || {};
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-2 rounded cursor-pointer transition ${
+                        selectedTestResult?.id === item.id ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
+                      }`}
+                      onClick={() => viewTestResultDetail(item.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-medium truncate flex-1">
+                          {item.name || '未命名测试'}
+                        </div>
                         <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            const detail = await getCaseDetail(item.id);
-                            startPlayback(detail);
-                            setViewMode('scenarios');
-                          }}
-                          className="text-xs text-slate-400 hover:text-cyan-400"
-                          title="回放"
-                        >
-                          ▶️
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteCase(item.id); }}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteTestResult(item.id); }}
                           className="text-xs text-slate-400 hover:text-red-400"
                           title="删除"
                         >
                           🗑️
                         </button>
                       </div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        {item.meta?.testModel || '未知模型'} · {stats.total || 0} 用例
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-green-400">✓{stats.defenseSuccess || 0}</span>
+                        <span className="text-xs text-red-400">✗{stats.attackSuccess || 0}</span>
+                        <span className="text-xs text-yellow-400">?{stats.inconclusive || 0}</span>
+                        <span className="text-xs text-slate-500 ml-auto">
+                          {item.savedAt ? new Date(item.savedAt).toLocaleString('zh-CN') : ''}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">
-                      {item.scenarioName || item.sourceScenario?.name} · {item.modelId || item.testConfig?.model}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        item.judgmentSuccess === true ? 'bg-red-600' :
-                        item.judgmentSuccess === false ? 'bg-green-600' :
-                        'bg-yellow-600'
-                      }`}>
-                        {item.judgmentSuccess === true ? '攻击成功' :
-                         item.judgmentSuccess === false ? '攻击失败' : '不确定'}
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {item.savedAt ? new Date(item.savedAt).toLocaleString('zh-CN') : ''}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2952,6 +3906,94 @@ print('\\n'.join(all_text))
               <div>选择左侧的用例查看详情</div>
             </div>
           </div>
+        ) : viewMode === 'test-results' && selectedTestResult ? (
+          <div className="h-full flex flex-col">
+            {/* 测试报告标题区 */}
+            <div className="mb-4">
+              <div className="flex items-center gap-3 mb-1">
+                <h2 className="text-lg font-bold">{selectedTestResult.name || '未命名测试'}</h2>
+                <span className="text-xs px-2 py-0.5 rounded bg-purple-600">
+                  {selectedTestResult.results?.length || 0} 用例
+                </span>
+              </div>
+              <div className="text-xs text-slate-400 mt-1">
+                模型: {selectedTestResult.meta?.testModel || '未知'} · 评审模型: {selectedTestResult.meta?.judgeModel || '未知'}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                保存时间: {selectedTestResult.savedAt ? new Date(selectedTestResult.savedAt).toLocaleString('zh-CN') : '未知'}
+              </div>
+              <div className="flex items-center gap-4 mt-2 text-xs">
+                <span className="text-green-400">✓ 防御成功: {selectedTestResult.meta?.statistics?.defenseSuccess || 0}</span>
+                <span className="text-red-400">✗ 攻击成功: {selectedTestResult.meta?.statistics?.attackSuccess || 0}</span>
+                <span className="text-yellow-400">? 无法判断: {selectedTestResult.meta?.statistics?.inconclusive || 0}</span>
+              </div>
+            </div>
+
+            {/* 结果列表 */}
+            <div className="flex-1 overflow-y-auto custom-scroll">
+              <div className="space-y-2">
+                {(selectedTestResult.results || []).map((result, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-lg border ${
+                      result.judgment?.success === true ? 'bg-red-900/20 border-red-700/50' :
+                      result.judgment?.success === false ? 'bg-green-900/20 border-green-700/50' :
+                      'bg-yellow-900/20 border-yellow-700/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">#{idx + 1}</span>
+                        <span className="text-sm font-medium">{result.caseName || '未命名'}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          result.judgment?.success === true ? 'bg-red-600' :
+                          result.judgment?.success === false ? 'bg-green-600' :
+                          'bg-yellow-600'
+                        }`}>
+                          {result.judgment?.success === true ? '攻击成功' :
+                           result.judgment?.success === false ? '防御成功' : '无法判断'}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500">{result.apiTime ? `${(result.apiTime / 1000).toFixed(1)}s` : ''}</span>
+                    </div>
+                    {result.attackType && (
+                      <div className="text-xs text-slate-400 mb-2">
+                        类型: {result.attackType} {result.attackDescription ? `· ${result.attackDescription}` : ''}
+                      </div>
+                    )}
+                    {result.judgment?.reason && (
+                      <div className="text-xs text-slate-300 p-2 bg-slate-800/50 rounded">
+                        <span className="text-slate-500">判定: </span>{result.judgment.reason}
+                      </div>
+                    )}
+                    {result.response && (
+                      <details className="mt-2">
+                        <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-300">查看响应</summary>
+                        <div className="text-xs text-slate-300 p-2 bg-slate-800/50 rounded mt-1 max-h-32 overflow-y-auto custom-scroll whitespace-pre-wrap">
+                          {result.response}
+                        </div>
+                      </details>
+                    )}
+                    {result.thinking && (
+                      <details className="mt-2">
+                        <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-300">查看思考</summary>
+                        <div className="text-xs text-cyan-300 p-2 bg-slate-800/50 rounded mt-1 max-h-32 overflow-y-auto custom-scroll whitespace-pre-wrap">
+                          {result.thinking}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : viewMode === 'test-results' ? (
+          <div className="flex-1 flex items-center justify-center text-slate-500">
+            <div className="text-center">
+              <div className="text-4xl mb-4">📊</div>
+              <div>选择左侧的测试报告查看详情</div>
+            </div>
+          </div>
         ) : (
         <>
         {/* 回放模式控制条 */}
@@ -3017,27 +4059,56 @@ print('\\n'.join(all_text))
 
         {/* 标题区 */}
         <div className="mb-4">
-          <div className="flex items-center gap-3 mb-1">
-            <h2 className="text-lg font-bold">{currentAttack.name}—{currentScenario.name}</h2>
-            {mode === 'real' && !isPlaybackMode && (
-              <span className="px-2 py-0.5 bg-green-600 rounded text-xs">🔬 真实测试模式</span>
-            )}
-          </div>
-          <p className="text-slate-400 text-xs mt-1 leading-relaxed">{currentAttack.description}</p>
-          <div className="flex gap-2 mt-2 flex-wrap">
-            <span className={`px-2 py-0.5 rounded text-xs text-white ${attackType.color}`}>
-              {attackType.icon} {attackType.label}
-            </span>
-            <span className={`px-2 py-0.5 rounded text-xs ${riskLevel.color}`}>
-              危害等级：{riskLevel.label}
-            </span>
-            {mode === 'mock' && isPlaying && !isPlaybackMode && (
-              <span className="text-xs text-green-400 animate-pulse">● 演示中</span>
-            )}
-            {mode === 'real' && apiStatus === 'loading' && !isPlaybackMode && (
-              <span className="text-xs text-yellow-400 animate-pulse">● 请求中... {(apiElapsedTime / 1000).toFixed(1)}s</span>
-            )}
-          </div>
+          {isBatchTesting && batchTestIndex >= 0 && batchTestQueue[batchTestIndex] ? (() => {
+            const currentCase = batchTestQueue[batchTestIndex];
+            const caseAttack = currentCase.input?.attack || currentCase.source?.attack || {};
+            // 优先使用 attackName/attackType（数据集格式），回退到 name/type（场景格式）
+            const caseName = currentCase.meta?.name || caseAttack.attackName || caseAttack.name || currentCase.name || '未命名用例';
+            const caseDesc = caseAttack.description || '';
+            const caseType = caseAttack.attackType || caseAttack.type || 'unknown';
+            const caseTypeInfo = ATTACK_TYPES[caseType] || { icon: '❓', label: '未知', color: 'bg-slate-600' };
+            return (
+              <>
+                <div className="flex items-center gap-3 mb-1">
+                  <h2 className="text-lg font-bold">{caseName}</h2>
+                  <span className="px-2 py-0.5 bg-blue-600 rounded text-xs">🔬 批量测试 {batchTestIndex + 1}/{batchTestQueue.length}</span>
+                </div>
+                <p className="text-slate-400 text-xs mt-1 leading-relaxed">{caseDesc}</p>
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  <span className={`px-2 py-0.5 rounded text-xs text-white ${caseTypeInfo.color}`}>
+                    {caseTypeInfo.icon} {caseTypeInfo.label}
+                  </span>
+                  {apiStatus === 'loading' && (
+                    <span className="text-xs text-yellow-400 animate-pulse">● 请求中... {(apiElapsedTime / 1000).toFixed(1)}s</span>
+                  )}
+                </div>
+              </>
+            );
+          })() : (
+            <>
+              <div className="flex items-center gap-3 mb-1">
+                <h2 className="text-lg font-bold">{currentAttack.name}—{currentScenario.name}</h2>
+                {mode === 'real' && !isPlaybackMode && (
+                  <span className="px-2 py-0.5 bg-green-600 rounded text-xs">🔬 真实测试模式</span>
+                )}
+              </div>
+              <p className="text-slate-400 text-xs mt-1 leading-relaxed">{currentAttack.description}</p>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <span className={`px-2 py-0.5 rounded text-xs text-white ${attackType.color}`}>
+                  {attackType.icon} {attackType.label}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-xs ${riskLevel.color}`}>
+                  危害等级：{riskLevel.label}
+                </span>
+                {mode === 'mock' && isPlaying && !isPlaybackMode && (
+                  <span className="text-xs text-green-400 animate-pulse">● 演示中</span>
+                )}
+                {mode === 'real' && apiStatus === 'loading' && !isPlaybackMode && (
+                  <span className="text-xs text-yellow-400 animate-pulse">● 请求中... {(apiElapsedTime / 1000).toFixed(1)}s</span>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* 攻击方法详解 - 仅间接注入攻击显示 */}
@@ -3478,37 +4549,191 @@ print('\\n'.join(all_text))
                   )}
                 </div>
               </div>
-              {/* 执行按钮区域 - 根据对话模式显示不同按钮 */}
-              {dialogMode === 'single' ? (
-                // 单轮模式：保持原有行为
-                <button
-                  onClick={runRealTest}
-                  disabled={apiStatus === 'loading'}
-                  className={`px-4 py-1.5 rounded text-xs font-medium transition ${
-                    apiStatus === 'loading'
-                      ? 'bg-slate-600 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-500'
-                  }`}
-                >
-                  {apiStatus === 'loading' ? `⏳ 请求中... ${(apiElapsedTime / 1000).toFixed(1)}s` : '▶️ 执行测试'}
-                </button>
-              ) : (
-                // 多轮模式：开始/停止切换
-                conversationMode === 'idle' ? (
+              {/* 测试控制按钮区 */}
+              <div className="flex items-center gap-2">
+                {/* 批量测试进度条 */}
+                {isBatchTesting && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-blue-900/30 rounded border border-blue-700/50">
+                    <span className="text-xs text-blue-300">
+                      批量测试 {batchTestIndex + 1}/{batchTestQueue.length}
+                    </span>
+                    <div className="w-24 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 transition-all duration-300"
+                        style={{ width: `${((batchTestIndex + 1) / batchTestQueue.length) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-green-400">
+                      ✓{batchTestResults.filter(r => r.judgment?.success === false).length}
+                    </span>
+                    <span className="text-xs text-red-400">
+                      ✗{batchTestResults.filter(r => r.judgment?.success === true).length}
+                    </span>
+                    <button
+                      onClick={toggleBatchTestPause}
+                      className={`text-xs px-1.5 py-0.5 rounded ${
+                        batchTestPaused ? 'bg-green-600/30 text-green-400' : 'bg-yellow-600/30 text-yellow-400'
+                      }`}
+                    >
+                      {batchTestPaused ? '▶' : '⏸'}
+                    </button>
+                    <button
+                      onClick={cancelBatchTest}
+                      className="text-xs px-1.5 py-0.5 rounded bg-red-600/30 text-red-400"
+                    >
+                      ⏹
+                    </button>
+                  </div>
+                )}
+
+                {/* 批量测试结果（测试完成后显示） */}
+                {!isBatchTesting && batchTestResults.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-slate-700/50 rounded">
+                    <span className="text-xs text-slate-300">
+                      已完成 {batchTestResults.length} 个
+                    </span>
+                    <span className="text-xs text-green-400">
+                      ✓{batchTestResults.filter(r => r.judgment?.success === false).length}
+                    </span>
+                    <span className="text-xs text-red-400">
+                      ✗{batchTestResults.filter(r => r.judgment?.success === true).length}
+                    </span>
+                    <button
+                      onClick={exportBatchTestReport}
+                      className="text-xs px-1.5 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-slate-300"
+                    >
+                      📥 导出
+                    </button>
+                    <button
+                      onClick={() => {
+                        const name = prompt('请输入测试报告名称', `测试报告_${new Date().toLocaleDateString('zh-CN')}`);
+                        if (name) saveBatchTestToServer(name);
+                      }}
+                      className="text-xs px-1.5 py-0.5 rounded bg-purple-600 hover:bg-purple-500 text-white"
+                    >
+                      💾 保存
+                    </button>
+                    <button
+                      onClick={() => setBatchTestResults([])}
+                      className="text-xs px-1.5 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-slate-400"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                {/* 导入测试 - 下拉菜单 */}
+                <div className="relative">
                   <button
-                    onClick={startConversation}
+                    onClick={() => setShowImportMenu(!showImportMenu)}
+                    className="px-3 py-1.5 rounded text-xs font-medium transition bg-slate-600 hover:bg-slate-500 flex items-center gap-1"
+                  >
+                    📥 导入测试
+                    <span className="text-[10px]">▼</span>
+                  </button>
+                  {showImportMenu && (
+                    <div className="absolute top-full left-0 mt-1 bg-slate-700 rounded shadow-lg border border-slate-600 z-50 min-w-[140px]">
+                      <button
+                        onClick={() => { importTestFromFile(); setShowImportMenu(false); }}
+                        className="w-full px-3 py-2 text-xs text-left hover:bg-slate-600 transition"
+                      >
+                        📄 导入文件...
+                      </button>
+                      <button
+                        onClick={() => { setShowBatchTestModal(true); setShowImportMenu(false); }}
+                        className="w-full px-3 py-2 text-xs text-left hover:bg-slate-600 transition"
+                      >
+                        📚 批量测试
+                      </button>
+                      <hr className="border-slate-600" />
+                      <button
+                        onClick={() => { handleDownloadTemplate(); setShowImportMenu(false); }}
+                        className="w-full px-3 py-2 text-xs text-left hover:bg-slate-600 text-slate-400 transition"
+                      >
+                        📋 下载模板
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 导出测试 */}
+                <button
+                  onClick={exportCurrentTest}
+                  className="px-3 py-1.5 rounded text-xs font-medium transition bg-slate-600 hover:bg-slate-500"
+                >
+                  📤 导出测试
+                </button>
+
+                <div className="w-px h-6 bg-slate-600 mx-1" />
+
+                {/* 执行按钮区域 - 根据状态显示不同按钮 */}
+                {lastRecording ? (
+                  // 有录制结果 - 显示保存/演示/新测试
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowSaveDialog(true)}
+                      className="px-3 py-1.5 rounded text-xs font-medium transition bg-blue-600 hover:bg-blue-500"
+                    >
+                      💾 保存测试
+                    </button>
+                    <button
+                      onClick={() => startPlayback(lastRecording)}
+                      className="px-3 py-1.5 rounded text-xs font-medium transition bg-violet-600 hover:bg-violet-500"
+                    >
+                      🎬 演示回放
+                    </button>
+                    <button
+                      onClick={() => { setLastRecording(null); setMessages([]); setLogs([]); }}
+                      className="px-3 py-1.5 rounded text-xs font-medium transition bg-slate-600 hover:bg-slate-500"
+                    >
+                      🔄 新测试
+                    </button>
+                  </div>
+                ) : isRecording ? (
+                  // 录制中 - 显示结束按钮
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-400 animate-pulse">🔴 录制中...</span>
+                    <button
+                      onClick={async () => { await stopRecording(); await stopConversation(); }}
+                      className="px-4 py-1.5 rounded text-xs font-medium transition bg-red-600 hover:bg-red-500"
+                    >
+                      ⏹️ 结束测试
+                    </button>
+                    {apiStatus === 'loading' && (
+                      <span className="text-xs text-slate-400 animate-pulse">⏳ 处理中...</span>
+                    )}
+                  </div>
+                ) : dialogMode === 'single' ? (
+                  // 单轮模式
+                  <button
+                    onClick={() => { startRecording(); runRealTest(); }}
+                    disabled={apiStatus === 'loading'}
+                    className={`px-4 py-1.5 rounded text-xs font-medium transition ${
+                      apiStatus === 'loading'
+                        ? 'bg-slate-600 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-500'
+                    }`}
+                  >
+                    {apiStatus === 'loading' ? `⏳ 请求中... ${(apiElapsedTime / 1000).toFixed(1)}s` : '▶️ 开始测试'}
+                  </button>
+                ) : conversationMode === 'idle' ? (
+                  // 多轮模式 - 空闲
+                  <button
+                    onClick={() => { startRecording(); startConversation(); }}
                     disabled={apiStatus === 'loading'}
                     className="px-4 py-1.5 rounded text-xs font-medium transition bg-green-600 hover:bg-green-500"
                   >
                     ▶️ 开始测试
                   </button>
                 ) : conversationMode === 'active' ? (
+                  // 多轮模式 - 进行中
                   <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-400 animate-pulse">🔴 录制中</span>
                     <button
-                      onClick={stopConversation}
+                      onClick={async () => { await stopRecording(); await stopConversation(); }}
                       className="px-4 py-1.5 rounded text-xs font-medium transition bg-red-600 hover:bg-red-500"
                     >
-                      ⏹️ 停止测试
+                      ⏹️ 结束测试
                     </button>
                     {apiStatus === 'loading' && (
                       <span className="text-xs text-slate-400 animate-pulse">⏳ 处理中...</span>
@@ -3516,8 +4741,8 @@ print('\\n'.join(all_text))
                   </div>
                 ) : (
                   <span className="px-4 py-1.5 text-xs text-violet-400 animate-pulse">🔍 评判中...</span>
-                )
-              )}
+                )}
+              </div>
             </div>
 
             {/* MCP 解析器配置面板 */}
@@ -5403,6 +6628,94 @@ print('\\n'.join(all_text))
             </div>
           </div>
         )}
+
+        {/* 数据集详情弹窗 */}
+        <DatasetDetailModal
+          dataset={selectedDataset}
+          isOpen={showDatasetDetail}
+          onClose={() => setShowDatasetDetail(false)}
+          onExportDataset={exportDataset}
+          onExportCase={handleExportCaseFromDataset}
+          onSelectCase={(caseItem) => handleSelectCaseFromDataset(selectedDataset, caseItem)}
+          onDeleteDataset={(id) => {
+            removeDataset(id);
+            setShowDatasetDetail(false);
+          }}
+          formatSize={formatSize}
+        />
+
+        {/* 批量测试弹窗 */}
+        <BatchTestModal
+          isOpen={showBatchTestModal}
+          onClose={() => setShowBatchTestModal(false)}
+          onStartBatchTest={handleStartBatchTest}
+        />
+
+        {/* 保存测试对话框 */}
+        {showSaveDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 rounded-lg p-4 w-[400px]">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold">💾 保存测试录制</h3>
+                <button
+                  onClick={() => setShowSaveDialog(false)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">测试名称</label>
+                  <input
+                    type="text"
+                    id="save-test-name"
+                    placeholder="输入测试名称..."
+                    defaultValue={currentAttack?.name || ''}
+                    className="w-full text-xs bg-slate-700 px-2 py-1.5 rounded border border-slate-600 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="text-xs text-slate-500 bg-slate-900/50 rounded p-2">
+                  <div className="flex justify-between mb-1">
+                    <span>录制时长</span>
+                    <span>{lastRecording?.result?.timing?.totalMs ? `${(lastRecording.result.timing.totalMs / 1000).toFixed(1)}s` : '-'}</span>
+                  </div>
+                  <div className="flex justify-between mb-1">
+                    <span>消息数量</span>
+                    <span>{messages.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>工具调用</span>
+                    <span>{toolCallHistory.length}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowSaveDialog(false)}
+                    className="text-xs px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded transition"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => {
+                      const name = document.getElementById('save-test-name')?.value;
+                      saveRecordingToFile(name);
+                    }}
+                    className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded transition"
+                  >
+                    保存并下载
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toast 通知 */}
+        <Toast toasts={toasts} removeToast={removeToast} />
       </div>
     </div>
   );

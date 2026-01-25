@@ -75,6 +75,36 @@
 
 ## 变更记录
 
+### [1.4.0] - 2026-01-26
+
+#### Added
+- **批量测试模块** - 从数据集选择用例进行批量自动化测试
+  - `src/components/BatchTestModal.jsx` - 用例选择弹窗组件
+  - `src/testResultsApi.js` - 测试结果 API 客户端
+  - `backend/app/routers/test_results.py` - 测试结果 API 路由
+  - `backend/app/services/test_results_storage.py` - 测试结果存储服务
+  - 支持暂停/继续/取消测试
+  - 支持导出 JSON 报告或保存到服务器
+  - 左侧栏"📊 已测试"视图查看历史报告
+- **数据集模板** - `public/templates/dataset-template.json`
+  - 包含 F1-F5 各能力级别的完整用例示例
+  - 详细的字段说明注释
+
+#### Changed
+- 左侧栏"📁 已保存"改为"📊 已测试"，用于查看批量测试报告
+- 批量测试时标题区动态显示当前测试用例信息
+
+#### Fixed
+- **批量测试执行记录序号错乱** - 使用 `flushSync` 强制同步重置状态
+- **思考记录无法跳转** - 批量测试思考记录添加 `thinkingIndex` 支持"查看"跳转
+
+#### Docs
+- 新增 [BATCH-TESTING.md](./BATCH-TESTING.md) - 批量测试模块文档
+- 更新 [API-REFERENCE.md](./API-REFERENCE.md) - 添加 Test Results API
+- 更新 [README.md](./README.md) - 添加文档链接
+
+---
+
 ### [1.3.0] - 2026-01-22
 
 #### Changed
