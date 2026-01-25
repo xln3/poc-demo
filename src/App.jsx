@@ -415,6 +415,19 @@ export default function App() {
     setNewAnnotation({ source: 'human', author: '', content: '' });
   }, [judgeConfig.model]);
 
+  // 删除批注
+  const removeAnnotation = useCallback((recordId, annotationId) => {
+    setTestRecords(prev => prev.map(record => {
+      if (record.id === recordId) {
+        return {
+          ...record,
+          annotations: (record.annotations || []).filter(ann => ann.id !== annotationId)
+        };
+      }
+      return record;
+    }));
+  }, []);
+
   // 请求 LLM 分析并添加批注
   const requestLLMAnnotation = useCallback(async (recordId) => {
     const record = testRecords.find(r => r.id === recordId);
@@ -813,7 +826,7 @@ export default function App() {
     setApiInteractions([]);
     setExpandedThinking(new Set());
     setExpandedApiInteraction(new Set());
-    setThinkingTab('thinking');
+    setLeftPanelTab('thinking');
 
     // 构建实际发送的 payload
     // 优先级：用户添加的文件 + 自定义 payload > 攻击的 realTestPayload > 攻击的 testPayload
@@ -1264,7 +1277,7 @@ export default function App() {
     setExpandedThinking(new Set());
     setExpandedApiInteraction(new Set());
     thinkingIndexRef.current = 0;
-    setThinkingTab('thinking');
+    setLeftPanelTab('thinking');
 
     // 构建实际发送的 payload
     let actualPayload;
@@ -4898,11 +4911,21 @@ print('\\n'.join(all_text))
                             {record.annotations && record.annotations.length > 0 && (
                               <div className="mt-2 space-y-1">
                                 {record.annotations.map((ann) => (
-                                  <div key={ann.id} className="flex items-start gap-1 text-xs">
+                                  <div key={ann.id} className="flex items-start gap-1 text-xs group/ann">
                                     <span className={ann.source === 'llm' ? 'text-cyan-400' : 'text-yellow-400'}>
                                       [{ann.source === 'llm' ? 'LLM' : ann.author}]
                                     </span>
-                                    <span className="text-slate-400">{ann.content}</span>
+                                    <span className="text-slate-400 flex-1">{ann.content}</span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeAnnotation(record.id, ann.id);
+                                      }}
+                                      className="text-red-400 hover:text-red-300 opacity-0 group-hover/ann:opacity-100 transition"
+                                      title="删除批注"
+                                    >
+                                      ×
+                                    </button>
                                   </div>
                                 ))}
                               </div>
@@ -4917,7 +4940,7 @@ print('\\n'.join(all_text))
                           className="text-xs px-1.5 py-0.5 bg-slate-600 hover:bg-slate-500 rounded transition opacity-60 hover:opacity-100"
                           title="添加批注"
                         >
-                          📝
+                          🧐
                         </button>
                       </div>
                     </div>
