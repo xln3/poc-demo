@@ -4843,7 +4843,8 @@ print('\\n'.join(all_text))
                     }
                   };
 
-                  const hasFullContent = record.fullContent && record.fullContent !== record.summary;
+                  // thinking/response 有 [查看] 跳转，不需要展开原文
+                  const hasFullContent = record.fullContent && record.fullContent !== record.summary && !['thinking', 'response'].includes(record.type);
 
                   const jumpToThinking = () => {
                     if (record.type === 'thinking' && record.meta?.thinkingIndex !== undefined) {
@@ -4937,7 +4938,7 @@ print('\\n'.join(all_text))
                             e.stopPropagation();
                             setAnnotationModal({ open: true, recordId: record.id });
                           }}
-                          className="text-xs px-1.5 py-0.5 bg-slate-600 hover:bg-slate-500 rounded transition opacity-60 hover:opacity-100"
+                          className="text-xs hover:text-yellow-300 transition opacity-60 hover:opacity-100"
                           title="添加批注"
                         >
                           🧐
