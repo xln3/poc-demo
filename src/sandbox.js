@@ -439,11 +439,12 @@ class SandboxClient {
     };
 
     ws.onerror = (error) => {
-      console.error('File watch WebSocket error:', error);
+      // 静默处理 WebSocket 错误（后端不可用时）
       if (onError) onError(error);
     };
 
     ws.onclose = () => {
+      // 静默处理连接关闭
       if (onError) onError(new Error('Connection closed'));
     };
 
@@ -518,14 +519,19 @@ class SandboxClient {
 
   // 获取锁状态
   async getLockStatus(tag) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock`);
+    try {
+      const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock`);
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || `获取锁状态失败: ${response.status}`);
+      if (!response.ok) {
+        // 静默处理错误，返回默认状态
+        return { locked: false, holder: null };
+      }
+
+      return response.json();
+    } catch {
+      // 网络错误时返回默认状态
+      return { locked: false, holder: null };
     }
-
-    return response.json();
   }
 
   // 批量获取所有终端的锁状态

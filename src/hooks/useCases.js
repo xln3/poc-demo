@@ -89,6 +89,11 @@ export const useCases = ({
   lastJudgment,
   apiTime,
 
+  // 测试记录（新增）
+  testRecords,
+  humanJudgment,
+  judgeConfig,
+
   // v2 状态收集器（可选）
   stateCollector,
 }) => {
@@ -350,10 +355,19 @@ export const useCases = ({
       thinking: null,
       error: apiError,
       judgment: lastJudgment ? {
-        judgeModel: CONFIG.judgeModel,
+        judgeModel: judgeConfig?.model || CONFIG.judgeModel,
         success: lastJudgment.success,
         reason: lastJudgment.reason,
         rawResponse: lastJudgment.rawResponse,
+      } : null,
+
+      // 测试记录（新增）
+      testRecords: testRecords || [],
+      humanJudgment: humanJudgment?.auditorCode ? {
+        auditorCode: humanJudgment.auditorCode,
+        score: humanJudgment.score,
+        summary: humanJudgment.summary,
+        timestamp: Date.now(),
       } : null,
     });
   }, [
@@ -365,6 +379,7 @@ export const useCases = ({
     ragEnabled, ragMode, ragKnowledge, ragDocuments,
     mcpEnabled, mcpParsers, mcpServerEnabled, selectedMcpServer, mcpServerConfigs, mcpServerStatus,
     payloadFiles, apiStatus, apiError, realResponse, lastJudgment, apiTime,
+    testRecords, humanJudgment, judgeConfig,
     getCapabilityLevel, getPayloadInfo,
   ]);
 

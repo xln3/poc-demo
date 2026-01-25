@@ -179,6 +179,165 @@ export const ApiStatus = {
   ERROR: 'error',
 };
 
+// ============ 测试记录类型定义 ============
+
+export const TestRecordType = {
+  THINKING: 'thinking',
+  RESPONSE: 'response',
+  TOOL_CALL: 'tool_call',
+  JUDGE: 'judge',
+  TIMING: 'timing',
+  ERROR: 'error',
+};
+
+export const AnnotationSource = {
+  LLM: 'llm',
+  HUMAN: 'human',
+};
+
+/**
+ * 创建测试记录
+ * @param {string} type - 记录类型
+ * @param {string} summary - 一行摘要
+ * @param {string} fullContent - 完整内容
+ * @param {Object} meta - 元数据
+ */
+export function createTestRecord(type, summary, fullContent = null, meta = {}) {
+  return {
+    id: generateUUID(),
+    type,
+    timestamp: Date.now(),
+    summary,
+    fullContent: fullContent || summary,
+    meta,
+    annotations: [],
+  };
+}
+
+/**
+ * 创建批注
+ * @param {string} source - 来源 ('llm' | 'human')
+ * @param {string} author - 作者（模型名或 auditor 代号）
+ * @param {string} content - 批注内容
+ */
+export function createAnnotation(source, author, content) {
+  return {
+    id: generateUUID(),
+    source,
+    author,
+    content,
+    timestamp: Date.now(),
+  };
+}
+
+/**
+ * 创建空的判定结构（支持 LLM 和人类评判分离）
+ */
+export function createEmptyJudgment() {
+  return {
+    llm: {
+      model: null,
+      systemPrompt: null,
+      success: null,
+      reason: null,
+      timestamp: null,
+    },
+    human: {
+      auditorCode: '',
+      score: null,  // 1-5 星
+      summary: '',
+      timestamp: null,
+    },
+  };
+}
+
+/**
+ * 根据内容生成摘要（截取前N个字符）
+ * @param {string} content - 原始内容
+ * @param {number} maxLength - 最大长度
+ */
+export function generateSummary(content, maxLength = 30) {
+  if (!content) return '';
+  const text = content.trim().replace(/\s+/g, ' ');
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
+}
+
+/**
+ * 从 thinking 内容创建测试记录
+ */
+export function createThinkingRecord(content) {
+  return createTestRecord(
+    TestRecordType.THINKING,
+    `思考：${generateSummary(content)}`,
+    content,
+    { chars: content?.length || 0 }
+  );
+}
+
+/**
+ * 从 response 内容创建测试记录
+ */
+export function createResponseRecord(content, isDangerous = false) {
+  return createTestRecord(
+    TestRecordType.RESPONSE,
+    `回答：${generateSummary(content)}`,
+    content,
+    { chars: content?.length || 0, isDangerous }
+  );
+}
+
+/**
+ * 从工具调用创建测试记录
+ */
+export function createToolCallRecord(toolName, args, result = null) {
+  const argsStr = typeof args === 'string' ? args : JSON.stringify(args);
+  const summary = `工具：${toolName}(${generateSummary(argsStr, 20)})`;
+  return createTestRecord(
+    TestRecordType.TOOL_CALL,
+    summary,
+    result ? `调用: ${toolName}(${argsStr})\n结果: ${result}` : `${toolName}(${argsStr})`,
+    { toolName, args: typeof args === 'string' ? args : argsStr }
+  );
+}
+
+/**
+ * 从评判结果创建测试记录
+ */
+export function createJudgeRecord(model, success, reason) {
+  const statusText = success === true ? '攻击成功' : (success === false ? '攻击失败' : '评判失败');
+  return createTestRecord(
+    TestRecordType.JUDGE,
+    `评判：${statusText} - ${generateSummary(reason, 20)}`,
+    reason,
+    { model, success, reason }
+  );
+}
+
+/**
+ * 从计时信息创建测试记录
+ */
+export function createTimingRecord(totalMs, label = 'API 响应') {
+  return createTestRecord(
+    TestRecordType.TIMING,
+    `耗时：${label} ${totalMs}ms`,
+    `${label}: ${totalMs}ms`,
+    { totalMs, label }
+  );
+}
+
+/**
+ * 从错误创建测试记录
+ */
+export function createErrorRecord(message, details = null) {
+  return createTestRecord(
+    TestRecordType.ERROR,
+    `错误：${generateSummary(message)}`,
+    details || message,
+    { message }
+  );
+}
+
 // ============ v2 类型定义 ============
 
 /**
@@ -795,6 +954,10 @@ export async function buildTestCaseFromState({
   thinking,
   error,
   judgment,
+
+  // 测试记录（新增）
+  testRecords,
+  humanJudgment,
 }) {
   const testCase = createEmptyTestCase();
 
@@ -971,6 +1134,33 @@ export async function buildTestCaseFromState({
     reason: judgment?.reason || null,
     rawResponse: judgment?.rawResponse || null,
   };
+
+  // 测试记录（新增）
+  testCase.execution.testRecords = (testRecords || []).map(r => ({
+    id: r.id,
+    type: r.type,
+    timestamp: r.timestamp,
+    summary: r.summary,
+    fullContent: r.fullContent,
+    meta: r.meta || {},
+    annotations: (r.annotations || []).map(a => ({
+      id: a.id,
+      source: a.source,
+      author: a.author,
+      content: a.content,
+      timestamp: a.timestamp,
+    })),
+  }));
+
+  // 人类评判（新增）
+  if (humanJudgment) {
+    testCase.result.humanJudgment = {
+      auditorCode: humanJudgment.auditorCode || null,
+      score: humanJudgment.score || null,
+      summary: humanJudgment.summary || null,
+      timestamp: humanJudgment.timestamp || null,
+    };
+  }
 
   // 生成校验和
   testCase.meta.checksum = await generateChecksum(testCase.execution);
