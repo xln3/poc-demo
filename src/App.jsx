@@ -1761,62 +1761,148 @@ export default function App() {
       // 构建 thinking 配置
       const thinkingConfig = thinkingEnabled ? { type: 'enabled', budget_tokens: thinkingBudget } : null;
 
-      // 调用模型 API（传递 thinking 配置）
-      const response = await CONFIG.callModel(
+      // === 流式输出：创建占位符（与单例测试一致）===
+      // 创建 thinking entry 占位符
+      if (thinkingConfig) {
+        setThinkingEntries([{
+          content: '',
+          chars: 0,
+          timestamp: Date.now(),
+          isStreaming: true
+        }]);
+        // 添加测试记录占位符
+        addTestRecord({
+          id: 'thinking-0',
+          type: 'thinking',
+          timestamp: Date.now(),
+          summary: '思考中...',
+          fullContent: null,
+          meta: { chars: 0, thinkingIndex: 0, isStreaming: true },
+          annotations: []
+        });
+        // 切换到思考标签页
+        setLeftPanelTab('thinking');
+      }
+
+      // 创建 agent message 占位符
+      setMessages(prev => [...prev, { role: 'agent', content: '', isStreaming: true }]);
+
+      // 创建 API 交互记录占位符
+      setApiInteractions([{
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        isStreaming: true,
+        interactions: []
+      }]);
+
+      // === 流式回调：实时更新 thinking 和 message ===
+      const onDelta = (deltaContent, deltaThinking) => {
+        if (deltaContent) {
+          setMessages(prev => {
+            const newMsgs = [...prev];
+            for (let i = newMsgs.length - 1; i >= 0; i--) {
+              if (newMsgs[i].isStreaming) {
+                newMsgs[i] = { ...newMsgs[i], content: newMsgs[i].content + deltaContent };
+                break;
+              }
+            }
+            return newMsgs;
+          });
+        }
+        if (deltaThinking && thinkingConfig) {
+          setThinkingEntries(prev => {
+            const newEntries = [...prev];
+            for (let i = newEntries.length - 1; i >= 0; i--) {
+              if (newEntries[i].isStreaming) {
+                newEntries[i] = {
+                  ...newEntries[i],
+                  content: newEntries[i].content + deltaThinking,
+                  chars: newEntries[i].content.length + deltaThinking.length
+                };
+                break;
+              }
+            }
+            return newEntries;
+          });
+        }
+      };
+
+      // 调用流式 API
+      const response = await CONFIG.callModelStream(
         [{ role: 'user', content: actualPayload }],
         systemPrompt,
         selectedModel,
         { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
-        thinkingConfig
+        thinkingConfig,
+        onDelta
       );
 
       const apiTime = Date.now() - startTime;
       const responseContent = typeof response === 'object' ? response.content : response;
 
-      // 显示思考过程（如果有）
+      // === 流式完成：标记结束状态 ===
+      // 更新 thinking entry 为完成状态
       if (response.thinking) {
-        // 设置思考面板（与单独测试一致的格式）
-        setThinkingEntries([{
-          content: response.thinking,
-          chars: response.thinking.length,  // 必须设置 chars，否则显示 undefined
-          timestamp: Date.now(),
-          isStreaming: false  // 已完成，非流式
-        }]);
-
-        // 切换到思考标签页
-        setLeftPanelTab('thinking');
-
-        // 添加执行日志中的思考记录（thinkingIndex=0，因为每个用例开始时已重置）
-        addTestRecord({
-          id: 'thinking-0',
-          type: 'thinking',
-          timestamp: Date.now(),
-          summary: `思考过程 (${response.thinking.length} 字符)`,
-          fullContent: response.thinking,
-          meta: { chars: response.thinking.length, thinkingIndex: 0, isStreaming: false },
-          annotations: []
+        setThinkingEntries(prev => {
+          const newEntries = [...prev];
+          for (let i = newEntries.length - 1; i >= 0; i--) {
+            if (newEntries[i].isStreaming) {
+              newEntries[i] = { ...newEntries[i], isStreaming: false };
+              break;
+            }
+          }
+          return newEntries;
         });
+
+        // 更新执行日志中的思考记录（与单例测试格式一致）
+        updateTestRecord('thinking-0', {
+          summary: `思考：${response.thinking.slice(0, 30).replace(/\n/g, ' ')}...`,
+          fullContent: response.thinking,
+          meta: { chars: response.thinking.length, thinkingIndex: 0, isStreaming: false }
+        });
+      } else if (thinkingConfig) {
+        // 如果启用了思考但没有返回思考内容，删除占位符
+        removeTestRecord('thinking-0');
+        setThinkingEntries([]);
       }
 
-      // 记录 API 交互
-      setApiInteractions([{
-        id: Date.now().toString(),
-        timestamp: Date.now(),
-        isStreaming: false,
-        interactions: [{
-          request: {
-            model: selectedModel,
-            messages: [{ role: 'user', content: actualPayload }],
-            system: systemPrompt
-          },
-          response: response
-        }]
-      }]);
+      // 更新 agent message 为完成状态
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        for (let i = newMsgs.length - 1; i >= 0; i--) {
+          if (newMsgs[i].isStreaming) {
+            newMsgs[i] = { ...newMsgs[i], isStreaming: false };
+            break;
+          }
+        }
+        return newMsgs;
+      });
+
+      // 更新 API 交互记录
+      setApiInteractions(prev => {
+        const newInteractions = [...prev];
+        for (let i = newInteractions.length - 1; i >= 0; i--) {
+          if (newInteractions[i].isStreaming) {
+            newInteractions[i] = {
+              ...newInteractions[i],
+              isStreaming: false,
+              interactions: [{
+                request: {
+                  model: selectedModel,
+                  messages: [{ role: 'user', content: actualPayload }],
+                  system: systemPrompt
+                },
+                response: response.raw || response
+              }]
+            };
+            break;
+          }
+        }
+        return newInteractions;
+      });
 
       // 显示响应
       setRealResponse(responseContent);
-      const agentMsg = { role: 'agent', content: responseContent };
-      setMessages(prev => [...prev, agentMsg]);
 
       // 添加日志
       setLogs(prev => [
@@ -1826,14 +1912,14 @@ export default function App() {
         { type: 'judge', content: `正在使用 ${judgeConfig.model} 评判攻击结果...`, status: 'normal' }
       ]);
 
-      // 添加回答记录
+      // 添加回答记录（与单例测试格式一致）
       addTestRecord({
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         type: 'response',
         timestamp: Date.now(),
-        summary: `模型响应 (${responseContent.length} 字符)`,
+        summary: `回答：${responseContent.slice(0, 30).replace(/\n/g, ' ')}...`,
         fullContent: responseContent,
-        meta: { model: selectedModel, apiTime },
+        meta: { model: selectedModel, apiTime, chars: responseContent.length },
         annotations: []
       });
 
