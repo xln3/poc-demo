@@ -37,12 +37,29 @@ export function generateUUID() {
  */
 export async function generateChecksum(data) {
   const str = JSON.stringify(data);
-  const encoder = new TextEncoder();
-  const buffer = encoder.encode(str);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return `sha256:${hashHex}`;
+
+  // crypto.subtle 在非 HTTPS 环境下可能不可用，使用 fallback
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    try {
+      const encoder = new TextEncoder();
+      const buffer = encoder.encode(str);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return `sha256:${hashHex}`;
+    } catch (e) {
+      // fallback to simple hash
+    }
+  }
+
+  // Fallback: 简单的字符串哈希
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return `simple:${Math.abs(hash).toString(16)}`;
 }
 
 /**
@@ -1661,17 +1678,494 @@ export function detectSchemaVersion(data) {
   const version = data?.meta?.schemaVersion;
 
   if (version === SCHEMA_VERSION) {
+    // Dataset
+    if (data.meta?.type === 'Dataset' && Array.isArray(data.cases)) {
+      return { version: SCHEMA_VERSION, type: 'Dataset' };
+    }
+    // RecordingSession
+    if (data.meta?.type === 'RecordingSession' && Array.isArray(data.states)) {
+      return { version: SCHEMA_VERSION, type: 'RecordingSession' };
+    }
+    // StandaloneTestCase
+    if (data.meta?.type === 'TestCase' && data.input && data.criteria) {
+      return { version: SCHEMA_VERSION, type: 'TestCase' };
+    }
+    // PlaybackSequence (legacy)
     if (data.states && Array.isArray(data.states)) {
       return { version: SCHEMA_VERSION, type: 'PlaybackSequence' };
     }
+    // TestInput (legacy)
     if (data.attack && data.llmConfig) {
       return { version: SCHEMA_VERSION, type: 'TestInput' };
     }
   }
 
   if (version === SCHEMA_VERSION_V1 || (data.source && data.execution)) {
-    return { version: SCHEMA_VERSION_V1, type: 'TestCase' };
+    return { version: SCHEMA_VERSION_V1, type: 'TestCaseV1' };
   }
 
   return { version: 'unknown', type: 'unknown' };
+}
+
+// ============ Dataset Schema (v2.0.0) ============
+
+/**
+ * 数据集来源类型
+ */
+export const DatasetSourceType = {
+  PAPER: 'paper',      // 学术论文
+  BUSINESS: 'business', // 业务场景
+  MANUAL: 'manual',    // 手工创建
+  GENERATED: 'generated', // 自动生成
+};
+
+/**
+ * 创建空的 Dataset
+ */
+export function createEmptyDataset() {
+  return {
+    meta: {
+      schemaVersion: SCHEMA_VERSION,
+      type: 'Dataset',
+      datasetId: generateUUID(),
+      name: '',
+      description: '',
+      createdAt: new Date().toISOString(),
+      updatedAt: null,
+      caseCount: 0,
+      totalSize: 0,
+      capabilities: [],
+      source: {
+        type: DatasetSourceType.MANUAL,
+        reference: null,
+        url: null,
+      },
+      tags: [],
+    },
+    cases: [],
+  };
+}
+
+/**
+ * 创建数据集内的测试用例
+ */
+export function createDatasetCase({
+  id,
+  name,
+  capability,
+  input,
+  criteria,
+  recording = null,
+}) {
+  return {
+    id: id || generateUUID(),
+    name: name || '',
+    capability: capability || null,
+    input: input || createEmptyTestInput(),
+    criteria: {
+      expectedBehavior: criteria?.expectedBehavior || '',
+      successCondition: criteria?.successCondition || '',
+      failureCondition: criteria?.failureCondition || '',
+    },
+    recording: recording || null,
+  };
+}
+
+/**
+ * 构建 Dataset
+ */
+export function buildDataset({
+  name,
+  description,
+  cases,
+  capabilities,
+  source,
+  tags,
+}) {
+  const dataset = createEmptyDataset();
+
+  dataset.meta.name = name || '';
+  dataset.meta.description = description || '';
+  dataset.meta.capabilities = capabilities || [];
+  dataset.meta.tags = tags || [];
+
+  if (source) {
+    dataset.meta.source = {
+      type: source.type || DatasetSourceType.MANUAL,
+      reference: source.reference || null,
+      url: source.url || null,
+    };
+  }
+
+  dataset.cases = cases || [];
+  dataset.meta.caseCount = dataset.cases.length;
+
+  // 计算总大小（估算）
+  dataset.meta.totalSize = JSON.stringify(dataset).length;
+
+  // 从用例中提取能力范围
+  if (dataset.cases.length > 0 && (!capabilities || capabilities.length === 0)) {
+    const caps = new Set();
+    dataset.cases.forEach(c => {
+      if (c.capability) caps.add(c.capability);
+      if (c.input?.attack?.capabilityLevel) caps.add(c.input.attack.capabilityLevel);
+    });
+    dataset.meta.capabilities = Array.from(caps);
+  }
+
+  return dataset;
+}
+
+/**
+ * 验证 Dataset
+ */
+export function validateDataset(data) {
+  const errors = [];
+
+  if (!data.meta) {
+    errors.push('缺少 meta 字段');
+  } else {
+    if (data.meta.type !== 'Dataset') {
+      errors.push('meta.type 必须为 "Dataset"');
+    }
+    if (!data.meta.datasetId) {
+      errors.push('缺少 meta.datasetId');
+    }
+    if (!data.meta.name) {
+      errors.push('缺少 meta.name');
+    }
+  }
+
+  if (!Array.isArray(data.cases)) {
+    errors.push('cases 必须是数组');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+// ============ Standalone TestCase Schema (v2.0.0) ============
+
+/**
+ * 创建独立的测试用例（可单独导入/导出）
+ */
+export function createStandaloneTestCase({
+  name,
+  capability,
+  input,
+  criteria,
+  recording = null,
+}) {
+  return {
+    meta: {
+      schemaVersion: SCHEMA_VERSION,
+      type: 'TestCase',
+      caseId: generateUUID(),
+      name: name || '',
+      capability: capability || null,
+      createdAt: new Date().toISOString(),
+    },
+    input: input || createEmptyTestInput(),
+    criteria: {
+      expectedBehavior: criteria?.expectedBehavior || '',
+      successCondition: criteria?.successCondition || '',
+      failureCondition: criteria?.failureCondition || '',
+    },
+    recording: recording || null,
+  };
+}
+
+/**
+ * 验证独立测试用例
+ */
+export function validateStandaloneTestCase(data) {
+  const errors = [];
+
+  if (!data.meta) {
+    errors.push('缺少 meta 字段');
+  } else {
+    if (data.meta.type !== 'TestCase') {
+      errors.push('meta.type 必须为 "TestCase"');
+    }
+    if (!data.meta.caseId) {
+      errors.push('缺少 meta.caseId');
+    }
+  }
+
+  if (!data.input) {
+    errors.push('缺少 input 字段');
+  }
+
+  if (!data.criteria) {
+    errors.push('缺少 criteria 字段');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+// ============ RecordingSession Schema (v2.0.0) ============
+
+/**
+ * 创建空的 RecordingSession
+ */
+export function createEmptyRecordingSession() {
+  return {
+    meta: {
+      schemaVersion: SCHEMA_VERSION,
+      type: 'RecordingSession',
+      sessionId: generateUUID(),
+      caseId: null,
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+    },
+    states: [],
+    result: {
+      status: null,
+      finalResponse: null,
+      judgment: null,
+      timing: {
+        totalMs: 0,
+        llmMs: null,
+        toolCallMs: null,
+        judgeMs: null,
+      },
+    },
+  };
+}
+
+/**
+ * 构建 RecordingSession
+ */
+export async function buildRecordingSession({
+  caseId,
+  states,
+  result,
+  startedAt,
+  completedAt,
+}) {
+  const session = createEmptyRecordingSession();
+
+  session.meta.caseId = caseId || null;
+  session.meta.startedAt = startedAt || new Date().toISOString();
+  session.meta.completedAt = completedAt || new Date().toISOString();
+
+  session.states = states || [];
+  session.result = result || session.result;
+
+  // 生成校验和
+  if (session.states.length > 0) {
+    session.meta.checksum = await generateChecksum(session.states);
+  }
+
+  return session;
+}
+
+/**
+ * 验证 RecordingSession
+ */
+export function validateRecordingSession(data) {
+  const errors = [];
+
+  if (!data.meta) {
+    errors.push('缺少 meta 字段');
+  } else {
+    if (data.meta.type !== 'RecordingSession') {
+      errors.push('meta.type 必须为 "RecordingSession"');
+    }
+    if (!data.meta.sessionId) {
+      errors.push('缺少 meta.sessionId');
+    }
+  }
+
+  if (!Array.isArray(data.states)) {
+    errors.push('states 必须是数组');
+  }
+
+  if (!data.result) {
+    errors.push('缺少 result 字段');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+// ============ 通用导入/导出 ============
+
+/**
+ * 导入任意格式的数据（自动检测类型）
+ */
+export function importFromJSON(json) {
+  try {
+    const data = typeof json === 'string' ? JSON.parse(json) : json;
+    const { version, type } = detectSchemaVersion(data);
+
+    if (type === 'unknown') {
+      return { data: null, type: null, error: '无法识别的数据格式' };
+    }
+
+    // 根据类型验证
+    let validation = { valid: true, errors: [] };
+
+    switch (type) {
+      case 'Dataset':
+        validation = validateDataset(data);
+        break;
+      case 'TestCase':
+        validation = validateStandaloneTestCase(data);
+        break;
+      case 'RecordingSession':
+        validation = validateRecordingSession(data);
+        break;
+      case 'PlaybackSequence':
+        validation = validatePlaybackSequence(data);
+        break;
+      case 'TestInput':
+        validation = validateTestInput(data);
+        break;
+      case 'TestCaseV1':
+        validation = validateTestCase(data);
+        break;
+    }
+
+    if (!validation.valid) {
+      return {
+        data: null,
+        type: null,
+        error: `验证失败: ${validation.errors.join(', ')}`,
+      };
+    }
+
+    return { data, type, version, error: null };
+  } catch (e) {
+    return { data: null, type: null, error: `JSON 解析失败: ${e.message}` };
+  }
+}
+
+/**
+ * 下载数据为 JSON 文件
+ */
+export function downloadAsJSON(data, filename) {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * 从文件选择器导入
+ */
+export function importFromFileDialog() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) {
+        resolve({ data: null, type: null, error: '未选择文件' });
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        resolve(importFromJSON(text));
+      } catch (err) {
+        resolve({ data: null, type: null, error: `读取文件失败: ${err.message}` });
+      }
+    };
+
+    input.click();
+  });
+}
+
+/**
+ * 将 v1 TestCase 转换为独立 TestCase (v2)
+ */
+export function convertV1ToStandaloneCase(v1Case) {
+  const input = createEmptyTestInput();
+
+  // 填充 input 数据（从 v1 格式迁移）
+  input.meta.name = v1Case.meta?.name || v1Case.source?.attack?.name;
+  input.meta.tags = v1Case.meta?.tags || [];
+
+  input.attack.capabilityLevel = v1Case.source?.capabilityLevel;
+  input.attack.scenarioKey = v1Case.source?.scenarioKey;
+  input.attack.scenarioName = v1Case.source?.scenarioName;
+  input.attack.attackName = v1Case.source?.attack?.name;
+  input.attack.attackType = v1Case.source?.attack?.type;
+  input.attack.riskLevel = v1Case.source?.attack?.level;
+  input.attack.description = v1Case.source?.attack?.description;
+
+  input.llmConfig = {
+    modelId: v1Case.environment?.llm?.modelId,
+    modelName: v1Case.environment?.llm?.modelName,
+    temperature: v1Case.environment?.llm?.temperature ?? 0.7,
+    maxTokens: v1Case.environment?.llm?.maxTokens ?? 2048,
+    topP: v1Case.environment?.llm?.topP ?? 0.9,
+    thinking: v1Case.environment?.llm?.thinking || { enabled: false, budgetTokens: 10000 },
+  };
+
+  input.systemPrompt = {
+    original: v1Case.environment?.originalSystemPrompt,
+    custom: v1Case.environment?.systemPrompt,
+    active: v1Case.environment?.systemPrompt,
+  };
+
+  input.payload = {
+    source: v1Case.execution?.payload?.isCustomized ? 'custom_text' : 'predefined',
+    displayText: v1Case.execution?.payload?.display,
+    actualText: v1Case.execution?.payload?.actual,
+    characterCount: v1Case.execution?.payload?.characterCount || 0,
+    file: null,
+  };
+
+  return createStandaloneTestCase({
+    name: input.meta.name,
+    capability: input.attack.capabilityLevel,
+    input,
+    criteria: {
+      expectedBehavior: v1Case.source?.attack?.description || '',
+      successCondition: '攻击成功绕过防护',
+      failureCondition: '防御机制有效阻止攻击',
+    },
+    recording: null,
+  });
+}
+
+/**
+ * 从 PlaybackSequence 提取独立 TestCase
+ */
+export function extractTestCaseFromPlaybackSequence(sequence) {
+  const input = sequence.input || createEmptyTestInput();
+
+  return createStandaloneTestCase({
+    name: input.meta?.name || input.attack?.attackName,
+    capability: input.attack?.capabilityLevel,
+    input,
+    criteria: {
+      expectedBehavior: input.attack?.description || '',
+      successCondition: '攻击成功',
+      failureCondition: '防御成功',
+    },
+    recording: {
+      sessionId: sequence.meta?.sequenceId,
+      states: sequence.states,
+      result: sequence.result,
+    },
+  });
 }

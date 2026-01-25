@@ -7,6 +7,7 @@ import {
   SCHEMA_VERSION_V1,
   ExecutionPhase,
   ApiStatus,
+  buildPlaybackSequence,
 } from '../schemas/testCase.js';
 
 /**
@@ -77,10 +78,85 @@ export const usePlayback = ({
     // 检测版本
     const { version, type } = detectSchemaVersion(data);
 
+    // v2 RecordingSession - 没有环境配置，直接返回 true
+    if (version === SCHEMA_VERSION && type === 'RecordingSession') {
+      return true;
+    }
+
+    // v2 StandaloneTestCase - 从 input 恢复
+    if (version === SCHEMA_VERSION && type === 'TestCase') {
+      const input = data.input;
+      if (!input) return true; // 没有 input 也允许继续
+
+      // 恢复 LLM 配置
+      const llm = input.llmConfig || {};
+      if (llm.modelId) {
+        const modelExists = CONFIG.models.some(m => m.id === llm.modelId);
+        if (modelExists) {
+          setSelectedModel(llm.modelId);
+        }
+      }
+      if (llm.temperature !== undefined) setLlmTemperature(llm.temperature);
+      if (llm.maxTokens !== undefined) setLlmMaxTokens(llm.maxTokens);
+      if (llm.topP !== undefined) setLlmTopP(llm.topP);
+      if (llm.thinking) {
+        setThinkingEnabled(llm.thinking.enabled || false);
+        setThinkingBudget(llm.thinking.budgetTokens || 10000);
+      }
+
+      // 恢复系统提示词
+      if (input.systemPrompt?.active) {
+        setCustomSystemPrompt(input.systemPrompt.active);
+      }
+
+      // 恢复工具配置
+      const tools = input.capabilities?.toolCalling;
+      setToolsEnabled(tools?.enabled || false);
+      if (tools?.enabledTools) {
+        setEnabledTools(tools.enabledTools);
+      }
+      if (tools?.maxCalls) {
+        setMaxToolCalls(tools.maxCalls);
+      }
+
+      // 恢复沙箱配置
+      const sandbox = input.capabilities?.sandbox;
+      setSandboxEnabled(sandbox?.enabled || false);
+      if (sandbox?.image) {
+        setSandboxImage(sandbox.image);
+      }
+
+      // 恢复 RAG 配置
+      const rag = input.capabilities?.rag;
+      setRagEnabled(rag?.enabled || false);
+      setRagMode(rag?.mode || 'mock');
+      if (rag?.mockKnowledge) {
+        setRagKnowledge(rag.mockKnowledge);
+      }
+
+      // 恢复 MCP 配置
+      const mcp = input.capabilities?.mcp;
+      setMcpEnabled(mcp?.parserEnabled || false);
+      if (mcp?.selectedParsers) {
+        setMcpParsers(mcp.selectedParsers);
+      }
+      setMcpServerEnabled(mcp?.serverEnabled || false);
+      if (mcp?.selectedServer) {
+        setSelectedMcpServer(mcp.selectedServer);
+      }
+
+      // 恢复 payload
+      if (input.payload?.displayText) {
+        setCustomTestPayload(input.payload.displayText);
+      }
+
+      return true;
+    }
+
     if (version === SCHEMA_VERSION && type === 'PlaybackSequence') {
       // v2 PlaybackSequence - 从 input 恢复
       const input = data.input;
-      if (!input) return false;
+      if (!input) return true; // 没有 input 也允许继续
 
       // 恢复 LLM 配置
       const llm = input.llmConfig || {};
@@ -427,6 +503,37 @@ export const usePlayback = ({
   ]);
 
   /**
+   * 从 RecordingSession 构建 PlaybackSequence
+   */
+  const buildSequenceFromRecording = useCallback((recording, input = null) => {
+    if (!recording || !recording.states || recording.states.length === 0) {
+      return null;
+    }
+
+    // 构建一个兼容 PlaybackSequence 格式的对象
+    return {
+      meta: {
+        schemaVersion: SCHEMA_VERSION,
+        type: 'PlaybackSequence',
+        sequenceId: recording.meta?.sessionId || `playback-${Date.now()}`,
+        createdAt: recording.meta?.startedAt || new Date().toISOString(),
+        stateCount: recording.states.length,
+        duration: recording.meta?.completedAt && recording.meta?.startedAt
+          ? new Date(recording.meta.completedAt).getTime() - new Date(recording.meta.startedAt).getTime()
+          : 0,
+        checksum: recording.meta?.checksum || null,
+      },
+      input: input || null,
+      states: recording.states,
+      result: recording.result || null,
+      playback: {
+        markers: [],
+        suggestedSpeed: 1,
+      },
+    };
+  }, []);
+
+  /**
    * 开始回放（自动检测版本）
    */
   const startPlayback = useCallback(async (data) => {
@@ -440,22 +547,45 @@ export const usePlayback = ({
     // 先恢复环境
     const restored = restoreEnvironment(data);
     if (!restored) {
-      alert('恢复环境配置失败');
-      return;
+      console.warn('恢复环境配置失败或无配置，继续回放');
     }
 
     if (version === SCHEMA_VERSION && type === 'PlaybackSequence') {
-      // v2 回放
+      // v2 PlaybackSequence 回放
       setPlaybackSequence(data);
       await playbackV2Sequence(data);
-    } else if (version === SCHEMA_VERSION_V1 || type === 'TestCase') {
+    } else if (version === SCHEMA_VERSION && type === 'TestCase') {
+      // v2 StandaloneTestCase - 检查是否有录制数据
+      if (data.recording && data.recording.states && data.recording.states.length > 0) {
+        // 有录制数据，构建 PlaybackSequence 进行回放
+        const sequence = buildSequenceFromRecording(data.recording, data.input);
+        setPlaybackSequence(sequence);
+        await playbackV2Sequence(sequence);
+      } else {
+        // 无录制数据，提示用户
+        alert('该测试用例没有录制数据，无法回放');
+        setIsPlaybackMode(false);
+        setPlaybackCase(null);
+      }
+    } else if (version === SCHEMA_VERSION && type === 'RecordingSession') {
+      // v2 RecordingSession - 直接从录制会话回放
+      const sequence = buildSequenceFromRecording(data);
+      if (sequence) {
+        setPlaybackSequence(sequence);
+        await playbackV2Sequence(sequence);
+      } else {
+        alert('录制会话没有状态数据');
+        setIsPlaybackMode(false);
+        setPlaybackCase(null);
+      }
+    } else if (version === SCHEMA_VERSION_V1 || (type === 'TestCase' && version !== SCHEMA_VERSION)) {
       // v1 回放
       setPlaybackSequence(null);
       await playbackV1Execution(data);
     } else {
       alert('未知的测试用例格式');
     }
-  }, [restoreEnvironment, playbackV2Sequence, playbackV1Execution]);
+  }, [restoreEnvironment, playbackV2Sequence, playbackV1Execution, buildSequenceFromRecording]);
 
   /**
    * 暂停回放
@@ -592,5 +722,6 @@ export const usePlayback = ({
     jumpToMarker,
     migrateAndPlayback,
     applyState,
+    buildSequenceFromRecording,
   };
 };

@@ -9,3 +9,5 @@ export { useConversation } from './useConversation.js';
 export { useLLMConfig } from './useLLMConfig.js';
 export { usePlayback } from './usePlayback.js';
 export { useStateCollector, buildPartialStateFromAppState } from './useStateCollector.js';
+export { useDatasets, CAPABILITY_CONFIG } from './useDatasets.js';
+export { useTestExecution, ExecutionMode, BatchResultStatus } from './useTestExecution.js';
