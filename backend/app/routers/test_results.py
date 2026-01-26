@@ -1,6 +1,6 @@
 """API endpoints for batch test results."""
 from __future__ import annotations
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -47,6 +47,27 @@ class TestResultSummary(BaseModel):
     meta: Dict[str, Any] = {}
 
 
+class UpdateCaseReview(BaseModel):
+    """Request to update a case review."""
+    type: Literal['llm', 'human'] = 'human'
+    riskLevel: str  # high/medium/low/safe/pending
+    reason: str
+    notes: Optional[str] = None
+    reviewer: Optional[str] = None
+
+
+class UpdateReport(BaseModel):
+    """Request to update the text report."""
+    content: str
+    editedBy: Literal['llm', 'human'] = 'human'
+
+
+class GenerateRequest(BaseModel):
+    """Request for LLM generation."""
+    prompt: str
+    model: Optional[str] = None
+
+
 @router.get("", response_model=List[TestResultSummary])
 async def list_test_results():
     """List all saved test results."""
@@ -80,3 +101,82 @@ async def delete_test_result(result_id: str):
     if not success:
         raise HTTPException(status_code=404, detail="Test result not found")
     return {"success": True}
+
+
+@router.delete("/{result_id}/cases/{case_index}")
+async def delete_test_case(result_id: str, case_index: int):
+    """Delete a single case from a test result."""
+    result = test_results_storage.delete_case(result_id, case_index)
+    if not result:
+        raise HTTPException(status_code=404, detail="Test result or case not found")
+    return {"success": True, "data": result}
+
+
+@router.patch("/{result_id}/cases/{case_index}/review")
+async def update_case_review(result_id: str, case_index: int, request: UpdateCaseReview):
+    """Update the review for a single case."""
+    result = test_results_storage.update_case_review(
+        result_id,
+        case_index,
+        request.model_dump()
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Test result or case not found")
+    return {"success": True, "data": result}
+
+
+@router.patch("/{result_id}/report")
+async def update_report(result_id: str, request: UpdateReport):
+    """Update the text report for a test result."""
+    result = test_results_storage.update_report(
+        result_id,
+        request.content,
+        request.editedBy
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Test result not found")
+    return {"success": True, "data": result}
+
+
+@router.post("/{result_id}/report/generate")
+async def generate_report(result_id: str, request: GenerateRequest):
+    """Generate a text report using LLM."""
+    # Get the test result data
+    result = test_results_storage.get_result(result_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Test result not found")
+
+    # Return data for frontend to call LLM
+    # (LLM call is done on frontend to use existing API config)
+    return {
+        "success": True,
+        "prompt": request.prompt,
+        "model": request.model,
+        "resultData": result
+    }
+
+
+@router.post("/{result_id}/cases/{case_index}/review/generate")
+async def generate_case_review(result_id: str, case_index: int, request: GenerateRequest):
+    """Generate a review for a single case using LLM."""
+    result = test_results_storage.get_result(result_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Test result not found")
+
+    # Find the case
+    case_data = None
+    for case in result.get("results", []):
+        if case.get("index") == case_index:
+            case_data = case
+            break
+
+    if not case_data:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    # Return data for frontend to call LLM
+    return {
+        "success": True,
+        "prompt": request.prompt,
+        "model": request.model,
+        "caseData": case_data
+    }

@@ -112,19 +112,35 @@ export const CaseBrowser = ({
             </div>
           </div>
         )}
-        {criteria.successCondition && (
+        {criteria.riskLevelConditions?.high && (
           <div>
-            <div className="text-green-500/70 text-xs mb-1">攻击成功条件</div>
-            <div className="bg-green-900/20 border border-green-800/30 rounded p-2 text-green-300">
-              {criteria.successCondition}
+            <div className="text-red-500/70 text-xs mb-1">🔴 高风险条件</div>
+            <div className="bg-red-900/20 border border-red-800/30 rounded p-2 text-red-300">
+              {criteria.riskLevelConditions.high}
             </div>
           </div>
         )}
-        {criteria.failureCondition && (
+        {criteria.riskLevelConditions?.medium && (
           <div>
-            <div className="text-blue-500/70 text-xs mb-1">防御成功条件</div>
-            <div className="bg-blue-900/20 border border-blue-800/30 rounded p-2 text-blue-300">
-              {criteria.failureCondition}
+            <div className="text-orange-500/70 text-xs mb-1">🟠 中风险条件</div>
+            <div className="bg-orange-900/20 border border-orange-800/30 rounded p-2 text-orange-300">
+              {criteria.riskLevelConditions.medium}
+            </div>
+          </div>
+        )}
+        {criteria.riskLevelConditions?.low && (
+          <div>
+            <div className="text-yellow-500/70 text-xs mb-1">🟡 低风险条件</div>
+            <div className="bg-yellow-900/20 border border-yellow-800/30 rounded p-2 text-yellow-300">
+              {criteria.riskLevelConditions.low}
+            </div>
+          </div>
+        )}
+        {criteria.riskLevelConditions?.safe && (
+          <div>
+            <div className="text-green-500/70 text-xs mb-1">🟢 安全条件</div>
+            <div className="bg-green-900/20 border border-green-800/30 rounded p-2 text-green-300">
+              {criteria.riskLevelConditions.safe}
             </div>
           </div>
         )}

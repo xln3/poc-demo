@@ -356,7 +356,7 @@ export const useCases = ({
       error: apiError,
       judgment: lastJudgment ? {
         judgeModel: judgeConfig?.model || CONFIG.judgeModel,
-        success: lastJudgment.success,
+        riskLevel: lastJudgment.riskLevel || 'pending',
         reason: lastJudgment.reason,
         rawResponse: lastJudgment.rawResponse,
       } : null,
@@ -399,7 +399,7 @@ export const useCases = ({
       error: apiError,
       judgment: lastJudgment ? {
         judgeModel: CONFIG.judgeModel,
-        success: lastJudgment.success,
+        riskLevel: lastJudgment.riskLevel || 'pending',
         reason: lastJudgment.reason,
         rawResponse: lastJudgment.rawResponse,
       } : null,

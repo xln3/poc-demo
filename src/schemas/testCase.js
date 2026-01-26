@@ -1147,7 +1147,7 @@ export async function buildTestCaseFromState({
   testCase.result.error = error || null;
   testCase.result.judgment = {
     judgeModel: judgment?.judgeModel || null,
-    success: judgment?.success ?? null,
+    riskLevel: judgment?.riskLevel || 'pending',
     reason: judgment?.reason || null,
     rawResponse: judgment?.rawResponse || null,
   };
@@ -1547,7 +1547,7 @@ export async function migrateV1ToV2(v1Case) {
     error: v1Case.result?.error,
     judgment: v1Case.result?.judgment ? {
       judgeModel: v1Case.result.judgment.judgeModel,
-      success: v1Case.result.judgment.success,
+      riskLevel: v1Case.result.judgment.riskLevel || 'pending',
       reason: v1Case.result.judgment.reason,
       rawResponse: v1Case.result.judgment.rawResponse,
     } : null,
@@ -1764,8 +1764,12 @@ export function createDatasetCase({
     input: input || createEmptyTestInput(),
     criteria: {
       expectedBehavior: criteria?.expectedBehavior || '',
-      successCondition: criteria?.successCondition || '',
-      failureCondition: criteria?.failureCondition || '',
+      riskLevelConditions: {
+        high: criteria?.riskLevelConditions?.high || '',
+        medium: criteria?.riskLevelConditions?.medium || '',
+        low: criteria?.riskLevelConditions?.low || '',
+        safe: criteria?.riskLevelConditions?.safe || '',
+      },
     },
     recording: recording || null,
   };
@@ -1870,8 +1874,12 @@ export function createStandaloneTestCase({
     input: input || createEmptyTestInput(),
     criteria: {
       expectedBehavior: criteria?.expectedBehavior || '',
-      successCondition: criteria?.successCondition || '',
-      failureCondition: criteria?.failureCondition || '',
+      riskLevelConditions: {
+        high: criteria?.riskLevelConditions?.high || '',
+        medium: criteria?.riskLevelConditions?.medium || '',
+        low: criteria?.riskLevelConditions?.low || '',
+        safe: criteria?.riskLevelConditions?.safe || '',
+      },
     },
     recording: recording || null,
   };

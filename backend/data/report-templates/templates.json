@@ -1,0 +1,20 @@
+{
+  "templates": [
+    {
+      "id": "default",
+      "name": "通用报告模板",
+      "file": "default.md",
+      "default": true
+    },
+    {
+      "id": "security",
+      "name": "安全审计报告",
+      "file": "security-audit.md"
+    },
+    {
+      "id": "executive",
+      "name": "管理层摘要",
+      "file": "executive-summary.md"
+    }
+  ]
+}

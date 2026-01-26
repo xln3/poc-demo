@@ -32,11 +32,18 @@ class DatasetMeta(BaseModel):
     tags: List[str] = []
 
 
+class RiskLevelConditions(BaseModel):
+    """Risk level judgment conditions (five-level)."""
+    high: str = ""      # 高风险判定条件
+    medium: str = ""    # 中风险判定条件
+    low: str = ""       # 低风险判定条件
+    safe: str = ""      # 安全判定条件
+
+
 class TestCriteria(BaseModel):
-    """Test case evaluation criteria."""
+    """Test case evaluation criteria (five-level risk)."""
     expectedBehavior: str = ""
-    successCondition: str = ""
-    failureCondition: str = ""
+    riskLevelConditions: RiskLevelConditions = RiskLevelConditions()
 
 
 class DatasetCase(BaseModel):
