@@ -11,7 +11,8 @@ MCP (Model Context Protocol) Server 功能为 LLM Agent 安全演示平台提供
 | Server ID | 名称 | 说明 | 工具数量 |
 |-----------|------|------|----------|
 | `filesystem` | Filesystem | 本地文件系统读写 | 4 |
-| `email` | Email | SMTP 邮件服务 | 2 |
+| `email` | Email | SMTP 邮件发送 | 2 |
+| `email_receive` | Email (Receive) | IMAP 邮件接收 | 3 |
 | `payment` | Payment | Stripe 支付网关 | 3 |
 | `notion` | Notion | Notion 文档管理 | 4 |
 | `github` | GitHub | GitHub 仓库操作 | 5 |
@@ -21,6 +22,8 @@ MCP (Model Context Protocol) Server 功能为 LLM Agent 安全演示平台提供
 | `calendar` | Calendar | 日历事件管理 | 4 |
 | `storage` | Storage | 对象存储服务 | 4 |
 | `memory` | Memory | 会话记忆存储 | 3 |
+| `browser_chrome` | Chrome Browser | Chrome 浏览器数据读取 | 2 |
+| `browser_firefox` | Firefox Browser | Firefox 浏览器数据读取 | 2 |
 
 ## 架构图
 
@@ -31,7 +34,7 @@ MCP (Model Context Protocol) Server 功能为 LLM Agent 安全演示平台提供
 │  src/App.jsx                                                     │
 │  ├── MCP 开关按钮 (mcpServerEnabled)                             │
 │  ├── MCP 配置面板                                                │
-│  │   ├── 左栏: 服务列表 (11 个 Server)                          │
+│  │   ├── 左栏: 服务列表 (14 个 Server)                          │
 │  │   └── 右栏: 动态配置表单 + 测试连接 + 启用/禁用               │
 │  └── 状态管理                                                    │
 │      ├── mcpServerConfigs (localStorage 持久化)                  │
@@ -63,16 +66,19 @@ MCP (Model Context Protocol) Server 功能为 LLM Agent 安全演示平台提供
 │      └── GET  /status/{server_id} - 获取服务状态                 │
 ├─────────────────────────────────────────────────────────────────┤
 │  backend/app/services/                                           │
-│  ├── mcp.py           - MCP Server 核心                          │
-│  ├── mcp_service.py   - MCP 服务封装                             │
-│  ├── mcp_notion.py    - Notion Server                            │
-│  ├── mcp_github.py    - GitHub Server                            │
-│  ├── mcp_database.py  - Database Server                          │
-│  ├── mcp_http.py      - HTTP Server                              │
-│  ├── mcp_slack.py     - Slack Server                             │
-│  ├── mcp_calendar.py  - Calendar Server                          │
-│  ├── mcp_storage.py   - Storage Server                           │
-│  └── mcp_memory.py    - Memory Server                            │
+│  ├── mcp.py              - MCP Server 核心                       │
+│  ├── mcp_service.py      - MCP 服务封装                          │
+│  ├── mcp_notion.py       - Notion Server                         │
+│  ├── mcp_github.py       - GitHub Server                         │
+│  ├── mcp_database.py     - Database Server                       │
+│  ├── mcp_http.py         - HTTP Server                           │
+│  ├── mcp_slack.py        - Slack Server                          │
+│  ├── mcp_calendar.py     - Calendar Server                       │
+│  ├── mcp_storage.py      - Storage Server                        │
+│  ├── mcp_memory.py       - Memory Server                         │
+│  ├── mcp_email_receive.py - Email Receive (IMAP)                 │
+│  ├── mcp_browser_chrome.py - Chrome Browser                      │
+│  └── mcp_browser_firefox.py - Firefox Browser                    │
 ├─────────────────────────────────────────────────────────────────┤
 │  backend/app/models/schemas.py                                   │
 │  └── Pydantic Models                                             │
@@ -453,6 +459,131 @@ elif server_id == McpServerType.NEW_SERVICE:
 - `memory_store` - 存储记忆
 - `memory_retrieve` - 检索记忆
 - `memory_clear` - 清除记忆
+
+### Email Receive 服务 (IMAP)
+
+| 配置字段 | 说明 |
+|---------|------|
+| imapHost | IMAP 服务器地址（如 `imap.163.com`） |
+| imapPort | IMAP 端口（默认 993） |
+| username | 邮箱账号 |
+| password | 授权码（非登录密码） |
+| useSSL | 是否使用 SSL（默认 true） |
+
+**可用工具**:
+- `email_list_inbox` - 列出收件箱邮件
+- `email_receive` - 读取邮件内容和附件列表
+- `email_download_attachment` - 下载附件（返回 base64）
+
+**实现文件**: `backend/app/services/mcp_email_receive.py`
+
+### Browser Chrome 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| profilePath | Chrome 配置目录（留空自动检测） |
+
+**默认路径**:
+- Linux: `~/.config/google-chrome/Default`
+- macOS: `~/Library/Application Support/Google/Chrome/Default`
+
+**可用工具**:
+- `chrome_get_cookies` - 读取 cookies（AES 加密密文）
+- `chrome_get_history` - 读取浏览历史
+
+**实现文件**: `backend/app/services/mcp_browser_chrome.py`
+
+**安全说明**: Chrome 使用 OS 级别加密存储 cookies，本服务返回加密后的密文（base64 格式），用于演示数据泄露风险。
+
+### Browser Firefox 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| profilePath | Firefox 配置目录（留空自动检测） |
+
+**默认路径**:
+- Linux: `~/.mozilla/firefox/*.default*`
+- macOS: `~/Library/Application Support/Firefox/Profiles/*.default*`
+
+**可用工具**:
+- `firefox_get_cookies` - 读取 cookies（明文）
+- `firefox_get_history` - 读取浏览历史
+
+**实现文件**: `backend/app/services/mcp_browser_firefox.py`
+
+**安全说明**: Firefox cookies 以明文存储在 SQLite 数据库中，可直接读取。
+
+---
+
+## 常见问题
+
+### 163 邮箱 IMAP "Unsafe Login" 错误
+
+**问题现象**:
+
+使用 Email Receive 服务连接 163 邮箱时，登录成功但执行操作时报错：
+```
+EXAMINE Unsafe Login. Please contact kefu@188.com for help
+```
+
+**根本原因**:
+
+163 邮箱（网易）的安全策略要求第三方客户端必须发送 **IMAP ID 命令**（RFC 2971）来表明身份。未发送 ID 命令的客户端会被判定为"不安全登录"。
+
+**解决方案**:
+
+在 `login()` 成功后、`select()` 之前发送 IMAP ID 命令：
+
+```python
+def _send_imap_id(self, conn: imaplib.IMAP4) -> None:
+    """发送 IMAP ID 命令（RFC 2971）"""
+    try:
+        args = '("name" "poc-demo" "version" "1.0" "vendor" "LLM-Security-Demo")'
+        tag = conn._new_tag()
+        cmd = f'{tag.decode()} ID {args}\r\n'
+        conn.send(cmd.encode())
+        # 读取响应直到收到 tagged 响应
+        response = conn.readline()
+        while not response.startswith(tag):
+            response = conn.readline()
+    except Exception as e:
+        logger.warning(f"[IMAP] ID command failed: {e}")
+```
+
+**IMAP 调用顺序**:
+
+```
+1. connect()     → 建立连接
+2. login()       → 认证（状态: AUTH）
+3. ID command    → 发送客户端身份 ← 关键步骤
+4. select()      → 选择邮箱（状态: SELECTED）
+5. search()      → 搜索邮件
+```
+
+**参考**:
+- [RFC 2971 - IMAP4 ID Extension](https://tools.ietf.org/html/rfc2971)
+- [博客：163邮箱 Unsafe Login 解决方案](https://blog.yrpang.com/posts/45207/)
+
+### Chrome 数据库锁定
+
+**问题**: 读取 Chrome 数据时报 "database is locked"
+
+**原因**: Chrome 正在运行，锁定了 SQLite 数据库
+
+**解决**:
+1. 关闭 Chrome 浏览器后重试
+2. 或者代码中复制数据库文件到临时目录后读取（已实现）
+
+### Firefox Profile 找不到
+
+**问题**: 报错 "Firefox profile not found"
+
+**原因**: Firefox 未安装或使用了非标准的 profile 目录
+
+**解决**: 在配置中手动指定 `profilePath`，例如：
+```
+~/.mozilla/firefox/abc123.default-release
+```
 
 ---
 

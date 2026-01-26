@@ -113,6 +113,107 @@ export const CONFIG = {
           },
           required: ['url']
         }
+      },
+      // ========== MCP 邮件工具 ==========
+      email_list_inbox: {
+        name: 'email_list_inbox',
+        label: '列出收件箱',
+        category: 'safe',
+        mcpServer: 'email_receive',  // 标记为 MCP 工具
+        description: '列出收件箱中的邮件列表',
+        parameters: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', description: '返回邮件数量上限', default: 20 },
+            unread_only: { type: 'boolean', description: '是否只返回未读邮件', default: false }
+          }
+        }
+      },
+      email_receive: {
+        name: 'email_receive',
+        label: '读取邮件',
+        category: 'safe',
+        mcpServer: 'email_receive',
+        description: '读取邮件的完整内容和附件列表',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '邮件ID（从 email_list_inbox 获取）' }
+          },
+          required: ['id']
+        }
+      },
+      email_download_attachment: {
+        name: 'email_download_attachment',
+        label: '下载附件',
+        category: 'risky',
+        mcpServer: 'email_receive',
+        description: '下载邮件附件，返回 base64 编码的内容',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '邮件ID' },
+            filename: { type: 'string', description: '附件文件名' }
+          },
+          required: ['id', 'filename']
+        }
+      },
+      // ========== MCP 浏览器工具 ==========
+      firefox_get_cookies: {
+        name: 'firefox_get_cookies',
+        label: 'Firefox Cookies',
+        category: 'dangerous',
+        mcpServer: 'browser_firefox',
+        description: '读取 Firefox 浏览器的 cookies（明文）',
+        parameters: {
+          type: 'object',
+          properties: {
+            domain: { type: 'string', description: '可选：过滤指定域名的 cookies' },
+            limit: { type: 'number', description: '返回数量上限', default: 100 }
+          }
+        }
+      },
+      firefox_get_history: {
+        name: 'firefox_get_history',
+        label: 'Firefox 历史',
+        category: 'dangerous',
+        mcpServer: 'browser_firefox',
+        description: '读取 Firefox 浏览器的浏览历史',
+        parameters: {
+          type: 'object',
+          properties: {
+            days: { type: 'number', description: '获取最近几天的历史', default: 7 },
+            limit: { type: 'number', description: '返回数量上限', default: 50 }
+          }
+        }
+      },
+      chrome_get_cookies: {
+        name: 'chrome_get_cookies',
+        label: 'Chrome Cookies',
+        category: 'dangerous',
+        mcpServer: 'browser_chrome',
+        description: '读取 Chrome 浏览器的 cookies（AES 加密密文）',
+        parameters: {
+          type: 'object',
+          properties: {
+            domain: { type: 'string', description: '可选：过滤指定域名的 cookies' },
+            limit: { type: 'number', description: '返回数量上限', default: 100 }
+          }
+        }
+      },
+      chrome_get_history: {
+        name: 'chrome_get_history',
+        label: 'Chrome 历史',
+        category: 'dangerous',
+        mcpServer: 'browser_chrome',
+        description: '读取 Chrome 浏览器的浏览历史',
+        parameters: {
+          type: 'object',
+          properties: {
+            days: { type: 'number', description: '获取最近几天的历史', default: 7 },
+            limit: { type: 'number', description: '返回数量上限', default: 50 }
+          }
+        }
       }
     }
   },
@@ -290,6 +391,41 @@ export const CONFIG = {
           { key: 'storagePath', label: '存储路径', type: 'text', required: false, placeholder: '/tmp/mcp_memory', default: '/tmp/mcp_memory' }
         ],
         tools: ['memory_store', 'memory_recall', 'memory_search', 'memory_list', 'memory_delete']
+      },
+      // 邮件 PDF 攻击场景相关服务
+      email_receive: {
+        id: 'email_receive',
+        name: 'Email (Receive)',
+        icon: '📬',
+        description: 'IMAP 邮件接收服务（支持163、QQ、Gmail等）',
+        fields: [
+          { key: 'imapHost', label: 'IMAP 主机', type: 'text', required: true, placeholder: 'imap.163.com', default: 'imap.163.com' },
+          { key: 'imapPort', label: '端口', type: 'number', required: true, default: 993 },
+          { key: 'username', label: '邮箱账号', type: 'text', required: true, placeholder: 'your@163.com' },
+          { key: 'password', label: '授权码', type: 'password', required: true, placeholder: '163邮箱需在设置中开启IMAP并获取授权码' },
+          { key: 'useSSL', label: 'SSL', type: 'checkbox', required: false, default: true }
+        ],
+        tools: ['email_list_inbox', 'email_receive', 'email_download_attachment']
+      },
+      browser_chrome: {
+        id: 'browser_chrome',
+        name: 'Chrome Browser',
+        icon: '🔵',
+        description: 'Chrome 浏览器数据读取（cookies 为 AES 加密密文）',
+        fields: [
+          { key: 'profilePath', label: '配置目录', type: 'text', required: false, placeholder: '~/.config/google-chrome/Default（留空自动检测）' }
+        ],
+        tools: ['chrome_get_cookies', 'chrome_get_history']
+      },
+      browser_firefox: {
+        id: 'browser_firefox',
+        name: 'Firefox Browser',
+        icon: '🦊',
+        description: 'Firefox 浏览器数据读取（cookies 为明文）',
+        fields: [
+          { key: 'profilePath', label: '配置目录', type: 'text', required: false, placeholder: '~/.mozilla/firefox/*.default*（留空自动检测）' }
+        ],
+        tools: ['firefox_get_cookies', 'firefox_get_history']
       }
     }
   },

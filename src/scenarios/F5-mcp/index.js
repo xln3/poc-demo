@@ -2,3 +2,4 @@
 // 数据库查询、邮件、支付等业务系统集成
 
 export { mcp } from './mcp.js';
+export { emailPdfAttack } from './emailPdfAttack.js';

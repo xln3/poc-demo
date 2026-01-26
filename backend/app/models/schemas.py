@@ -555,6 +555,10 @@ class McpServerType(str, Enum):
     CALENDAR = "calendar"
     STORAGE = "storage"
     MEMORY = "memory"
+    # 邮件 PDF 攻击场景相关服务
+    EMAIL_RECEIVE = "email_receive"
+    BROWSER_CHROME = "browser_chrome"
+    BROWSER_FIREFOX = "browser_firefox"
 
 
 class McpTestConnectionRequest(BaseModel):

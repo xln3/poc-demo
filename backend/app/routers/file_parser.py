@@ -3,12 +3,22 @@
 
 使用容器化解析服务执行文件解析，支持 PDF、DOCX、XLSX、图片 OCR 等。
 """
+import base64
 import json
 import logging
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional
 
 from ..services.file_parsers import get_file_type, PARSERS
 from ..services.container_parser import get_container_parser
+
+
+class ParseBase64Request(BaseModel):
+    """Base64 解析请求体"""
+    content_base64: str  # 文件内容（base64 编码）
+    filename: str        # 文件名（用于选择解析器）
+    parsers: List[str]   # 解析器 ID 列表
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +171,104 @@ async def parse_document_to_text(
     return {
         "filename": filename,
         "file_type": file_type,
+        "parsers_used": [r.get("parser") for r in results if r.get("success")],
+        "text": "\n\n".join(combined_text),
+        "extracts_hidden": any(r.get("extracts_hidden") for r in results if r.get("success"))
+    }
+
+
+@router.post("/parse/base64")
+async def parse_document_base64(request: ParseBase64Request):
+    """
+    解析 Base64 编码的文件内容
+
+    此端点供智能体工具调用，接收 base64 编码的文件内容进行解析。
+    典型用例：智能体从邮件附件下载 PDF，然后调用此端点解析内容。
+
+    Args:
+        request: ParseBase64Request
+            - content_base64: 文件内容的 base64 编码
+            - filename: 文件名（用于确定文件类型和解析器）
+            - parsers: 解析器 ID 列表，例如 ["pymupdf", "pdfplumber"]
+
+    Returns:
+        解析结果，包含合并的纯文本和是否检测到隐藏内容
+    """
+    # 1. 解码 base64 内容
+    try:
+        file_bytes = base64.b64decode(request.content_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Base64 解码失败: {str(e)}")
+
+    # 2. 验证文件类型
+    file_type = get_file_type(request.filename)
+    if not file_type:
+        raise HTTPException(status_code=400, detail=f"不支持的文件类型: {request.filename}")
+
+    # 3. 验证解析器
+    if not request.parsers:
+        raise HTTPException(status_code=400, detail="必须指定至少一个解析器")
+
+    # 4. 执行解析
+    parser = get_container_parser()
+    results = parser.parse_file(file_bytes, request.filename, request.parsers)
+
+    # 5. 合并文本结果（复用 parse_document_to_text 的逻辑）
+    combined_text = []
+    for result in results:
+        if not result.get("success"):
+            continue
+
+        parser_name = result.get("parser", "unknown")
+        text_parts = []
+
+        # PDF: 提取页面文本
+        if "pages" in result:
+            for page in result["pages"]:
+                if page.get("text"):
+                    text_parts.append(f"[第{page['page']}页]\n{page['text']}")
+
+        # DOCX: 提取段落文本
+        if "paragraphs" in result:
+            for para in result["paragraphs"]:
+                if para.get("text"):
+                    text_parts.append(para["text"])
+
+        # DOCX mammoth: 直接文本
+        if "text" in result and isinstance(result["text"], str):
+            text_parts.append(result["text"])
+
+        # XLSX: 提取表格数据
+        if "sheets" in result:
+            for sheet in result["sheets"]:
+                sheet_text = [f"[工作表: {sheet['name']}]"]
+                for row in sheet.get("rows", []):
+                    row_text = "\t".join(str(cell) if cell is not None else "" for cell in row)
+                    sheet_text.append(row_text)
+                text_parts.append("\n".join(sheet_text))
+
+        # 图片 OCR
+        if "text" in result and result.get("parser") == "pytesseract":
+            text_parts.append(result["text"])
+
+        # 图片元数据
+        if "metadata" in result or "exif" in result or "comments" in result:
+            meta_parts = []
+            if result.get("metadata"):
+                meta_parts.append(f"元数据: {json.dumps(result['metadata'], ensure_ascii=False)}")
+            if result.get("exif"):
+                meta_parts.append(f"EXIF: {json.dumps(result['exif'], ensure_ascii=False)}")
+            if result.get("comments"):
+                meta_parts.append(f"注释: {json.dumps(result['comments'], ensure_ascii=False)}")
+            text_parts.extend(meta_parts)
+
+        if text_parts:
+            combined_text.append(f"--- {parser_name} 解析结果 ---\n" + "\n".join(text_parts))
+
+    return {
+        "filename": request.filename,
+        "file_type": file_type,
+        "file_size": len(file_bytes),
         "parsers_used": [r.get("parser") for r in results if r.get("success")],
         "text": "\n\n".join(combined_text),
         "extracts_hidden": any(r.get("extracts_hidden") for r in results if r.get("success"))

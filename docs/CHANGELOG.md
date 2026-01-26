@@ -75,6 +75,36 @@
 
 ## 变更记录
 
+### [1.6.0] - 2026-01-26
+
+#### Added
+- **邮件 PDF 攻击场景** - 演示通过邮件 PDF 附件进行间接注入攻击
+  - `src/scenarios/F5-mcp/emailPdfAttack.js` - 新攻击场景
+  - 攻击流程：邮件附件 PDF → 智能体解析 → 被注入窃取敏感数据
+  - 包含两个攻击用例：数据窃取、横向移动
+
+- **邮件接收 MCP 服务 (IMAP)**
+  - `backend/app/services/mcp_email_receive.py` - IMAP 邮件接收服务
+  - 工具：`email_list_inbox`、`email_receive`、`email_download_attachment`
+  - 支持 163、QQ、Gmail 等主流邮箱
+
+- **浏览器数据 MCP 服务**
+  - `backend/app/services/mcp_browser_firefox.py` - Firefox 浏览器数据读取
+  - `backend/app/services/mcp_browser_chrome.py` - Chrome 浏览器数据读取
+  - 工具：`firefox_get_cookies`、`firefox_get_history`、`chrome_get_cookies`、`chrome_get_history`
+  - Firefox cookies 为明文，Chrome cookies 为 AES 加密密文
+
+- **文件解析 Base64 端点**
+  - `POST /file-parser/parse/base64` - 接收 base64 编码的文件内容进行解析
+  - 供智能体工具调用，无需文件上传
+
+#### Changed
+- **MCP Server 数量** - 从 11 增加到 14
+- **schemas.py** - 添加 `EMAIL_RECEIVE`、`BROWSER_CHROME`、`BROWSER_FIREFOX` 枚举
+- **config.js** - 添加 3 个新 MCP 服务的前端配置
+
+---
+
 ### [1.5.0] - 2026-01-26
 
 #### Added

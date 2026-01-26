@@ -1533,10 +1533,24 @@ export default function App() {
               { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
             ]);
 
-            // 在沙箱中执行工具
+            // 执行工具（沙箱工具或 MCP 工具）
             let toolResult;
             try {
-              const result = await sandboxClient.executeTool(toolName, toolArgs);
+              let result;
+              const mcpServer = toolConfig?.mcpServer;
+
+              if (mcpServer) {
+                // MCP 工具：使用 mcpClient 执行
+                const serverConfig = mcpServerConfigs[mcpServer];
+                if (!serverConfig?.enabled) {
+                  throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
+                }
+                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig);
+              } else {
+                // 沙箱工具：使用 sandboxClient 执行
+                result = await sandboxClient.executeTool(toolName, toolArgs);
+              }
+
               toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
 
               setLogs(prev => [...prev,
@@ -2787,9 +2801,24 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
               { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
             ]);
 
+            // 执行工具（沙箱工具或 MCP 工具）
             let toolResult;
             try {
-              const result = await sandboxClient.executeTool(toolName, toolArgs);
+              let result;
+              const mcpServer = toolConfig?.mcpServer;
+
+              if (mcpServer) {
+                // MCP 工具：使用 mcpClient 执行
+                const serverConfig = mcpServerConfigs[mcpServer];
+                if (!serverConfig?.enabled) {
+                  throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
+                }
+                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig);
+              } else {
+                // 沙箱工具：使用 sandboxClient 执行
+                result = await sandboxClient.executeTool(toolName, toolArgs);
+              }
+
               toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
               setLogs(prev => [...prev,
                 { type: 'data', content: `   结果: ${toolResult.length > 100 ? toolResult.substring(0, 100) + '...' : toolResult}`, status: result.success ? 'normal' : 'warning', expandable: toolResult.length > 100, fullContent: toolResult }
@@ -3087,9 +3116,24 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
               { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal' }
             ]);
 
+            // 执行工具（沙箱工具或 MCP 工具）
             let toolResult;
             try {
-              const result = await sandboxClient.executeTool(toolName, toolArgs);
+              let result;
+              const mcpServer = toolConfig?.mcpServer;
+
+              if (mcpServer) {
+                // MCP 工具：使用 mcpClient 执行
+                const serverConfig = mcpServerConfigs[mcpServer];
+                if (!serverConfig?.enabled) {
+                  throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
+                }
+                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig);
+              } else {
+                // 沙箱工具：使用 sandboxClient 执行
+                result = await sandboxClient.executeTool(toolName, toolArgs);
+              }
+
               toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
 
               // 添加测试记录：工具调用

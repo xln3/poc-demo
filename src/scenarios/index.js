@@ -20,6 +20,7 @@ import { rag } from './F4-rag/rag.js';
 
 // ============ F5-mcp: MCP 扩展工具 ============
 import { mcp } from './F5-mcp/mcp.js';
+import { emailPdfAttack } from './F5-mcp/emailPdfAttack.js';
 
 // 导出与原 scenarios.js 兼容的 SCENARIOS 对象
 export const SCENARIOS = {
@@ -41,7 +42,8 @@ export const SCENARIOS = {
   rag,
 
   // F5-mcp: MCP 扩展工具
-  mcp
+  mcp,
+  emailPdfAttack
 };
 
 // 按能力层级分组导出
@@ -64,7 +66,8 @@ export const SCENARIOS_BY_LEVEL = {
     rag
   },
   'F5-mcp': {
-    mcp
+    mcp,
+    emailPdfAttack
   }
 };
 
@@ -84,7 +87,8 @@ export {
   // F4-rag
   rag,
   // F5-mcp
-  mcp
+  mcp,
+  emailPdfAttack
 };
 
 // 导出类型定义

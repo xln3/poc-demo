@@ -25,6 +25,9 @@ from ..services.mcp_slack import slack_service
 from ..services.mcp_calendar import calendar_service
 from ..services.mcp_storage import storage_service
 from ..services.mcp_memory import memory_service
+from ..services.mcp_email_receive import email_receive_service
+from ..services.mcp_browser_chrome import chrome_browser_service
+from ..services.mcp_browser_firefox import firefox_browser_service
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,7 @@ async def health_check():
     """MCP Server 健康检查"""
     return {
         "status": "healthy",
-        "servers_available": 11
+        "servers_available": 14
     }
 
 
@@ -103,6 +106,22 @@ async def list_mcp_servers():
                 "name": "Memory",
                 "tools": ["memory_store", "memory_recall", "memory_search", "memory_list", "memory_delete"],
             },
+            # 邮件 PDF 攻击场景相关服务
+            {
+                "id": "email_receive",
+                "name": "Email (Receive)",
+                "tools": ["email_list_inbox", "email_receive", "email_download_attachment"],
+            },
+            {
+                "id": "browser_chrome",
+                "name": "Chrome Browser",
+                "tools": ["chrome_get_cookies", "chrome_get_history"],
+            },
+            {
+                "id": "browser_firefox",
+                "name": "Firefox Browser",
+                "tools": ["firefox_get_cookies", "firefox_get_history"],
+            },
         ]
     }
 
@@ -137,6 +156,13 @@ async def test_mcp_connection(request: McpTestConnectionRequest):
             result = await storage_service.test_connection(config)
         elif server_id == McpServerType.MEMORY:
             result = await memory_service.test_connection(config)
+        # 邮件 PDF 攻击场景相关服务
+        elif server_id == McpServerType.EMAIL_RECEIVE:
+            result = await email_receive_service.test_connection(config)
+        elif server_id == McpServerType.BROWSER_CHROME:
+            result = await chrome_browser_service.test_connection(config)
+        elif server_id == McpServerType.BROWSER_FIREFOX:
+            result = await firefox_browser_service.test_connection(config)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown server type: {server_id}")
 
@@ -180,6 +206,13 @@ async def execute_mcp_tool(request: McpToolRequest):
             result = await storage_service.execute_tool(tool_name, params, config)
         elif server_id == McpServerType.MEMORY:
             result = await memory_service.execute_tool(tool_name, params, config)
+        # 邮件 PDF 攻击场景相关服务
+        elif server_id == McpServerType.EMAIL_RECEIVE:
+            result = await email_receive_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.BROWSER_CHROME:
+            result = await chrome_browser_service.execute_tool(tool_name, params, config)
+        elif server_id == McpServerType.BROWSER_FIREFOX:
+            result = await firefox_browser_service.execute_tool(tool_name, params, config)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown server type: {server_id}")
 
@@ -217,6 +250,10 @@ async def get_mcp_server_status(server_id: McpServerType):
         McpServerType.CALENDAR: ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"],
         McpServerType.STORAGE: ["storage_list_buckets", "storage_list_objects", "storage_download_url", "storage_upload"],
         McpServerType.MEMORY: ["memory_store", "memory_recall", "memory_search", "memory_list", "memory_delete"],
+        # 邮件 PDF 攻击场景相关服务
+        McpServerType.EMAIL_RECEIVE: ["email_list_inbox", "email_receive", "email_download_attachment"],
+        McpServerType.BROWSER_CHROME: ["chrome_get_cookies", "chrome_get_history"],
+        McpServerType.BROWSER_FIREFOX: ["firefox_get_cookies", "firefox_get_history"],
     }
 
     return McpServerStatus(
