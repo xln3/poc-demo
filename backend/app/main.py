@@ -27,7 +27,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://101.6.21.31:5173",  # 内网IP
+        "http://localhost:5175",      # 部署端口
+        "http://127.0.0.1:5175",      # 本地部署
+        "http://101.6.21.31:5173",    # 内网开发
+        "http://101.6.21.31:5175",    # 内网部署
     ],
     allow_credentials=True,
     allow_methods=["*"],

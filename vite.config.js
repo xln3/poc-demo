@@ -39,6 +39,18 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
+      '/datasets': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/test-results': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/report-templates': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     },
   },
 })
