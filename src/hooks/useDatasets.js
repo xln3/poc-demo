@@ -18,6 +18,7 @@ import {
   downloadAsJSON,
   CapabilityLevel,
 } from '../schemas/testCase.js';
+import { convertToDatasetFormat } from '../datasetConverter.js';
 
 /**
  * 能力层级配置
@@ -80,6 +81,10 @@ export const useDatasets = () => {
   // 错误状态
   const [error, setError] = useState(null);
 
+  // 格式转换状态
+  const [pendingConversion, setPendingConversion] = useState(null);
+  const [isConverting, setIsConverting] = useState(false);
+
   /**
    * 加载数据集列表
    */
@@ -138,32 +143,42 @@ export const useDatasets = () => {
 
   /**
    * 导入数据集（从文件）
+   * @returns {Promise<{saved: Object|null, needsConversion: boolean}>}
    */
   const importDatasetFromFile = useCallback(async () => {
     try {
       const result = await importFromFileDialog();
 
+      // 用户取消选择
+      if (!result.data && !result.error) {
+        return { saved: null, needsConversion: false };
+      }
+
       if (result.error) {
         setError(result.error);
-        return null;
+        return { saved: null, needsConversion: false };
       }
 
-      if (result.type !== 'Dataset') {
-        setError(`不支持的数据类型: ${result.type}，请导入 Dataset 格式的文件`);
-        return null;
+      if (result.type === 'Dataset') {
+        // 标准格式，直接保存
+        setIsSaving(true);
+        const saved = await saveDataset(result.data);
+        await loadDatasets();
+        setIsSaving(false);
+        return { saved, needsConversion: false };
       }
 
-      // 保存到服务器
-      setIsSaving(true);
-      const saved = await saveDataset(result.data);
-      await loadDatasets();
-      setIsSaving(false);
-
-      return saved;
+      // 非标准格式，设置待转换数据
+      setPendingConversion({
+        data: result.data,
+        detectedType: result.type,
+        detectedVersion: result.version,
+      });
+      return { saved: null, needsConversion: true };
     } catch (err) {
       setError(err.message);
       setIsSaving(false);
-      return null;
+      return { saved: null, needsConversion: false };
     }
   }, [loadDatasets]);
 
@@ -340,6 +355,33 @@ export const useDatasets = () => {
   }, []);
 
   /**
+   * 执行格式转换（使用 LLM）
+   */
+  const executeConversion = useCallback(async () => {
+    if (!pendingConversion) return null;
+    try {
+      setIsConverting(true);
+      const converted = await convertToDatasetFormat(pendingConversion.data);
+      const saved = await saveDataset(converted);
+      await loadDatasets();
+      setPendingConversion(null);
+      setIsConverting(false);
+      return saved;
+    } catch (err) {
+      setError(`格式转换失败: ${err.message}`);
+      setIsConverting(false);
+      return null;
+    }
+  }, [pendingConversion, loadDatasets]);
+
+  /**
+   * 取消格式转换
+   */
+  const cancelConversion = useCallback(() => {
+    setPendingConversion(null);
+  }, []);
+
+  /**
    * 清除错误
    */
   const clearError = useCallback(() => {
@@ -368,6 +410,10 @@ export const useDatasets = () => {
     isSaving,
     error,
 
+    // 格式转换状态
+    pendingConversion,
+    isConverting,
+
     // 数据集操作
     loadDatasets,
     createDataset,
@@ -376,6 +422,10 @@ export const useDatasets = () => {
     removeDataset,
     importDatasetFromFile,
     importDatasetFromJSON,
+
+    // 格式转换操作
+    executeConversion,
+    cancelConversion,
 
     // 用例操作
     addCase,

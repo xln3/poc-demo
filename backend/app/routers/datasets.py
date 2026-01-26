@@ -18,7 +18,7 @@ class DatasetSource(BaseModel):
 
 class DatasetMeta(BaseModel):
     """Dataset metadata."""
-    schemaVersion: str = "2.0.0"
+    schemaVersion: str = "2.1.0"
     type: str = "Dataset"
     datasetId: Optional[str] = None
     name: str
@@ -75,7 +75,7 @@ class DatasetSummary(BaseModel):
     """Summary of a dataset for list display."""
     id: str
     savedAt: str
-    schemaVersion: str = "2.0.0"
+    schemaVersion: str = "2.1.0"
     name: str
     description: str = ""
     caseCount: int = 0

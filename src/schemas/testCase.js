@@ -13,7 +13,7 @@
 
 // ============ Schema 版本 ============
 
-export const SCHEMA_VERSION = '2.0.0';
+export const SCHEMA_VERSION = '2.1.0';
 export const SCHEMA_VERSION_V1 = '1.0.0';
 
 // ============ 工具函数 ============
@@ -1673,38 +1673,45 @@ function reconstructStatesFromV1Execution(input, v1Case) {
 
 /**
  * 检测版本
+ * 基于结构检测类型，支持多版本兼容
  */
 export function detectSchemaVersion(data) {
   const version = data?.meta?.schemaVersion;
 
-  if (version === SCHEMA_VERSION) {
-    // Dataset
-    if (data.meta?.type === 'Dataset' && Array.isArray(data.cases)) {
-      return { version: SCHEMA_VERSION, type: 'Dataset' };
-    }
-    // RecordingSession
-    if (data.meta?.type === 'RecordingSession' && Array.isArray(data.states)) {
-      return { version: SCHEMA_VERSION, type: 'RecordingSession' };
-    }
-    // StandaloneTestCase
-    if (data.meta?.type === 'TestCase' && data.input && data.criteria) {
-      return { version: SCHEMA_VERSION, type: 'TestCase' };
-    }
+  // 基于结构检测类型（不严格依赖版本号）
+  // Dataset: 有 meta.type === 'Dataset' 和 cases 数组
+  if (data.meta?.type === 'Dataset' && Array.isArray(data.cases)) {
+    return { version: version || SCHEMA_VERSION, type: 'Dataset' };
+  }
+
+  // RecordingSession: 有 meta.type === 'RecordingSession' 和 states 数组
+  if (data.meta?.type === 'RecordingSession' && Array.isArray(data.states)) {
+    return { version: version || SCHEMA_VERSION, type: 'RecordingSession' };
+  }
+
+  // StandaloneTestCase: 有 meta.type === 'TestCase' 和 input、criteria
+  if (data.meta?.type === 'TestCase' && data.input && data.criteria) {
+    return { version: version || SCHEMA_VERSION, type: 'TestCase' };
+  }
+
+  // v2 格式（根据结构推断）
+  if (version === SCHEMA_VERSION || version === '2.0.0') {
     // PlaybackSequence (legacy)
     if (data.states && Array.isArray(data.states)) {
-      return { version: SCHEMA_VERSION, type: 'PlaybackSequence' };
+      return { version, type: 'PlaybackSequence' };
     }
     // TestInput (legacy)
     if (data.attack && data.llmConfig) {
-      return { version: SCHEMA_VERSION, type: 'TestInput' };
+      return { version, type: 'TestInput' };
     }
   }
 
+  // v1 格式
   if (version === SCHEMA_VERSION_V1 || (data.source && data.execution)) {
     return { version: SCHEMA_VERSION_V1, type: 'TestCaseV1' };
   }
 
-  return { version: 'unknown', type: 'unknown' };
+  return { version: version || 'unknown', type: 'unknown' };
 }
 
 // ============ Dataset Schema (v2.0.0) ============

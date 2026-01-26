@@ -745,7 +745,22 @@ export default function App() {
     clearCapabilityFilter,
     setSelectedDataset,
     formatSize,
+    // 格式转换相关
+    pendingConversion,
+    isConverting,
+    executeConversion,
+    cancelConversion,
+    // 错误处理
+    clearError: clearDatasetsError,
   } = datasets;
+
+  // 监听数据集错误并显示 toast
+  useEffect(() => {
+    if (datasetsError) {
+      addToast(datasetsError, 'error');
+      clearDatasetsError();
+    }
+  }, [datasetsError, addToast, clearDatasetsError]);
 
   // 数据集详情弹窗状态
   const [showDatasetDetail, setShowDatasetDetail] = useState(false);
@@ -754,6 +769,24 @@ export default function App() {
   const [importedTestCase, setImportedTestCase] = useState(null);
 
   // 数据集相关操作
+  const handleImportDataset = useCallback(async () => {
+    const result = await importDatasetFromFile();
+    if (result.saved) {
+      addToast(`数据集导入成功: ${result.saved.meta?.name || '未命名'}`, 'success');
+    } else if (result.needsConversion) {
+      // pendingConversion 已设置，弹窗会自动显示
+    }
+    // 错误由 useEffect 监听 datasetsError 处理
+  }, [importDatasetFromFile, addToast]);
+
+  const handleExecuteConversion = useCallback(async () => {
+    const result = await executeConversion();
+    if (result) {
+      addToast(`格式转换成功: ${result.meta?.name || '未命名'}`, 'success');
+    }
+    // 错误由 useEffect 监听 datasetsError 处理
+  }, [executeConversion, addToast]);
+
   const handleViewDataset = useCallback(async (datasetId) => {
     await loadDatasetDetail(datasetId);
     setShowDatasetDetail(true);
@@ -4006,7 +4039,7 @@ print('\\n'.join(all_text))
               onViewDataset={handleViewDataset}
               onExportDataset={exportDataset}
               onDeleteDataset={removeDataset}
-              onImportDataset={importDatasetFromFile}
+              onImportDataset={handleImportDataset}
               onDownloadTemplate={handleDownloadTemplate}
               formatSize={formatSize}
             />
@@ -6956,6 +6989,45 @@ print('\\n'.join(all_text))
             total={transferState.total}
             onCancel={cancelTransfer}
           />
+        )}
+
+        {/* 格式转换确认弹窗 */}
+        {pendingConversion && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 rounded-lg p-6 max-w-md">
+              <h3 className="text-lg font-medium text-white mb-4">格式转换</h3>
+              <p className="text-slate-300 mb-4">
+                检测到非标准格式
+                {pendingConversion.detectedType !== 'unknown' && (
+                  <span className="text-slate-400">（{pendingConversion.detectedType}）</span>
+                )}
+                ，是否使用 AI 转换为数据集格式？
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={cancelConversion}
+                  disabled={isConverting}
+                  className="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded text-white text-sm transition disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleExecuteConversion}
+                  disabled={isConverting}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white text-sm flex items-center gap-2 transition disabled:opacity-50"
+                >
+                  {isConverting ? (
+                    <>
+                      <span className="animate-spin">&#9881;</span>
+                      转换中...
+                    </>
+                  ) : (
+                    '转换'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* 评判设置弹窗 */}

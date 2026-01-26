@@ -34,7 +34,7 @@ def extract_dataset_summary(dataset_data: dict) -> dict:
     return {
         "id": meta.get("datasetId"),
         "savedAt": meta.get("createdAt"),
-        "schemaVersion": meta.get("schemaVersion", "2.0.0"),
+        "schemaVersion": meta.get("schemaVersion", "2.1.0"),
         "name": meta.get("name", ""),
         "description": meta.get("description", ""),
         "caseCount": meta.get("caseCount", len(cases)),
@@ -80,7 +80,7 @@ class DatasetStorage:
 
         # Ensure type is set
         meta["type"] = "Dataset"
-        meta["schemaVersion"] = "2.0.0"
+        meta["schemaVersion"] = "2.1.0"
 
         # Update case count
         cases = dataset_data.get("cases", [])
