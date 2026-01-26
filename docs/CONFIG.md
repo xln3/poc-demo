@@ -23,12 +23,28 @@ VITE_API_BASE_URL=https://your-llm-api.com/v1/chat/completions
 VITE_API_KEY=your-api-key-here
 ```
 
-### 变量说明
+### 前端变量
 
 | 变量 | 必需 | 说明 |
 |------|------|------|
 | `VITE_API_BASE_URL` | 是 | LLM API 端点 URL |
 | `VITE_API_KEY` | 是 | API 密钥 |
+
+### 后端变量
+
+| 变量 | 必需 | 默认值 | 说明 |
+|------|------|--------|------|
+| `POC_DATA_ROOT` | 否 | `../poc-data` | 运行时数据存储根目录 |
+
+运行时数据目录结构：
+```
+poc-data/                    # POC_DATA_ROOT
+├── sandbox/                 # 沙箱文件
+├── terminals/               # 终端锁
+├── datasets/                # 数据集
+├── saved-cases/             # 已保存用例
+└── test-results/            # 测试结果
+```
 
 > **注意**: Vite 项目中环境变量必须以 `VITE_` 前缀开头才能在前端代码中访问。
 

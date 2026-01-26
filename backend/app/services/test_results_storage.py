@@ -7,8 +7,9 @@ from typing import List, Optional, Dict, Any
 import uuid
 
 
-# 使用与 case_storage 一致的路径设置
-DATA_DIR = Path(__file__).parent.parent.parent / "data" / "test_results"
+# Storage directory path (configured in config.py)
+from ..config import DATA_PATHS
+DATA_DIR = DATA_PATHS['test_results']
 
 
 class TestResultsStorage:

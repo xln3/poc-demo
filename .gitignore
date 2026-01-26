@@ -31,3 +31,10 @@ backend/__pycache__/
 backend/app/__pycache__/
 backend/app/**/__pycache__/
 backend/venv/
+
+# 运行时数据（应存储在 ../poc-data/）
+backend/data/datasets/
+backend/data/saved-cases/
+backend/data/test_results/
+# 保留静态模板
+!backend/data/report-templates/

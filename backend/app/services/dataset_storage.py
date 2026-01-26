@@ -10,8 +10,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-# Storage directory path
-DATA_DIR = Path(__file__).parent.parent.parent / "data" / "datasets"
+# Storage directory path (configured in config.py)
+from ..config import DATA_PATHS
+DATA_DIR = DATA_PATHS['datasets']
 
 
 def extract_dataset_summary(dataset_data: dict) -> dict:

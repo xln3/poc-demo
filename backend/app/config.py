@@ -6,8 +6,21 @@ from pathlib import Path
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
-# 数据目录
-DATA_ROOT = PROJECT_ROOT.parent / 'poc-data'
+# 运行时数据根目录（可通过环境变量覆盖）
+DATA_ROOT = Path(os.environ.get('POC_DATA_ROOT', str(PROJECT_ROOT.parent / 'poc-data')))
+
+# 运行时数据路径配置
+DATA_PATHS = {
+    'datasets': DATA_ROOT / 'datasets',
+    'saved_cases': DATA_ROOT / 'saved-cases',
+    'test_results': DATA_ROOT / 'test-results',
+}
+
+
+def ensure_data_dirs():
+    """确保所有数据目录存在"""
+    for path in DATA_PATHS.values():
+        path.mkdir(parents=True, exist_ok=True)
 
 # 文件传输配置
 TRANSFER_CONFIG = {
