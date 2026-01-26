@@ -226,6 +226,68 @@ playback.skipToEnd()             // 跳过动画直接显示结果
 playback.restoreEnvironment(testCase) // 恢复环境配置
 ```
 
+### useDatasets
+
+管理数据集的 CRUD 操作、能力筛选、导入/导出和格式转换功能。
+
+```javascript
+import { useDatasets } from './hooks/index.js';
+
+const datasets = useDatasets();
+
+// 数据集列表状态
+datasets.datasets               // 全部数据集列表
+datasets.filteredDatasets       // 按能力筛选后的列表
+datasets.selectedDataset        // 当前选中的数据集
+datasets.selectedCase           // 当前选中的用例
+datasets.selectedCapabilities   // 选中的能力筛选
+
+// 加载状态
+datasets.isLoading              // 加载中
+datasets.isSaving               // 保存中
+datasets.error                  // 错误信息
+
+// 格式转换状态
+datasets.pendingConversion      // 待转换的数据（含 data, detectedType, detectedVersion）
+datasets.isConverting           // AI 转换进行中
+
+// 数据集操作
+datasets.loadDatasets()         // 加载数据集列表
+datasets.createDataset(params)  // 创建新数据集
+datasets.loadDatasetDetail(id)  // 加载数据集详情
+datasets.exportDataset(id)      // 导出数据集为 JSON
+datasets.removeDataset(id)      // 删除数据集
+datasets.importDatasetFromFile() // 从文件导入（返回 {saved, needsConversion}）
+
+// 格式转换操作
+datasets.executeConversion()    // 执行 LLM 格式转换
+datasets.cancelConversion()     // 取消转换
+
+// 用例操作
+datasets.addCase(datasetId, caseData)     // 添加用例
+datasets.removeCase(datasetId, caseId)    // 移除用例
+datasets.exportCase(datasetId, caseId)    // 导出用例
+
+// 筛选操作
+datasets.toggleCapability(cap)            // 切换能力筛选
+datasets.clearCapabilityFilter()          // 清除筛选
+```
+
+#### useDatasets 状态表
+
+| 状态 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `datasets` | `Array` | `[]` | 全部数据集列表 |
+| `filteredDatasets` | `Array` | `[]` | 按能力筛选后的列表 |
+| `selectedDataset` | `object \| null` | `null` | 当前选中的数据集 |
+| `selectedCase` | `object \| null` | `null` | 当前选中的用例 |
+| `selectedCapabilities` | `Array` | `[]` | 选中的能力筛选 |
+| `isLoading` | `boolean` | `false` | 加载中状态 |
+| `isSaving` | `boolean` | `false` | 保存中状态 |
+| `error` | `string \| null` | `null` | 错误信息 |
+| `pendingConversion` | `object \| null` | `null` | 待转换数据（含 data, detectedType, detectedVersion）|
+| `isConverting` | `boolean` | `false` | AI 转换进行中 |
+
 ### useToast
 
 管理 Toast 通知，支持两个维度分类。

@@ -8,7 +8,8 @@
 
 | 版本 | 说明 | 状态 |
 |------|------|------|
-| v2.0.0 | 新架构：TestInput + State + PlaybackSequence | 当前版本 |
+| v2.1.0 | 基于结构检测类型，支持多版本兼容 | 当前版本 |
+| v2.0.0 | 新架构：TestInput + State + PlaybackSequence | 向后兼容 |
 | v1.0.0 | 传统架构：单一 TestCase 结构 | 向后兼容 |
 
 ---
@@ -392,14 +393,49 @@ import { migrateV1ToV2, detectSchemaVersion } from './schemas/testCase.js';
 
 // 检测版本
 const { version, type } = detectSchemaVersion(data);
-// version: '1.0.0' | '2.0.0'
-// type: 'TestCase' | 'TestInput' | 'PlaybackSequence'
+// version: '1.0.0' | '2.0.0' | '2.1.0'
+// type: 'Dataset' | 'RecordingSession' | 'TestCase' | 'PlaybackSequence' | 'TestInput' | 'TestCaseV1'
 
 // 迁移 v1 到 v2
 if (version === '1.0.0') {
   const { input, sequence } = await migrateV1ToV2(v1Case);
 }
 ```
+
+### detectSchemaVersion 改进 (v2.1.0)
+
+v2.1.0 版本改进了格式检测逻辑，**基于结构检测类型，不再严格依赖版本号**。
+
+#### 检测规则
+
+| 优先级 | 判断条件 | 识别为 |
+|--------|----------|--------|
+| 1 | `meta.type === 'Dataset'` 且有 `cases` 数组 | Dataset |
+| 2 | `meta.type === 'RecordingSession'` 且有 `states` 数组 | RecordingSession |
+| 3 | `meta.type === 'TestCase'` 且有 `input` 和 `criteria` | TestCase |
+| 4 | 有 `states` 数组（v2 格式） | PlaybackSequence |
+| 5 | 有 `attack` 和 `llmConfig`（v2 格式） | TestInput |
+| 6 | 有 `source` 和 `execution`（v1 格式） | TestCaseV1 |
+| 7 | 其他 | unknown |
+
+#### 设计意图
+
+```javascript
+// 即使版本号缺失或不匹配，也能正确识别标准结构
+const data = {
+  meta: { type: 'Dataset' },  // 无 schemaVersion
+  cases: []
+};
+
+const { version, type } = detectSchemaVersion(data);
+// version: '2.1.0' (使用当前版本)
+// type: 'Dataset' (根据结构识别)
+```
+
+这种设计允许：
+- 旧版本生成的标准数据无需迁移即可识别
+- 手动创建的数据只需符合结构即可被接受
+- 第三方工具生成的数据更容易兼容
 
 ---
 
@@ -430,6 +466,7 @@ TestCase (v1)
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 2.1.0 | 2026-01-26 | 基于结构检测类型，支持多版本兼容；新增 AI 格式转换功能 |
 | 2.0.0 | 2026-01-21 | 新架构：TestInput + State + PlaybackSequence |
 | 1.0.0 | 2026-01-21 | 初始版本 |
 

@@ -382,4 +382,75 @@ const caseType = caseAttack.attackType || caseAttack.type || 'unknown';
 
 ---
 
+## 格式转换功能 (v2.1.0)
+
+### 概述
+
+支持导入非标准格式的测试数据，使用 LLM 自动转换为标准 Dataset 格式。
+
+### 转换流程
+
+```
+用户导入文件
+      │
+      ▼
+┌─────────────────────────┐
+│  detectSchemaVersion()  │  检测格式类型
+└───────────┬─────────────┘
+            │
+      ┌─────┴─────┐
+      │ Dataset?  │
+      └─────┬─────┘
+           │
+    ┌──────┴──────┐
+    │             │
+    ▼ 是          ▼ 否
+直接保存     弹出转换确认弹窗
+                  │
+                  ▼ 用户确认
+          ┌──────────────────┐
+          │ convertToDataset │  调用 LLM 转换
+          │    Format()      │
+          └────────┬─────────┘
+                   │
+                   ▼
+              保存结果
+```
+
+### 使用方式
+
+```javascript
+// 导入文件，返回 { saved, needsConversion }
+const result = await importDatasetFromFile();
+
+if (result.needsConversion) {
+  // 显示确认弹窗，用户确认后执行转换
+  const converted = await executeConversion();
+}
+```
+
+### 相关文件
+
+| 文件 | 职责 |
+|------|------|
+| `src/datasetConverter.js` | LLM 格式转换逻辑（`convertToDatasetFormat`） |
+| `src/hooks/useDatasets.js` | 转换状态管理（`pendingConversion`、`isConverting`） |
+| `public/templates/dataset-template.json` | 目标格式模板 |
+
+### 状态说明
+
+| 状态 | 类型 | 说明 |
+|------|------|------|
+| `pendingConversion` | `object \| null` | 待转换的数据（含 data, detectedType, detectedVersion）|
+| `isConverting` | `boolean` | AI 转换进行中标志 |
+
+### 函数说明
+
+| 函数 | 说明 |
+|------|------|
+| `executeConversion()` | 执行 LLM 格式转换，返回保存后的数据集 |
+| `cancelConversion()` | 取消转换，清除 `pendingConversion` |
+
+---
+
 *最后更新: 2026-01-26*

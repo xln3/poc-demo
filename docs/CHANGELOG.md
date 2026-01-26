@@ -75,6 +75,29 @@
 
 ## 变更记录
 
+### [1.5.0] - 2026-01-26
+
+#### Added
+- **AI 格式转换** - 使用 LLM 将任意格式数据转换为标准 Dataset 格式
+  - `src/datasetConverter.js` - 转换模块，提供 `convertToDatasetFormat()` 函数
+  - `useDatasets` 新增 `pendingConversion`、`isConverting` 状态
+  - `executeConversion()`、`cancelConversion()` 函数
+  - 格式转换确认弹窗（非 Dataset 格式时触发）
+
+#### Changed
+- **Schema 版本升级** - 2.0.0 → 2.1.0
+- **detectSchemaVersion 改进** - 基于结构检测类型，不再严格依赖版本号
+  - 支持 Dataset、RecordingSession、TestCase、PlaybackSequence、TestInput、TestCaseV1 等类型
+  - 缺失或未知版本号的标准结构数据可正确识别
+- **importDatasetFromFile 返回值变更** - 返回 `{saved, needsConversion}` 对象，支持转换流程
+
+#### Docs
+- 更新 BATCH-TESTING.md - 添加"格式转换功能"章节
+- 更新 FRONTEND.md - 添加 useDatasets Hook 及状态表
+- 更新 TEST-CASE-SCHEMA.md - 版本更新和检测逻辑说明
+
+---
+
 ### [1.4.1] - 2026-01-26
 
 #### Docs
