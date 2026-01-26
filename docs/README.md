@@ -73,6 +73,9 @@ cd backend && ./run.sh
 | [FRONTEND.md](./FRONTEND.md) | 前端状态管理、组件结构、API 客户端 | 前端开发者 |
 | [BACKEND.md](./BACKEND.md) | 后端服务架构、Docker 容器管理、工具执行 | 后端开发者 |
 | [TERMINAL.md](./TERMINAL.md) | F3 终端运行模块：架构、API、安全、扩展展望 | 后端/安全开发者 |
+| [FILE-PARSER.md](./FILE-PARSER.md) | 文件解析服务：解析器、API、扩展指南 | 后端/安全开发者 |
+| [MCP-ARCHITECTURE.md](./MCP-ARCHITECTURE.md) | MCP Server 架构：11 个外部工具服务 | 后端/安全开发者 |
+| [RAG-ARCHITECTURE.md](./RAG-ARCHITECTURE.md) | RAG 知识库服务：向量存储、检索攻击 | 后端/安全开发者 |
 | [SCENARIOS.md](./SCENARIOS.md) | 场景数据结构、Builder 模式、扩展指南 | 场景开发者 |
 | [TEST-CASE-SCHEMA.md](./TEST-CASE-SCHEMA.md) | 测试用例 JSON 格式规范、回放功能 | 所有开发者/外行 |
 | [BATCH-TESTING.md](./BATCH-TESTING.md) | 批量测试模块：执行流程、状态管理、API | 前后端开发者 |
@@ -214,4 +217,4 @@ poc-demo/
 
 ---
 
-*最后更新: 2026-01-21*
+*最后更新: 2026-01-26*

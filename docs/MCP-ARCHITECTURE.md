@@ -2,7 +2,25 @@
 
 ## 概述
 
-MCP (Model Context Protocol) Server 功能为 LLM Agent 安全演示平台提供外部工具调用能力。通过配置不同的 MCP 服务（文件系统、邮件、支付），可以模拟真实的 Agent 工具调用场景，用于测试各类安全攻击。
+MCP (Model Context Protocol) Server 功能为 LLM Agent 安全演示平台提供外部工具调用能力。通过配置不同的 MCP 服务，可以模拟真实的 Agent 工具调用场景，用于测试各类安全攻击。
+
+> **注意**：文件解析服务已独立为 `/file-parser/*` 路由，与 MCP Server 无关。详见 [FILE-PARSER.md](./FILE-PARSER.md)。
+
+### 可用 MCP Server
+
+| Server ID | 名称 | 说明 | 工具数量 |
+|-----------|------|------|----------|
+| `filesystem` | Filesystem | 本地文件系统读写 | 4 |
+| `email` | Email | SMTP 邮件服务 | 2 |
+| `payment` | Payment | Stripe 支付网关 | 3 |
+| `notion` | Notion | Notion 文档管理 | 4 |
+| `github` | GitHub | GitHub 仓库操作 | 5 |
+| `database` | Database | SQL 数据库查询 | 3 |
+| `http` | HTTP | HTTP 请求代理 | 2 |
+| `slack` | Slack | Slack 消息通知 | 3 |
+| `calendar` | Calendar | 日历事件管理 | 4 |
+| `storage` | Storage | 对象存储服务 | 4 |
+| `memory` | Memory | 会话记忆存储 | 3 |
 
 ## 架构图
 
@@ -13,7 +31,7 @@ MCP (Model Context Protocol) Server 功能为 LLM Agent 安全演示平台提供
 │  src/App.jsx                                                     │
 │  ├── MCP 开关按钮 (mcpServerEnabled)                             │
 │  ├── MCP 配置面板                                                │
-│  │   ├── 左栏: 服务列表 (filesystem/email/payment)               │
+│  │   ├── 左栏: 服务列表 (11 个 Server)                          │
 │  │   └── 右栏: 动态配置表单 + 测试连接 + 启用/禁用               │
 │  └── 状态管理                                                    │
 │      ├── mcpServerConfigs (localStorage 持久化)                  │
@@ -38,25 +56,23 @@ MCP (Model Context Protocol) Server 功能为 LLM Agent 安全演示平台提供
 ├─────────────────────────────────────────────────────────────────┤
 │  backend/app/routers/mcp.py                                      │
 │  └── API Endpoints (prefix: /mcp)                                │
+│      ├── GET  /health   - 健康检查                               │
 │      ├── POST /test     - 测试服务连接                           │
 │      ├── POST /tool     - 执行工具调用                           │
 │      ├── GET  /servers  - 列出可用服务                           │
 │      └── GET  /status/{server_id} - 获取服务状态                 │
 ├─────────────────────────────────────────────────────────────────┤
-│  backend/app/services/mcp.py                                     │
-│  └── McpService                                                  │
-│      ├── Filesystem Tools (本地执行)                             │
-│      │   ├── fs_read_file    - 读取文件                          │
-│      │   ├── fs_write_file   - 写入文件                          │
-│      │   ├── fs_list_dir     - 列目录                            │
-│      │   └── fs_search       - 搜索文件                          │
-│      ├── Email Tools (smtplib)                                   │
-│      │   ├── email_send      - 发送邮件                          │
-│      │   └── email_send_with_attachment - 带附件邮件             │
-│      └── Payment Tools (Stripe API)                              │
-│          ├── payment_create_order  - 创建支付订单                │
-│          ├── payment_query_status  - 查询订单状态                │
-│          └── payment_refund        - 发起退款                    │
+│  backend/app/services/                                           │
+│  ├── mcp.py           - MCP Server 核心                          │
+│  ├── mcp_service.py   - MCP 服务封装                             │
+│  ├── mcp_notion.py    - Notion Server                            │
+│  ├── mcp_github.py    - GitHub Server                            │
+│  ├── mcp_database.py  - Database Server                          │
+│  ├── mcp_http.py      - HTTP Server                              │
+│  ├── mcp_slack.py     - Slack Server                             │
+│  ├── mcp_calendar.py  - Calendar Server                          │
+│  ├── mcp_storage.py   - Storage Server                           │
+│  └── mcp_memory.py    - Memory Server                            │
 ├─────────────────────────────────────────────────────────────────┤
 │  backend/app/models/schemas.py                                   │
 │  └── Pydantic Models                                             │
@@ -331,3 +347,113 @@ elif server_id == McpServerType.NEW_SERVICE:
 | 工具调用 | Cyan | `text-cyan-*`, `border-cyan-*` |
 | RAG | Amber | `text-amber-*`, `border-amber-*` |
 | **MCP Server** | **Emerald** | `text-emerald-*`, `border-emerald-*` |
+
+---
+
+## 新增 MCP Server 详情
+
+### Notion 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| apiKey | Notion Integration Token |
+| workspaceId | 工作区 ID (可选) |
+
+**可用工具**:
+- `notion_search` - 搜索页面
+- `notion_get_page` - 获取页面内容
+- `notion_create_page` - 创建新页面
+- `notion_update_page` - 更新页面
+
+### GitHub 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| token | GitHub Personal Access Token |
+| owner | 仓库所有者 |
+| repo | 仓库名称 |
+
+**可用工具**:
+- `github_get_repo` - 获取仓库信息
+- `github_list_issues` - 列出 Issues
+- `github_create_issue` - 创建 Issue
+- `github_get_file` - 获取文件内容
+- `github_search_code` - 搜索代码
+
+### Database 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| connectionString | 数据库连接字符串 |
+| type | 数据库类型 (mysql/postgres/sqlite) |
+
+**可用工具**:
+- `db_query` - 执行 SQL 查询
+- `db_list_tables` - 列出表
+- `db_describe_table` - 描述表结构
+
+### HTTP 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| baseUrl | API 基础 URL |
+| headers | 默认请求头 (JSON) |
+
+**可用工具**:
+- `http_request` - 发起 HTTP 请求
+- `http_graphql` - GraphQL 查询
+
+### Slack 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| token | Slack Bot Token |
+| channel | 默认频道 |
+
+**可用工具**:
+- `slack_send_message` - 发送消息
+- `slack_list_channels` - 列出频道
+- `slack_get_history` - 获取消息历史
+
+### Calendar 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| provider | 日历提供商 (google/outlook) |
+| credentials | OAuth 凭证 |
+
+**可用工具**:
+- `calendar_list_events` - 列出事件
+- `calendar_create_event` - 创建事件
+- `calendar_update_event` - 更新事件
+- `calendar_delete_event` - 删除事件
+
+### Storage 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| provider | 存储提供商 (s3/gcs/azure) |
+| bucket | 存储桶名称 |
+| credentials | 访问凭证 |
+
+**可用工具**:
+- `storage_list` - 列出对象
+- `storage_get` - 获取对象
+- `storage_put` - 上传对象
+- `storage_delete` - 删除对象
+
+### Memory 服务
+
+| 配置字段 | 说明 |
+|---------|------|
+| sessionId | 会话 ID |
+| maxItems | 最大存储条目数 |
+
+**可用工具**:
+- `memory_store` - 存储记忆
+- `memory_retrieve` - 检索记忆
+- `memory_clear` - 清除记忆
+
+---
+
+*相关文档: [FILE-PARSER.md](./FILE-PARSER.md) | [CONFIG.md](./CONFIG.md) | [API-REFERENCE.md](./API-REFERENCE.md)*

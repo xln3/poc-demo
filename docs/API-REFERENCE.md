@@ -413,11 +413,38 @@
 
 ---
 
-## MCP API
+## File Parser API
+
+文件解析服务，用于对比不同解析器提取文件内容的能力差异。详见 [FILE-PARSER.md](./FILE-PARSER.md)。
+
+### 健康检查
+
+**GET** `/file-parser/health`
+
+**响应**:
+```json
+{
+  "status": "healthy",
+  "container_available": true,
+  "parsers": {
+    "pymupdf": true,
+    "pdfplumber": true,
+    "python-docx": true,
+    "mammoth": true,
+    "openpyxl": true,
+    "openpyxl_hidden": true,
+    "exiftool": true,
+    "pytesseract": true,
+    "pillow_meta": true
+  }
+}
+```
+
+---
 
 ### 获取可用解析器
 
-**GET** `/mcp/parsers`
+**GET** `/file-parser/parsers`
 
 **响应**:
 ```json
@@ -433,7 +460,7 @@
 
 ### 解析文件
 
-**POST** `/mcp/parse`
+**POST** `/file-parser/parse`
 
 **请求**: `multipart/form-data`
 
@@ -443,8 +470,10 @@
 | `parsers` | `string` | 是 | JSON 格式的解析器 ID 列表 |
 
 **示例**:
-```
-parsers=["pymupdf", "pdfplumber"]
+```bash
+curl -X POST http://localhost:8000/file-parser/parse \
+  -F "file=@document.pdf" \
+  -F 'parsers=["pymupdf", "pdfplumber"]'
 ```
 
 **响应**:
@@ -457,8 +486,9 @@ parsers=["pymupdf", "pdfplumber"]
     {
       "parser": "pymupdf",
       "success": true,
+      "total_pages": 3,
       "pages": [
-        {"page": 1, "text": "第一页内容..."}
+        {"page": 1, "text": "第一页内容...", "char_count": 150}
       ],
       "extracts_hidden": true
     }
@@ -470,9 +500,9 @@ parsers=["pymupdf", "pdfplumber"]
 
 ### 解析为纯文本
 
-**POST** `/mcp/parse/text`
+**POST** `/file-parser/parse/text`
 
-与 `/mcp/parse` 相同，但返回合并的纯文本。
+与 `/file-parser/parse` 相同，但返回合并的纯文本。
 
 **响应**:
 ```json
@@ -480,12 +510,16 @@ parsers=["pymupdf", "pdfplumber"]
   "filename": "document.pdf",
   "file_type": "pdf",
   "parsers_used": ["pymupdf"],
-  "text": "合并后的文本内容...",
+  "text": "--- pymupdf 解析结果 ---\n[第1页]\n文件内容...",
   "extracts_hidden": true
 }
 ```
 
 ---
+
+## MCP API
+
+MCP Server 工具调用服务。
 
 ### MCP 健康检查
 

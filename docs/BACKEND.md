@@ -9,20 +9,39 @@ backend/
 ├── app/
 │   ├── main.py              # FastAPI 应用入口
 │   ├── routers/             # API 路由层
-│   │   ├── sandbox.py       # 沙箱管理
-│   │   ├── rag.py           # RAG 服务
-│   │   ├── mcp.py           # MCP 解析和工具
-│   │   └── cases.py         # 用例存储
+│   │   ├── sandbox.py       # 沙箱管理 (/sandbox)
+│   │   ├── rag.py           # RAG 服务 (/rag)
+│   │   ├── mcp.py           # MCP Server 工具 (/mcp)
+│   │   ├── file_parser.py   # 文件解析 (/file-parser)
+│   │   ├── cases.py         # 用例存储 (/cases)
+│   │   ├── datasets.py      # 数据集管理 (/datasets)
+│   │   ├── test_results.py  # 测试结果 (/test-results)
+│   │   └── report_templates.py # 报告模板 (/report-templates)
 │   ├── services/            # 业务逻辑层
 │   │   ├── container.py     # Docker 容器管理
 │   │   ├── tools.py         # 工具执行器
 │   │   ├── log_manager.py   # WebSocket 日志
 │   │   ├── rag_service.py   # RAG 业务逻辑
 │   │   ├── container_rag.py # 容器化 RAG
-│   │   ├── container_parser.py # 容器化解析
-│   │   ├── mcp.py           # MCP Server 实现
-│   │   ├── file_parsers.py   # 文件解析器定义
-│   │   └── case_storage.py  # 用例持久化
+│   │   ├── container_parser.py # 容器化文件解析
+│   │   ├── file_parsers.py  # 文件解析器定义
+│   │   ├── file_parser_cli.py # 文件解析 CLI
+│   │   ├── mcp.py           # MCP Server 核心
+│   │   ├── mcp_service.py   # MCP 服务封装
+│   │   ├── mcp_notion.py    # Notion MCP Server
+│   │   ├── mcp_github.py    # GitHub MCP Server
+│   │   ├── mcp_database.py  # Database MCP Server
+│   │   ├── mcp_http.py      # HTTP MCP Server
+│   │   ├── mcp_slack.py     # Slack MCP Server
+│   │   ├── mcp_calendar.py  # Calendar MCP Server
+│   │   ├── mcp_storage.py   # Storage MCP Server
+│   │   ├── mcp_memory.py    # Memory MCP Server
+│   │   ├── case_storage.py  # 用例持久化
+│   │   ├── dataset_storage.py # 数据集持久化
+│   │   ├── test_results_storage.py # 测试结果持久化
+│   │   ├── terminal_sandbox_service.py # 终端沙箱服务
+│   │   ├── terminal_lock.py # 终端锁管理
+│   │   └── file_watcher.py  # 文件监控
 │   └── models/              # 数据模型
 │       ├── schemas.py       # Pydantic 模型
 │       └── rag_schemas.py   # RAG 专用模型
@@ -167,15 +186,23 @@ async def query_documents(request: QueryRequest):
     return QueryResponse(success=True, results=results)
 ```
 
-### MCP 路由 (`/mcp`)
+### File Parser 路由 (`/file-parser`)
 
-文件解析和 MCP Server 工具。
+独立的文件解析服务。详见 [FILE-PARSER.md](./FILE-PARSER.md)。
 
 | 方法 | 端点 | 功能 |
 |------|------|------|
-| GET | `/mcp/parsers` | 获取可用解析器 |
-| POST | `/mcp/parse` | 解析文件 |
-| POST | `/mcp/parse/text` | 解析为纯文本 |
+| GET | `/file-parser/health` | 健康检查 |
+| GET | `/file-parser/parsers` | 获取可用解析器 |
+| POST | `/file-parser/parse` | 解析文件 |
+| POST | `/file-parser/parse/text` | 解析为纯文本 |
+
+### MCP 路由 (`/mcp`)
+
+MCP Server 工具调用服务。
+
+| 方法 | 端点 | 功能 |
+|------|------|------|
 | GET | `/mcp/health` | 健康检查 |
 | GET | `/mcp/servers` | 列出 MCP Server |
 | POST | `/mcp/test` | 测试 Server 连接 |
@@ -183,24 +210,6 @@ async def query_documents(request: QueryRequest):
 | GET | `/mcp/status/{server_id}` | 获取 Server 状态 |
 
 ```python
-@router.post("/parse")
-async def parse_document(
-    file: UploadFile = File(...),
-    parsers: str = Form(...)  # JSON 数组
-):
-    parser_ids = json.loads(parsers)
-    file_bytes = await file.read()
-    file_type = get_file_type(file.filename)
-
-    parser = get_container_parser()
-    results = parser.parse_file(file_bytes, file.filename, parser_ids)
-
-    return {
-        "filename": file.filename,
-        "file_type": file_type,
-        "results": results
-    }
-
 @router.post("/tool", response_model=McpToolResult)
 async def execute_mcp_tool(request: McpToolRequest):
     if request.server_id == McpServerType.FILESYSTEM:

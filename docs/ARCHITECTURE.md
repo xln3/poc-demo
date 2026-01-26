@@ -94,10 +94,14 @@ showDocument, docTab, expandedLogs, apiStatus
 backend/app/
 ├── main.py              # FastAPI 应用入口
 ├── routers/             # API 路由层
-│   ├── sandbox.py       # 沙箱管理 API
-│   ├── rag.py           # RAG 服务 API
-│   ├── mcp.py           # MCP 解析/工具 API
-│   └── cases.py         # 用例存储 API
+│   ├── sandbox.py       # 沙箱管理 (/sandbox)
+│   ├── rag.py           # RAG 服务 (/rag)
+│   ├── mcp.py           # MCP Server 工具 (/mcp)
+│   ├── file_parser.py   # 文件解析 (/file-parser)
+│   ├── cases.py         # 用例存储 (/cases)
+│   ├── datasets.py      # 数据集管理 (/datasets)
+│   ├── test_results.py  # 测试结果 (/test-results)
+│   └── report_templates.py # 报告模板 (/report-templates)
 ├── services/            # 业务逻辑层
 │   ├── container.py     # Docker 容器管理
 │   ├── tools.py         # 工具执行器
@@ -105,9 +109,12 @@ backend/app/
 │   ├── rag_service.py   # RAG 业务逻辑
 │   ├── container_rag.py # 容器化 RAG
 │   ├── container_parser.py # 容器化文件解析
-│   ├── mcp.py           # MCP Server 实现
-│   ├── file_parsers.py   # 文件解析器
-│   └── case_storage.py  # 用例持久化
+│   ├── file_parsers.py  # 文件解析器定义
+│   ├── mcp.py           # MCP Server 核心
+│   ├── mcp_*.py         # MCP Server 实现 (notion, github, database, http, slack, calendar, storage, memory)
+│   ├── case_storage.py  # 用例持久化
+│   ├── dataset_storage.py # 数据集持久化
+│   └── test_results_storage.py # 测试结果持久化
 └── models/              # 数据模型层
     ├── schemas.py       # Pydantic 模型
     └── rag_schemas.py   # RAG 专用模型
@@ -119,8 +126,12 @@ backend/app/
 |----------|------|----------|
 | `/sandbox` | 沙箱管理 | container, tool, logs |
 | `/rag` | RAG 服务 | upload, query, documents |
-| `/mcp` | MCP 服务 | parse, servers, tool |
+| `/file-parser` | 文件解析 | parse, parsers |
+| `/mcp` | MCP Server 工具 | servers, tool, test |
 | `/cases` | 用例存储 | CRUD 操作 |
+| `/datasets` | 数据集管理 | CRUD 操作 |
+| `/test-results` | 测试结果 | CRUD 操作 |
+| `/report-templates` | 报告模板 | 获取模板 |
 
 ## 数据流
 

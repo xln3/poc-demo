@@ -262,6 +262,8 @@ CONFIG.mcp = {
 
 ## MCP Server 配置
 
+> **注意**：文件解析服务已独立为 `/file-parser/*` 路由。MCP Server 仅用于外部工具调用。
+
 ```javascript
 CONFIG.mcpServers = {
   enabled: false,
@@ -303,6 +305,96 @@ CONFIG.mcpServers = {
         { key: 'merchantId', label: '商户标识', type: 'text', required: true }
       ],
       tools: ['payment_create_order', 'payment_query_status', 'payment_refund']
+    },
+    notion: {
+      id: 'notion',
+      name: 'Notion',
+      icon: '📝',
+      description: 'Notion 文档管理',
+      fields: [
+        { key: 'apiKey', label: 'Integration Token', type: 'password', required: true },
+        { key: 'workspaceId', label: '工作区 ID', type: 'text', required: false }
+      ],
+      tools: ['notion_search', 'notion_get_page', 'notion_create_page', 'notion_update_page']
+    },
+    github: {
+      id: 'github',
+      name: 'GitHub',
+      icon: '🐙',
+      description: 'GitHub 仓库操作',
+      fields: [
+        { key: 'token', label: 'Personal Access Token', type: 'password', required: true },
+        { key: 'owner', label: '仓库所有者', type: 'text', required: true },
+        { key: 'repo', label: '仓库名称', type: 'text', required: true }
+      ],
+      tools: ['github_get_repo', 'github_list_issues', 'github_create_issue', 'github_get_file', 'github_search_code']
+    },
+    database: {
+      id: 'database',
+      name: 'Database',
+      icon: '🗄️',
+      description: 'SQL 数据库查询',
+      fields: [
+        { key: 'connectionString', label: '连接字符串', type: 'password', required: true },
+        { key: 'type', label: '数据库类型', type: 'select', options: ['mysql', 'postgres', 'sqlite'], required: true }
+      ],
+      tools: ['db_query', 'db_list_tables', 'db_describe_table']
+    },
+    http: {
+      id: 'http',
+      name: 'HTTP',
+      icon: '🌐',
+      description: 'HTTP 请求代理',
+      fields: [
+        { key: 'baseUrl', label: 'API 基础 URL', type: 'text', required: true },
+        { key: 'headers', label: '默认请求头 (JSON)', type: 'textarea', required: false }
+      ],
+      tools: ['http_request', 'http_graphql']
+    },
+    slack: {
+      id: 'slack',
+      name: 'Slack',
+      icon: '💬',
+      description: 'Slack 消息通知',
+      fields: [
+        { key: 'token', label: 'Bot Token', type: 'password', required: true },
+        { key: 'channel', label: '默认频道', type: 'text', required: false }
+      ],
+      tools: ['slack_send_message', 'slack_list_channels', 'slack_get_history']
+    },
+    calendar: {
+      id: 'calendar',
+      name: 'Calendar',
+      icon: '📅',
+      description: '日历事件管理',
+      fields: [
+        { key: 'provider', label: '提供商', type: 'select', options: ['google', 'outlook'], required: true },
+        { key: 'credentials', label: 'OAuth 凭证', type: 'textarea', required: true }
+      ],
+      tools: ['calendar_list_events', 'calendar_create_event', 'calendar_update_event', 'calendar_delete_event']
+    },
+    storage: {
+      id: 'storage',
+      name: 'Storage',
+      icon: '☁️',
+      description: '对象存储服务',
+      fields: [
+        { key: 'provider', label: '提供商', type: 'select', options: ['s3', 'gcs', 'azure'], required: true },
+        { key: 'bucket', label: '存储桶名称', type: 'text', required: true },
+        { key: 'credentials', label: '访问凭证', type: 'textarea', required: true }
+      ],
+      tools: ['storage_list', 'storage_get', 'storage_put', 'storage_delete']
+    },
+    memory: {
+      id: 'memory',
+      name: 'Memory',
+      icon: '🧠',
+      description: '会话记忆存储',
+      fields: [
+        { key: 'sessionId', label: '会话 ID', type: 'text', required: false },
+        { key: 'maxItems', label: '最大条目数', type: 'number', default: 100 }
+      ],
+      tools: ['memory_store', 'memory_retrieve', 'memory_clear']
     }
   }
 }

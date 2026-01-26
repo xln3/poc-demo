@@ -75,6 +75,27 @@
 
 ## 变更记录
 
+### [1.4.1] - 2026-01-26
+
+#### Docs
+- **新增 FILE-PARSER.md** - 独立的文件解析服务文档
+  - 解析器详解（PDF/DOCX/XLSX/图片）
+  - `/file-parser/*` API 参考
+  - 容器化实现说明
+  - 扩展指南（添加新解析器/新文件类型）
+- **更新 API-REFERENCE.md** - 添加 File Parser API 章节
+- **更新 BACKEND.md** - 补充缺失的路由和服务文件
+  - 新增路由：file_parser.py, datasets.py, test_results.py, report_templates.py
+  - 新增服务：mcp_notion.py, mcp_github.py, mcp_database.py, mcp_http.py, mcp_slack.py, mcp_calendar.py, mcp_storage.py, mcp_memory.py
+- **更新 ARCHITECTURE.md** - 补充路由概览（8 个路由前缀）
+- **更新 MCP-ARCHITECTURE.md** - 区分文件解析与 MCP Server
+  - 明确文件解析已独立为 `/file-parser/*` 路由
+  - 添加 8 个新 MCP Server 详情
+- **更新 CONFIG.md** - 添加 8 个新 MCP Server 配置
+- **更新 README.md** - 文档导航添加 FILE-PARSER.md, MCP-ARCHITECTURE.md, RAG-ARCHITECTURE.md
+
+---
+
 ### [1.4.0] - 2026-01-26
 
 #### Added
