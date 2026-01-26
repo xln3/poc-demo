@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CONFIG } from '../config';
 
 /**
@@ -7,9 +7,10 @@ import { CONFIG } from '../config';
  * @returns {Object} MCP state and setters
  */
 export const useMCP = () => {
-  // MCP Parser states
-  const [mcpEnabled, setMcpEnabled] = useState(false);
-  const [mcpConfigCollapsed, setMcpConfigCollapsed] = useState(true);
+  // 文件解析状态
+  const [mcpEnabled, setMcpEnabled] = useState(true);  // 默认启用
+  const [mcpConfigCollapsed, setMcpConfigCollapsed] = useState(true);  // 默认折叠
+  const [mcpParserServiceAvailable, setMcpParserServiceAvailable] = useState(false);
   const [mcpParsers, setMcpParsers] = useState(() => {
     // Initialize parser selection state: list of selected tools per file type (by priority)
     const parsers = {};
@@ -77,6 +78,29 @@ export const useMCP = () => {
     return Math.max(1000, Math.ceil(sizeMB * rate));  // Minimum 1s
   };
 
+  // Check file parser service health (独立于 MCP)
+  const checkMcpParserHealth = useCallback(async () => {
+    try {
+      const response = await fetch('/file-parser/health');
+      if (response.ok) {
+        const data = await response.json();
+        setMcpParserServiceAvailable(data.container_available === true);
+        return data;
+      }
+    } catch (error) {
+      console.warn('File parser health check failed:', error.message);
+    }
+    setMcpParserServiceAvailable(false);
+    return null;
+  }, []);
+
+  // Auto-check MCP parser service on mount and periodically
+  useEffect(() => {
+    checkMcpParserHealth();
+    const interval = setInterval(checkMcpParserHealth, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, [checkMcpParserHealth]);
+
   return {
     // Parser state
     mcpEnabled,
@@ -91,6 +115,10 @@ export const useMCP = () => {
     setParsingProgress,
     parsingAbortController,
     setParsingAbortController,
+
+    // Parser service health (独立于 MCP Server)
+    mcpParserServiceAvailable,
+    checkMcpParserHealth,
 
     // Server state
     mcpServerEnabled,

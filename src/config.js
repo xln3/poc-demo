@@ -120,7 +120,7 @@ export const CONFIG = {
   // MCP 文件解析配置
   mcp: {
     enabled: true,  // 默认启用
-    serverUrl: `http://${BACKEND_HOST}:8000`,  // 与sandbox同一后端
+    serverUrl: '',  // 使用相对路径，走 Vite 代理（避免 CORS 和系统代理问题）
     // 可用的解析器，按文件类型分组
     parsers: {
       pdf: {
@@ -737,16 +737,12 @@ export const CONFIG = {
     }
   },
 
-  // ========== MCP 文件解析 API 辅助函数 ==========
+  // ========== 文件解析 API 辅助函数 ==========
 
-  // 检查 MCP 服务健康状态
-  async checkMCPHealth() {
-    if (!this.mcp.enabled) {
-      return { status: 'DISABLED' };
-    }
-
+  // 检查文件解析服务健康状态
+  async checkFileParserHealth() {
     try {
-      const response = await fetch(`${this.mcp.serverUrl}/mcp/health`);
+      const response = await fetch('/file-parser/health');
       if (response.ok) {
         return await response.json();
       }
@@ -757,75 +753,63 @@ export const CONFIG = {
   },
 
   // 获取可用的解析器列表
-  async getMCPParsers() {
-    if (!this.mcp.enabled) {
-      return {};
-    }
-
+  async getFileParsers() {
     try {
-      const response = await fetch(`${this.mcp.serverUrl}/mcp/parsers`);
+      const response = await fetch('/file-parser/parsers');
       if (response.ok) {
         return await response.json();
       }
       return {};
     } catch (error) {
-      console.error('获取 MCP 解析器失败:', error);
+      console.error('获取文件解析器失败:', error);
       return {};
     }
   },
 
-  // 使用 MCP 解析文件
-  async parseMCPFile(file, parserIds) {
-    if (!this.mcp.enabled) {
-      throw new Error('MCP 服务未启用');
-    }
-
+  // 解析文件
+  async parseFile(file, parserIds) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('parsers', JSON.stringify(parserIds));
 
     try {
-      const response = await fetch(`${this.mcp.serverUrl}/mcp/parse`, {
+      const response = await fetch('/file-parser/parse', {
         method: 'POST',
         body: formData
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || `MCP 解析失败: ${response.status}`);
+        throw new Error(error.detail || `文件解析失败: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
-      console.error('MCP 文件解析失败:', error);
+      console.error('文件解析失败:', error);
       throw error;
     }
   },
 
-  // 使用 MCP 解析文件并返回纯文本
-  async parseMCPFileToText(file, parserIds) {
-    if (!this.mcp.enabled) {
-      throw new Error('MCP 服务未启用');
-    }
-
+  // 解析文件并返回纯文本
+  async parseFileToText(file, parserIds) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('parsers', JSON.stringify(parserIds));
 
     try {
-      const response = await fetch(`${this.mcp.serverUrl}/mcp/parse/text`, {
+      const response = await fetch('/file-parser/parse/text', {
         method: 'POST',
         body: formData
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || `MCP 解析失败: ${response.status}`);
+        throw new Error(error.detail || `文件解析失败: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
-      console.error('MCP 文件解析失败:', error);
+      console.error('文件解析失败:', error);
       throw error;
     }
   }

@@ -526,8 +526,8 @@ export default function App() {
     ragEnabled, setRagEnabled, ragConfigCollapsed, setRagConfigCollapsed,
     ragKnowledge, setRagKnowledge, ragKnowledgeEdit, setRagKnowledgeEdit,
     ragMode, setRagMode, ragServiceAvailable, ragDocuments, setRagDocuments,
-    ragQueryResults, setRagQueryResults, ragUploading, parserContainerAvailable,
-    setParserContainerAvailable, refreshRagDocuments, handleRagUpload,
+    ragQueryResults, setRagQueryResults, ragUploading,
+    refreshRagDocuments, handleRagUpload,
     handleRagDelete, handleRagClear, handleRagReset, performRagQuery
   } = rag;
 
@@ -541,6 +541,7 @@ export default function App() {
     mcpEnabled, setMcpEnabled, mcpConfigCollapsed, setMcpConfigCollapsed,
     mcpParsers, setMcpParsers, isParsingFile, setIsParsingFile,
     parsingProgress, setParsingProgress, parsingAbortController, setParsingAbortController,
+    mcpParserServiceAvailable, checkMcpParserHealth,
     mcpServerEnabled, setMcpServerEnabled, mcpServerConfigCollapsed, setMcpServerConfigCollapsed,
     selectedMcpServer, setSelectedMcpServer, mcpServerConfigs, setMcpServerConfigs,
     mcpServerStatus, setMcpServerStatus, getFileType, requiresDockerParsers, estimateParsingTime
@@ -3251,11 +3252,11 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
 
     for (const file of files) {
       try {
-        // 尝试解析文件（使用 MCP）
+        // 尝试解析文件
         if (mcpEnabled) {
           const fileType = getFileTypeForMcp(file.name);
           if (fileType && mcpParsers[fileType]?.length > 0) {
-            const result = await CONFIG.parseMCPFileToText(file, mcpParsers[fileType]);
+            const result = await CONFIG.parseFileToText(file, mcpParsers[fileType]);
             if (result.content) {
               fileContents.push(`[文件: ${file.name}]\n${result.content}`);
               continue;
@@ -3321,19 +3322,19 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
     return typeMap[ext] || null;
   };
 
-  // 通过MCP后端服务解析文件
+  // 通过后端服务解析文件
   const parseViaMcpBackend = async (file, parsers, abortController) => {
-    console.log('🌐 调用MCP后端:', CONFIG.mcp.serverUrl, '解析器:', parsers);
+    console.log('🌐 调用文件解析后端, 解析器:', parsers);
     const formData = new FormData();
     formData.append('file', file);
     formData.append('parsers', JSON.stringify(parsers));
 
-    const response = await fetch(`${CONFIG.mcp.serverUrl}/mcp/parse/text`, {
+    const response = await fetch('/file-parser/parse/text', {
       method: 'POST',
       body: formData,
       signal: abortController?.signal
     });
-    console.log('📡 MCP响应状态:', response.status);
+    console.log('📡 文件解析响应状态:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -3587,7 +3588,7 @@ print('\\n'.join(all_text))
   };
 
   // 文件处理函数 - 解析文件内容作为文本
-  // F2 文件注入场景：直接调用后端 /mcp/parse/text API 解析（不依赖 mcpEnabled）
+  // F2 文件注入场景：直接调用后端 /file-parser/parse/text API 解析
   const handleAddFile = async (e) => {
     const files = Array.from(e.target.files);
 
@@ -3601,30 +3602,63 @@ print('\\n'.join(all_text))
       const needsParsing = ['pdf', 'docx', 'xlsx', 'xls', 'doc', 'pptx', 'ppt', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
 
       if (needsParsing) {
+        const startTime = Date.now();
+        let progressTimer = null;
+
         try {
           setIsParsingFile(true);
+
+          // 根据文件扩展名映射到 mcpParsers 的 key
+          const parserTypeMap = {
+            'pdf': 'pdf',
+            'docx': 'docx', 'doc': 'docx',
+            'xlsx': 'xlsx', 'xls': 'xlsx',
+            'pptx': 'pptx', 'ppt': 'pptx',
+            'jpg': 'image', 'jpeg': 'image', 'png': 'image',
+            'gif': 'image', 'bmp': 'image', 'webp': 'image'
+          };
+          const parserType = parserTypeMap[ext];
+
+          // 优先使用用户在配置面板选择的解析器
+          let selectedParsers = parserType ? mcpParsers[parserType] : [];
+
+          // 如果用户没有选择任何解析器，使用默认值
+          if (!selectedParsers || selectedParsers.length === 0) {
+            const defaults = {
+              'pdf': ['pymupdf'],
+              'docx': ['python-docx'],
+              'xlsx': ['openpyxl'],
+              'pptx': ['python-pptx'],
+              'image': ['pytesseract']
+            };
+            selectedParsers = defaults[parserType] || ['text'];
+          }
+
+          // 设置进度状态
+          setParsingProgress({
+            filename: file.name,
+            parser: selectedParsers.join(', '),
+            startTime,
+            elapsedTime: 0,
+            estimatedTime: estimateParsingTime(file.size, parserType || 'text'),
+            runLocation: 'backend'
+          });
+
+          // 启动计时器更新已用时间
+          progressTimer = setInterval(() => {
+            setParsingProgress(prev => prev ? {
+              ...prev,
+              elapsedTime: Date.now() - startTime
+            } : null);
+          }, 100);
 
           // 构建 FormData
           const formData = new FormData();
           formData.append('file', file);
+          formData.append('parsers', JSON.stringify(selectedParsers));
 
-          // 根据文件类型选择默认解析器
-          let defaultParsers;
-          if (['pdf'].includes(ext)) {
-            defaultParsers = ['pymupdf'];
-          } else if (['docx', 'doc'].includes(ext)) {
-            defaultParsers = ['python-docx'];
-          } else if (['xlsx', 'xls'].includes(ext)) {
-            defaultParsers = ['openpyxl'];
-          } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
-            defaultParsers = ['tesseract'];
-          } else {
-            defaultParsers = ['text'];
-          }
-          formData.append('parsers', JSON.stringify(defaultParsers));
-
-          // 调用后端解析 API
-          const response = await fetch(`${CONFIG.mcp.serverUrl}/mcp/parse/text`, {
+          // 调用后端文件解析 API（走 Vite 代理）
+          const response = await fetch('/file-parser/parse/text', {
             method: 'POST',
             body: formData
           });
@@ -3635,7 +3669,7 @@ print('\\n'.join(all_text))
 
           const result = await response.json();
           content = result.text || '';
-          parsedWith = defaultParsers.join(', ');
+          parsedWith = selectedParsers.join(', ');
 
         } catch (error) {
           console.error('文件解析失败:', error);
@@ -3644,6 +3678,8 @@ print('\\n'.join(all_text))
           content = await file.text();
           parsedWith = 'fallback (原始文本)';
         } finally {
+          if (progressTimer) clearInterval(progressTimer);
+          setParsingProgress(null);
           setIsParsingFile(false);
         }
       } else {
@@ -3852,25 +3888,6 @@ print('\\n'.join(all_text))
             <div className="text-xs text-slate-500 text-center py-2">
               <div>后端服务未运行</div>
               <div className="mt-1 text-slate-600">cd backend && ./run.sh</div>
-            </div>
-          )}
-        </div>
-
-        {/* 解析容器状态 */}
-        <div className="mb-3 p-2 bg-slate-700 rounded">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400">📦 服务引擎</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded ${
-              parserContainerAvailable
-                ? 'bg-green-600 text-white'
-                : 'bg-slate-600 text-slate-400'
-            }`}>
-              {parserContainerAvailable ? '运行中' : '未启动'}
-            </span>
-          </div>
-          {parserContainerAvailable && (
-            <div className="mt-1 text-xs text-slate-500">
-              支持 PDF/DOCX/XLSX/图片OCR 解析
             </div>
           )}
         </div>
@@ -4910,7 +4927,7 @@ print('\\n'.join(all_text))
                     ))}
                   </select>
                 </div>
-                {/* MCP 开关 */}
+                {/* 文件解析开关 + 状态 */}
                 <div className="flex items-center gap-2">
                   <label
                     className="flex items-center gap-1.5 cursor-pointer"
@@ -4924,11 +4941,15 @@ print('\\n'.join(all_text))
                     />
                     <span className="text-xs text-slate-400">文件解析</span>
                   </label>
-                  {mcpEnabled && (
-                    <span className="text-xs text-purple-400">
-                      ({Object.values(mcpParsers).flat().length} 工具)
-                    </span>
-                  )}
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                    isParsingFile
+                      ? 'bg-yellow-600 text-white'
+                      : mcpParserServiceAvailable
+                        ? 'bg-green-600 text-white'
+                        : 'bg-slate-600 text-slate-400'
+                  }`}>
+                    {isParsingFile ? '解析中' : mcpParserServiceAvailable ? '运行中' : '未运行'}
+                  </span>
                 </div>
                 {/* 工具调用开关 */}
                 <div className="flex items-center gap-2">
@@ -5193,7 +5214,7 @@ print('\\n'.join(all_text))
               </div>
             </div>
 
-            {/* MCP 解析器配置面板 */}
+            {/* 文件解析器配置面板 */}
             {mcpEnabled && (
               <div className="mb-3 p-2 bg-slate-900 rounded border border-purple-900/50">
                 <div className="text-xs text-purple-400 flex items-center justify-between">
@@ -5204,10 +5225,30 @@ print('\\n'.join(all_text))
                     <span>{mcpConfigCollapsed ? '▶' : '▼'}</span>
                     <span>🔧 文件解析器配置</span>
                   </button>
-                  <span className="text-slate-500 text-[10px]">
-                    勾选启用，取消勾选禁用
-                    {payloadFiles.length > 0 && <span className="text-yellow-500 ml-2">| 修改后需重新上传文件</span>}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {payloadFiles.length > 0 && (
+                      <span className="text-yellow-500 text-[10px]">修改后需重新上传文件</span>
+                    )}
+                    {mcpConfigCollapsed && (
+                      <span className="text-[10px] text-slate-400 truncate max-w-[300px]">
+                        {(() => {
+                          const enabledByType = Object.entries(mcpParsers)
+                            .filter(([_, ids]) => ids && ids.length > 0)
+                            .map(([fileType, ids]) => {
+                              const config = CONFIG.mcp.parsers[fileType];
+                              if (!config) return null;
+                              const names = ids.map(id => {
+                                const tool = config.tools.find(t => t.id === id);
+                                return tool ? tool.name : id;
+                              });
+                              return names.join(', ');
+                            })
+                            .filter(Boolean);
+                          return enabledByType.join(' | ') || '无';
+                        })()}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {!mcpConfigCollapsed && (
                   <>
@@ -5228,7 +5269,6 @@ print('\\n'.join(all_text))
                               className={`flex items-center gap-1.5 text-xs cursor-pointer p-1 rounded transition ${
                                 isSelected ? 'bg-purple-900/30' : 'hover:bg-slate-700'
                               }`}
-                              title={tool.desc}
                             >
                               <input
                                 type="checkbox"
@@ -5252,9 +5292,7 @@ print('\\n'.join(all_text))
                               {isSelected && priority >= 0 && (
                                 <span className="ml-auto text-purple-400 text-[10px]">#{priority + 1}</span>
                               )}
-                              {tool.hiddenExtract && (
-                                <span className="text-yellow-500 text-[10px]" title="可提取隐藏内容">⚠</span>
-                              )}
+                              <span className="text-blue-400 text-[10px] cursor-help" title={tool.desc}>ℹ</span>
                             </label>
                           );
                         })}
@@ -5262,17 +5300,15 @@ print('\\n'.join(all_text))
                     </div>
                   ))}
                 </div>
-                <div className="mt-2 text-[10px] text-slate-500 flex items-center gap-3">
-                  <span>⚠ = 可提取隐藏文本层</span>
+                <div className="mt-2 text-[10px] text-slate-500">
                   <span>数字 = 解析优先级</span>
-                  <span className="text-slate-600">服务端点: {CONFIG.mcp.serverUrl}</span>
                 </div>
                   </>
                 )}
               </div>
             )}
 
-            {/* 工具调用配置面板 */}
+            {/* 终端工具配置面板 */}
             {toolsEnabled && (
               <div className="mb-3 p-2 bg-slate-900 rounded border border-cyan-900/50">
                 <div className="text-xs text-cyan-400 flex items-center justify-between">
@@ -5281,11 +5317,13 @@ print('\\n'.join(all_text))
                     className="flex items-center gap-2 hover:text-cyan-300 transition"
                   >
                     <span>{toolsConfigCollapsed ? '▶' : '▼'}</span>
-                    <span>🔧 工具调用配置</span>
+                    <span>🔧 终端工具配置</span>
                   </button>
-                  <span className="text-slate-500 text-[10px]">
-                    已启用 {Object.values(enabledTools).filter(Boolean).length} / {Object.keys(enabledTools).length} 个工具
-                  </span>
+                  {toolsConfigCollapsed && (
+                    <span className="text-[10px] text-slate-400 truncate max-w-[300px]">
+                      {Object.entries(enabledTools).filter(([_, enabled]) => enabled).map(([name]) => name).join(' | ') || '无'}
+                    </span>
+                  )}
                 </div>
                 {!toolsConfigCollapsed && (
                   <>

@@ -106,9 +106,10 @@ class ContainerParserService:
             self._ensure_container()
 
             # 简单验证：检查 CLI 脚本是否存在
+            # 注意：exec_in_container 直接执行命令，需要用 shell 包装才能使用 && 操作符
             exit_code, stdout, _ = container_manager.exec_in_container(
                 PARSER_SESSION_ID,
-                "test -f /app/file_parser_cli.py && echo ok"
+                '/bin/sh -c "test -f /app/file_parser_cli.py && echo ok"'
             )
             return exit_code == 0 and "ok" in stdout
         except Exception as e:
