@@ -179,6 +179,7 @@ async def execute_mcp_tool(request: McpToolRequest):
     tool_name = request.tool_name
     params = request.params
     config = request.config
+    sandbox_session_id = request.sandbox_session_id
 
     start_time = time.time()
 
@@ -208,7 +209,7 @@ async def execute_mcp_tool(request: McpToolRequest):
             result = await memory_service.execute_tool(tool_name, params, config)
         # 邮件 PDF 攻击场景相关服务
         elif server_id == McpServerType.EMAIL_RECEIVE:
-            result = await email_receive_service.execute_tool(tool_name, params, config)
+            result = await email_receive_service.execute_tool(tool_name, params, config, sandbox_session_id)
         elif server_id == McpServerType.BROWSER_CHROME:
             result = await chrome_browser_service.execute_tool(tool_name, params, config)
         elif server_id == McpServerType.BROWSER_FIREFOX:

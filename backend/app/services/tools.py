@@ -117,8 +117,11 @@ class ToolExecutor:
             ToolType.RUN_COMMAND: self._run_command,
             ToolType.HTTP_REQUEST: self._http_request,
             ToolType.LIST_DIR: self._list_dir,
+            ToolType.PARSE_FILE: self._parse_file,
         }
         self._log_callbacks: List[Callable[[LogEntry], None]] = []
+        # File-Parser 服务地址（内部 HTTP 调用）
+        self._file_parser_url = "http://127.0.0.1:8000/file-parser/parse/base64"
 
     def register_log_callback(self, callback: Callable[[LogEntry], None]):
         """Register callback to receive log entries."""
@@ -424,6 +427,96 @@ class ToolExecutor:
             "entries": [e.model_dump() for e in entries],
             "total": len(entries)
         }
+
+    async def _parse_file(self, session_id: str, params: dict) -> dict:
+        """Parse file in container using file-parser service.
+
+        通过 HTTP 调用独立的 file-parser 服务解析文件内容。
+        松耦合设计：file-parser 代码不变，sandbox 通过 API 调用。
+
+        Args:
+            session_id: 会话 ID
+            params: {
+                "path": 容器内文件路径,
+                "parsers": 解析器 ID 列表（可选，如 ["pymupdf", "pdfplumber"]）
+            }
+
+        Returns:
+            dict: {
+                "filename": 文件名,
+                "file_type": 文件类型,
+                "text": 解析后的文本,
+                "extracts_hidden": 是否提取隐藏内容
+            }
+        """
+        path = params.get("path")
+        if not path:
+            raise ValueError("Missing required parameter: path")
+
+        if ".." in path:
+            raise ValueError("Path traversal not allowed")
+
+        # 如果是相对路径，转换为 /workspace 下的绝对路径
+        if not path.startswith('/'):
+            path = f"/workspace/{path}"
+
+        parsers = params.get("parsers", [])
+
+        # 提取文件名
+        filename = path.split('/')[-1]
+
+        self._emit_log(
+            LogType.INFO,
+            f"Parsing file: {filename}",
+            LogStatus.NORMAL
+        )
+
+        # 1. 从容器读取文件（Base64 编码）
+        exit_code, stdout, stderr = await asyncio.to_thread(
+            container_manager.exec_in_container,
+            session_id,
+            f"/bin/sh -c \"base64 '{path}'\""
+        )
+
+        if exit_code != 0:
+            raise RuntimeError(f"Failed to read file for parsing: {stderr or stdout}")
+
+        # 移除换行符，得到干净的 base64 字符串
+        file_base64 = stdout.replace('\n', '').replace('\r', '')
+
+        # 2. 调用 file-parser 服务
+        request_body = {
+            "filename": filename,
+            "content_base64": file_base64,
+        }
+        if parsers:
+            request_body["parsers"] = parsers
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                self._file_parser_url,
+                json=request_body
+            )
+
+            if response.status_code != 200:
+                error_detail = response.text[:500]
+                raise RuntimeError(f"File-parser service error ({response.status_code}): {error_detail}")
+
+            result = response.json()
+
+        self._emit_log(
+            LogType.INFO,
+            f"File parsed: {filename} ({len(result.get('text', ''))} chars)",
+            LogStatus.SUCCESS
+        )
+
+        return {
+            "filename": result.get("filename", filename),
+            "file_type": result.get("file_type"),
+            "text": result.get("text", ""),
+            "extracts_hidden": result.get("extracts_hidden", False),
+        }
+
 
 # Singleton instance
 tool_executor = ToolExecutor()

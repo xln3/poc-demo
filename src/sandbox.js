@@ -33,6 +33,7 @@ export const ToolType = {
   RUN_COMMAND: 'run_command',
   HTTP_REQUEST: 'http_request',
   LIST_DIR: 'list_dir',
+  PARSE_FILE: 'parse_file',
 };
 
 // 日志类型
@@ -370,6 +371,11 @@ class SandboxClient {
     return this.executeTool(ToolType.LIST_DIR, { path });
   }
 
+  // 解析文件（通过 file-parser 服务）
+  async parseFile(path, parsers = []) {
+    return this.executeTool(ToolType.PARSE_FILE, { path, parsers });
+  }
+
   // ============ WebSocket Logs ============
 
   // 连接 WebSocket 获取实时日志
@@ -596,6 +602,12 @@ export const TOOL_DESCRIPTIONS = {
     icon: '📁',
     description: '列出目录内容',
     params: ['path'],
+  },
+  [ToolType.PARSE_FILE]: {
+    name: '解析文件',
+    icon: '🔍',
+    description: '使用 file-parser 服务解析文件内容',
+    params: ['path', 'parsers'],
   },
 };
 

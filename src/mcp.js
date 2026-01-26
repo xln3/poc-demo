@@ -40,21 +40,29 @@ export const mcpClient = {
    * @param {string} toolName - 工具名称
    * @param {object} params - 工具参数
    * @param {object} config - 服务配置
+   * @param {string} [sandboxSessionId] - 沙箱会话 ID（用于将文件写入容器）
    * @returns {Promise<{success: boolean, result?: any, error?: string}>}
    */
-  async executeTool(serverId, toolName, params, config) {
+  async executeTool(serverId, toolName, params, config, sandboxSessionId = null) {
     try {
+      const body = {
+        server_id: serverId,
+        tool_name: toolName,
+        params: params,
+        config: config,
+      };
+
+      // 如果提供了 sandbox session id，传递给后端
+      if (sandboxSessionId) {
+        body.sandbox_session_id = sandboxSessionId;
+      }
+
       const response = await fetch(`${MCP_API_URL}/tool`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          server_id: serverId,
-          tool_name: toolName,
-          params: params,
-          config: config,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

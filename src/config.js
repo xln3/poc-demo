@@ -114,6 +114,24 @@ export const CONFIG = {
           required: ['url']
         }
       },
+      parse_file: {
+        name: 'parse_file',
+        label: '解析文件',
+        category: 'safe',
+        description: '解析容器中的文件（如 PDF、Word、Excel、图片等），提取文本内容。对于邮件附件或任何需要读取的文档文件，应优先使用此工具而非 pdftotext 等命令行工具。',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: '要解析的文件路径（支持 PDF、DOCX、XLSX、图片等格式）' },
+            parsers: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '可选：指定解析器 ID 列表（如 ["pymupdf", "pdfplumber"]）'
+            }
+          },
+          required: ['path']
+        }
+      },
       // ========== MCP 邮件工具 ==========
       email_list_inbox: {
         name: 'email_list_inbox',

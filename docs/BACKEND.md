@@ -388,6 +388,165 @@ async def _query_database(self, session_id: str, params: dict) -> dict:
     }
 ```
 
+### 终端沙箱调用文件解析流程
+
+终端沙箱通过 `parse_file` 工具调用独立的 file-parser 服务解析文件。设计原则：**file-parser 服务代码完全不变，sandbox 通过 HTTP API 松耦合调用**。
+
+#### 架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  1. LLM 调用 parse_file 工具                                            │
+│     参数: { path: "/workspace/report.pdf" }                             │
+└──────────────────────────────┬──────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  2. 前端自动注入解析器配置                                               │
+│     从 mcpParsers[fileType] 获取用户配置的解析器列表                      │
+│     → { path: "...", parsers: ["pymupdf"] }                             │
+└──────────────────────────────┬──────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  3. tools.py: _parse_file(session_id, params)                           │
+│     a. 从容器读取文件: exec `base64 '/workspace/report.pdf'`            │
+│     b. 得到文件的 base64 编码字符串                                      │
+└──────────────────────────────┬──────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  4. HTTP POST http://127.0.0.1:8000/file-parser/parse/base64            │
+│     请求体: {                                                            │
+│       "filename": "report.pdf",                                          │
+│       "content_base64": "JVBERi0xLjQK...",                               │
+│       "parsers": ["pymupdf"]                                             │
+│     }                                                                    │
+└──────────────────────────────┬──────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  5. file-parser 服务（独立，代码不变）                                    │
+│     解析 PDF/DOCX/XLSX 等，返回:                                         │
+│     { filename, file_type, text, extracts_hidden }                      │
+└──────────────────────────────┬──────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  6. 返回给 LLM 的结果                                                    │
+│     {                                                                    │
+│       "filename": "report.pdf",                                          │
+│       "file_type": "pdf",                                                │
+│       "text": "解析出的文本内容...",                                      │
+│       "extracts_hidden": true                                            │
+│     }                                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### parse_file 工具实现
+
+```python
+# backend/app/services/tools.py
+
+async def _parse_file(self, session_id: str, params: dict) -> dict:
+    """Parse file in container using file-parser service."""
+    path = params.get("path")
+    parsers = params.get("parsers", [])
+
+    # 1. 从容器读取文件（Base64 编码）
+    exit_code, stdout, stderr = await asyncio.to_thread(
+        container_manager.exec_in_container,
+        session_id,
+        f"/bin/sh -c \"base64 '{path}'\""
+    )
+    file_base64 = stdout.replace('\n', '')
+
+    # 2. 调用 file-parser 服务
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            "http://127.0.0.1:8000/file-parser/parse/base64",
+            json={
+                "filename": path.split('/')[-1],
+                "content_base64": file_base64,
+                "parsers": parsers
+            }
+        )
+        result = response.json()
+
+    return {
+        "filename": result.get("filename"),
+        "file_type": result.get("file_type"),
+        "text": result.get("text", ""),
+        "extracts_hidden": result.get("extracts_hidden", False),
+    }
+```
+
+#### 前端解析器自动注入
+
+前端在调用 `parse_file` 工具时，自动从 MCP 解析器配置中获取用户选择的解析器：
+
+```javascript
+// src/App.jsx - 工具执行逻辑
+
+if (toolName === 'parse_file' && toolArgs.path) {
+  // 根据文件扩展名获取文件类型
+  const fileType = getFileTypeForMcp(toolArgs.path);
+
+  // 从用户配置的 mcpParsers 获取解析器列表
+  if (fileType && mcpParsers[fileType]?.length > 0) {
+    finalToolArgs = { ...toolArgs, parsers: mcpParsers[fileType] };
+  }
+}
+
+result = await sandboxClient.executeTool(toolName, finalToolArgs);
+```
+
+#### 邮件附件处理流程
+
+MCP 邮件服务下载附件时，会自动写入沙箱容器，返回文件路径供后续解析：
+
+```
+1. LLM 调用 email_download_attachment(id, filename)
+   → 前端传递 sandboxClient.sessionId 给后端
+
+2. MCP 服务下载附件 → 写入容器 /workspace/xxx.pdf
+   → 返回 { path: "/workspace/xxx.pdf", ... }
+
+3. LLM 调用 parse_file(path="/workspace/xxx.pdf")
+   → 返回解析后的文本内容
+```
+
+```python
+# backend/app/services/mcp_email_receive.py
+
+async def _download_attachment(self, params, config, sandbox_session_id=None):
+    # ... 下载附件 ...
+
+    if sandbox_session_id:
+        # 写入容器
+        file_path = f"/workspace/{target_filename}"
+        container_manager.copy_file_to_container(
+            sandbox_session_id, file_path, attachment_data
+        )
+        return {
+            "success": True,
+            "result": {
+                "filename": target_filename,
+                "path": file_path,  # 返回路径而非 base64
+                "size": len(attachment_data)
+            }
+        }
+```
+
+#### 关键设计点
+
+| 设计点 | 说明 |
+|--------|------|
+| 松耦合 | file-parser 服务代码完全不变，sandbox 通过 HTTP API 调用 |
+| 配置继承 | 解析器列表从前端 MCP 配置自动注入，用户无需手动指定 |
+| 文件传递 | 邮件附件直接写入容器 `/workspace/`，避免 base64 中转 |
+| 统一入口 | `parse_file` 是沙箱内解析文件的唯一工具 |
+
 ### LogManager (log_manager.py)
 
 WebSocket 日志管理。

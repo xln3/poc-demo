@@ -1545,10 +1545,18 @@ export default function App() {
                 if (!serverConfig?.enabled) {
                   throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
                 }
-                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig);
+                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig, sandboxClient.sessionId);
               } else {
                 // 沙箱工具：使用 sandboxClient 执行
-                result = await sandboxClient.executeTool(toolName, toolArgs);
+                // 对于 parse_file 工具，自动注入前端配置的解析器
+                let finalToolArgs = toolArgs;
+                if (toolName === 'parse_file' && toolArgs.path && (!toolArgs.parsers || toolArgs.parsers.length === 0)) {
+                  const fileType = getFileTypeForMcp(toolArgs.path);
+                  if (fileType && mcpParsers[fileType]?.length > 0) {
+                    finalToolArgs = { ...toolArgs, parsers: mcpParsers[fileType] };
+                  }
+                }
+                result = await sandboxClient.executeTool(toolName, finalToolArgs);
               }
 
               toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
@@ -2813,10 +2821,18 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
                 if (!serverConfig?.enabled) {
                   throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
                 }
-                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig);
+                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig, sandboxClient.sessionId);
               } else {
                 // 沙箱工具：使用 sandboxClient 执行
-                result = await sandboxClient.executeTool(toolName, toolArgs);
+                // 对于 parse_file 工具，自动注入前端配置的解析器
+                let finalToolArgs = toolArgs;
+                if (toolName === 'parse_file' && toolArgs.path && (!toolArgs.parsers || toolArgs.parsers.length === 0)) {
+                  const fileType = getFileTypeForMcp(toolArgs.path);
+                  if (fileType && mcpParsers[fileType]?.length > 0) {
+                    finalToolArgs = { ...toolArgs, parsers: mcpParsers[fileType] };
+                  }
+                }
+                result = await sandboxClient.executeTool(toolName, finalToolArgs);
               }
 
               toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
@@ -3128,10 +3144,18 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
                 if (!serverConfig?.enabled) {
                   throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
                 }
-                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig);
+                result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig, sandboxClient.sessionId);
               } else {
                 // 沙箱工具：使用 sandboxClient 执行
-                result = await sandboxClient.executeTool(toolName, toolArgs);
+                // 对于 parse_file 工具，自动注入前端配置的解析器
+                let finalToolArgs = toolArgs;
+                if (toolName === 'parse_file' && toolArgs.path && (!toolArgs.parsers || toolArgs.parsers.length === 0)) {
+                  const fileType = getFileTypeForMcp(toolArgs.path);
+                  if (fileType && mcpParsers[fileType]?.length > 0) {
+                    finalToolArgs = { ...toolArgs, parsers: mcpParsers[fileType] };
+                  }
+                }
+                result = await sandboxClient.executeTool(toolName, finalToolArgs);
               }
 
               toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;

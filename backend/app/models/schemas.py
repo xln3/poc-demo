@@ -64,6 +64,7 @@ class ToolType(str, Enum):
     RUN_COMMAND = "run_command"
     HTTP_REQUEST = "http_request"
     LIST_DIR = "list_dir"
+    PARSE_FILE = "parse_file"
 
 
 class LogType(str, Enum):
@@ -580,6 +581,7 @@ class McpToolRequest(BaseModel):
     tool_name: str
     params: Dict[str, Any]
     config: Dict[str, Any]
+    sandbox_session_id: Optional[str] = None  # 用于将文件写入沙箱容器
 
 
 class McpToolResult(BaseModel):

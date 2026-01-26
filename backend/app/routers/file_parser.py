@@ -18,7 +18,7 @@ class ParseBase64Request(BaseModel):
     """Base64 解析请求体"""
     content_base64: str  # 文件内容（base64 编码）
     filename: str        # 文件名（用于选择解析器）
-    parsers: List[str]   # 解析器 ID 列表
+    parsers: List[str] = []  # 解析器 ID 列表（可选，为空则自动选择）
 
 logger = logging.getLogger(__name__)
 

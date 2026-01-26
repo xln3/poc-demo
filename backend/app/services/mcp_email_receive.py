@@ -12,6 +12,8 @@ from datetime import datetime
 from email.header import decode_header
 from typing import Any, Dict, List, Optional
 
+from .container import container_manager
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,20 +120,18 @@ class EmailReceiveService:
             return {"success": False, "error": f"Connection failed: {str(e)}"}
 
     async def execute_tool(
-        self, tool_name: str, params: Dict[str, Any], config: Dict[str, Any]
+        self, tool_name: str, params: Dict[str, Any], config: Dict[str, Any],
+        sandbox_session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Execute an email receive tool."""
-        tool_handlers = {
-            "email_list_inbox": self._list_inbox,
-            "email_receive": self._receive_email,
-            "email_download_attachment": self._download_attachment,
-        }
-
-        handler = tool_handlers.get(tool_name)
-        if not handler:
+        if tool_name == "email_list_inbox":
+            return await self._list_inbox(params, config)
+        elif tool_name == "email_receive":
+            return await self._receive_email(params, config)
+        elif tool_name == "email_download_attachment":
+            return await self._download_attachment(params, config, sandbox_session_id)
+        else:
             return {"success": False, "error": f"Unknown tool: {tool_name}"}
-
-        return await handler(params, config)
 
     def _send_imap_id(self, conn: imaplib.IMAP4) -> None:
         """
@@ -366,19 +366,22 @@ class EmailReceiveService:
             return {"success": False, "error": f"Failed to read email: {str(e)}"}
 
     async def _download_attachment(
-        self, params: Dict[str, Any], config: Dict[str, Any]
+        self, params: Dict[str, Any], config: Dict[str, Any],
+        sandbox_session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Download email attachment as base64.
+        Download email attachment and save to sandbox container.
 
         Args:
             params:
                 id: Email ID
                 filename: Attachment filename to download
             config: IMAP configuration
+            sandbox_session_id: If provided, save file to container and return path
 
         Returns:
-            Attachment content as base64 encoded string
+            If sandbox_session_id provided: file path in container
+            Otherwise: base64 encoded content (legacy)
         """
         email_id = params.get("id")
         target_filename = params.get("filename")
@@ -420,7 +423,34 @@ class EmailReceiveService:
             if attachment_data is None:
                 return {"success": False, "error": f"Attachment not found: {target_filename}"}
 
-            # Return as base64
+            # If sandbox_session_id provided, save to container
+            if sandbox_session_id:
+                try:
+                    # Write file to container /workspace
+                    file_path = f"/workspace/{target_filename}"
+                    container_manager.copy_file_to_container(
+                        sandbox_session_id,
+                        file_path,
+                        attachment_data
+                    )
+
+                    logger.info(f"[EmailReceive] Saved attachment to container: {file_path}")
+
+                    return {
+                        "success": True,
+                        "result": {
+                            "filename": target_filename,
+                            "content_type": content_type,
+                            "size": len(attachment_data),
+                            "path": file_path
+                        }
+                    }
+                except Exception as e:
+                    logger.error(f"[EmailReceive] Failed to save to container: {e}")
+                    # Fall back to base64 if container write fails
+                    return {"success": False, "error": f"Failed to save to container: {str(e)}"}
+
+            # Legacy: return as base64 (when no sandbox available)
             content_base64 = base64.b64encode(attachment_data).decode("ascii")
 
             return {
