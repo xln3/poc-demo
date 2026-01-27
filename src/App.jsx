@@ -7,7 +7,6 @@ import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
 import { listTestResults, getTestResult, saveTestResult, deleteTestResult, deleteTestCase, updateCaseReview, updateReport, listReportTemplates, getReportTemplate } from './testResultsApi.js';
 import { mcpClient } from './mcp.js';
-import { exportReport, exportHTML } from './utils/index.js';
 import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast, useDatasets, CAPABILITY_CONFIG, useTestExecution, ExecutionMode } from './hooks/index.js';
 import {
   buildTestInput,
@@ -184,16 +183,16 @@ function JsonTree({ data }) {
 export default function App() {
   // 状态
   const [mode, setMode] = useState('real'); // 'mock' | 'real'
-  const [selectedAttack, setSelectedAttack] = useState({ scenario: 'finbot', index: 0 });
-  const [expanded, setExpanded] = useState({ type: 'F3-tool-use', scenario: 'finbot' });
+  const [selectedAttack, setSelectedAttack] = useState(null);
+  const [expanded, setExpanded] = useState({ type: null, scenario: null });
   const [messages, setMessages] = useState([]);
   const [logs, setLogs] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState(new Set()); // 跟踪展开的日志索引
+  const [scenarioListExpanded, setScenarioListExpanded] = useState(false); // 场景列表折叠状态（默认折叠）
   const [runningTerminalsExpanded, setRunningTerminalsExpanded] = useState(false); // 运行中终端列表展开状态（默认折叠）
   const [deletedTerminalsExpanded, setDeletedTerminalsExpanded] = useState(false); // 已删除终端列表展开状态（默认折叠）
   const [isPlaying, setIsPlaying] = useState(false);
   const [typingMsg, setTypingMsg] = useState(null);
-  const [showExport, setShowExport] = useState(false);
   const [apiStatus, setApiStatus] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
   const [apiError, setApiError] = useState('');
   const [realResponse, setRealResponse] = useState('');
@@ -610,10 +609,10 @@ export default function App() {
   const abortRef = useRef(false);
 
   const groupedData = getGroupedData();
-  const currentScenario = SCENARIOS[selectedAttack.scenario];
-  const currentAttack = currentScenario.attacks[selectedAttack.index];
-  const attackType = ATTACK_TYPES[currentAttack.type];
-  const riskLevel = RISK_LEVELS[currentAttack.level];
+  const currentScenario = selectedAttack ? SCENARIOS[selectedAttack.scenario] : null;
+  const currentAttack = currentScenario?.attacks[selectedAttack?.index] ?? null;
+  const attackType = currentAttack ? ATTACK_TYPES[currentAttack.type] : null;
+  const riskLevel = currentAttack ? RISK_LEVELS[currentAttack.level] : null;
 
   // Cases hook - 需要在所有状态定义之后调用
   const cases = useCases({
@@ -1198,6 +1197,7 @@ export default function App() {
 
   // 加载恶意文档说明文件
   useEffect(() => {
+    if (!currentAttack) return;
     if (currentAttack.documentReadme) {
       fetch(currentAttack.documentReadme)
         .then(res => res.text())
@@ -1210,6 +1210,7 @@ export default function App() {
 
   // 切换时重置
   useEffect(() => {
+    if (!selectedAttack || !currentScenario || !currentAttack) return;
     abortRef.current = true;
     setMessages([]);
     setLogs([]);
@@ -3839,7 +3840,7 @@ print('\\n'.join(all_text))
               viewMode === 'scenarios' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
             }`}
           >
-            🛡️ 场景
+            🛡️ 测试
           </button>
           <button
             onClick={() => setViewMode('datasets')}
@@ -3847,7 +3848,7 @@ print('\\n'.join(all_text))
               viewMode === 'datasets' ? 'bg-green-600' : 'bg-slate-700 hover:bg-slate-600'
             }`}
           >
-            📦 数据集
+            📦 数据
           </button>
           <button
             onClick={() => setViewMode('test-results')}
@@ -3855,32 +3856,29 @@ print('\\n'.join(all_text))
               viewMode === 'test-results' ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
             }`}
           >
-            📊 已测试
+            📊 报告
           </button>
         </div>
 
         {/* 模式切换 - 仅场景视图显示 */}
         {viewMode === 'scenarios' && (
-        <div className="mb-3 p-2 bg-slate-700 rounded">
-          <div className="text-xs text-slate-400 mb-2">测试模式</div>
-          <div className="flex gap-1">
+        <div className="flex gap-1 mb-3">
             <button
               onClick={() => setMode('mock')}
-              className={`flex-1 py-1.5 rounded text-xs transition ${
-                mode === 'mock' ? 'bg-blue-600' : 'bg-slate-600 hover:bg-slate-500'
+              className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
+                mode === 'mock' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
               }`}
             >
               📺 模拟演示
             </button>
             <button
               onClick={() => setMode('real')}
-              className={`flex-1 py-1.5 rounded text-xs transition ${
-                mode === 'real' ? 'bg-green-600' : 'bg-slate-600 hover:bg-slate-500'
+              className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
+                mode === 'real' ? 'bg-green-600' : 'bg-slate-700 hover:bg-slate-600'
               }`}
             >
               🔬 真实测试
             </button>
-          </div>
         </div>
         )}
 
@@ -3993,42 +3991,16 @@ print('\\n'.join(all_text))
           )}
         </div>
 
-        {/* 导出按钮 */}
-        <div className="mb-3">
-          <button
-            onClick={() => setShowExport(!showExport)}
-            className="w-full text-xs px-2 py-1.5 bg-slate-700 hover:bg-slate-600 rounded"
-          >
-            📤 导出功能
-          </button>
-          {showExport && (
-            <div className="mt-2 p-2 bg-slate-700 rounded text-xs space-y-2">
-              <button onClick={exportReport} className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 rounded">
-                📄 场景列表 (JSON)
-              </button>
-              <button onClick={() => exportHTML({ attack: currentAttack, scenario: currentScenario, attackType, riskLevel })} className="w-full py-1.5 bg-green-600 hover:bg-green-500 rounded">
-                🎬 当前演示 (HTML)
-              </button>
-              <button
-                onClick={exportCurrentCase}
-                disabled={apiStatus !== 'success'}
-                className={`w-full py-1.5 rounded ${apiStatus === 'success' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-slate-600 cursor-not-allowed'}`}
-              >
-                📊 测试结果 (JSON) {apiStatus === 'success' ? '✓' : ''}
-              </button>
-              <button
-                onClick={saveToServer}
-                disabled={apiStatus !== 'success' || isSaving}
-                className={`w-full py-1.5 rounded ${apiStatus === 'success' && !isSaving ? 'bg-orange-600 hover:bg-orange-500' : 'bg-slate-600 cursor-not-allowed'}`}
-              >
-                {isSaving ? '⏳ 保存中...' : '💾 保存到服务器'} {apiStatus === 'success' && !isSaving ? '' : ''}
-              </button>
-            </div>
-          )}
-        </div>
 
-        {/* 层级列表 */}
-        {Object.entries(groupedData).map(([typeKey, typeData]) => (
+        {/* 场景列表（可折叠） */}
+        <button
+          onClick={() => setScenarioListExpanded(!scenarioListExpanded)}
+          className="w-full flex items-center justify-between px-2 py-1.5 mb-2 rounded text-xs font-medium bg-slate-700 hover:bg-slate-600"
+        >
+          <span>📋 场景列表 ({Object.values(SCENARIOS).reduce((a, s) => a + s.attacks.length, 0)})</span>
+          <span className="text-slate-400">{scenarioListExpanded ? '−' : '+'}</span>
+        </button>
+        {scenarioListExpanded && Object.entries(groupedData).map(([typeKey, typeData]) => (
           <div key={typeKey} className="mb-2">
             <button
               onClick={() => toggleType(typeKey)}
@@ -4058,7 +4030,7 @@ print('\\n'.join(all_text))
                       <div className="ml-3 mt-1 space-y-0.5">
                         {scenario.attacks.map((attack) => {
                           const originalIdx = SCENARIOS[scenarioKey].attacks.findIndex(a => a.id === attack.id);
-                          const isSelected = selectedAttack.scenario === scenarioKey && selectedAttack.index === originalIdx;
+                          const isSelected = selectedAttack?.scenario === scenarioKey && selectedAttack?.index === originalIdx;
                           return (
                             <button
                               key={attack.id}
@@ -4079,10 +4051,6 @@ print('\\n'.join(all_text))
             )}
           </div>
         ))}
-
-        <div className="mt-4 pt-3 border-t border-slate-700 text-xs text-slate-500">
-          共 {Object.values(SCENARIOS).reduce((a, s) => a + s.attacks.length, 0)} 个场景
-        </div>
         </>
         )}
 
@@ -4653,19 +4621,25 @@ print('\\n'.join(all_text))
           })() : (
             <>
               <div className="flex items-center gap-3 mb-1">
-                <h2 className="text-lg font-bold">{currentAttack.name}—{currentScenario.name}</h2>
+                <h2 className="text-lg font-bold">{currentAttack ? `${currentAttack.name}—${currentScenario.name}` : '安全测试'}</h2>
                 {mode === 'real' && !isPlaybackMode && (
                   <span className="px-2 py-0.5 bg-green-600 rounded text-xs">🔬 真实测试模式</span>
                 )}
               </div>
-              <p className="text-slate-400 text-xs mt-1 leading-relaxed">{currentAttack.description}</p>
+              {currentAttack && (
+                <p className="text-slate-400 text-xs mt-1 leading-relaxed">{currentAttack.description}</p>
+              )}
               <div className="flex gap-2 mt-2 flex-wrap">
-                <span className={`px-2 py-0.5 rounded text-xs text-white ${attackType.color}`}>
-                  {attackType.icon} {attackType.label}
-                </span>
-                <span className={`px-2 py-0.5 rounded text-xs ${riskLevel.color}`}>
-                  危害等级：{riskLevel.label}
-                </span>
+                {attackType && (
+                  <span className={`px-2 py-0.5 rounded text-xs text-white ${attackType.color}`}>
+                    {attackType.icon} {attackType.label}
+                  </span>
+                )}
+                {riskLevel && (
+                  <span className={`px-2 py-0.5 rounded text-xs ${riskLevel.color}`}>
+                    危害等级：{riskLevel.label}
+                  </span>
+                )}
                 {mode === 'mock' && isPlaying && !isPlaybackMode && (
                   <span className="text-xs text-green-400 animate-pulse">● 演示中</span>
                 )}
@@ -4678,7 +4652,7 @@ print('\\n'.join(all_text))
         </div>
 
         {/* 攻击方法详解 - 仅间接注入攻击显示 */}
-        {currentAttack.documentFile && (
+        {currentAttack?.documentFile && (
           <div className="mb-4 p-3 bg-slate-800 rounded-lg border border-slate-700">
             {/* 标题栏：文件名 + 下载按钮 + 折叠按钮 */}
             <div className="flex items-center justify-between mb-3">
@@ -6000,7 +5974,7 @@ print('\\n'.join(all_text))
                 >
                   <span>{promptConfigCollapsed ? '▶' : '▼'}</span>
                   <span className="font-medium">⚙️ 模型配置</span>
-                  {(customSystemPrompt !== currentScenario.systemPrompt || customTestPayload !== currentAttack.testPayload || payloadFiles.length > 0) && (
+                  {(customSystemPrompt !== currentScenario?.systemPrompt || customTestPayload !== currentAttack?.testPayload || payloadFiles.length > 0) && (
                     <span className="text-yellow-400">(已修改)</span>
                   )}
                 </button>
@@ -6108,7 +6082,7 @@ print('\\n'.join(all_text))
                               isEditingLlmConfig ? 'border-blue-500' : 'border-slate-500'
                             }`}
                           />
-                          {customSystemPrompt !== currentScenario.systemPrompt && (
+                          {customSystemPrompt !== currentScenario?.systemPrompt && (
                             <span className="text-yellow-400 text-[10px]">(改)</span>
                           )}
                         </div>
@@ -6123,7 +6097,7 @@ print('\\n'.join(all_text))
                               </button>
                               <button
                                 onClick={() => {
-                                  setCustomSystemPrompt(currentScenario.systemPrompt || '');
+                                  setCustomSystemPrompt(currentScenario?.systemPrompt || '');
                                   setLlmTemperature(CONFIG.llmParams.temperature);
                                   setLlmMaxTokens(CONFIG.llmParams.max_tokens);
                                   setLlmTopP(CONFIG.llmParams.top_p);
@@ -6144,7 +6118,7 @@ print('\\n'.join(all_text))
                               </button>
                               <button
                                 onClick={() => {
-                                  setCustomSystemPrompt(currentScenario.systemPrompt || '');
+                                  setCustomSystemPrompt(currentScenario?.systemPrompt || '');
                                   setLlmTemperature(CONFIG.llmParams.temperature);
                                   setLlmMaxTokens(CONFIG.llmParams.max_tokens);
                                   setLlmTopP(CONFIG.llmParams.top_p);
@@ -6180,7 +6154,7 @@ print('\\n'.join(all_text))
                       <div className="flex items-center justify-between p-2 border-b border-slate-600">
                         <div className="flex items-center gap-2 text-xs">
                           <span className="text-slate-400 font-medium">用户提示词</span>
-                          {(customTestPayload !== currentAttack.testPayload || payloadFiles.length > 0) && (
+                          {(customTestPayload !== currentAttack?.testPayload || payloadFiles.length > 0) && (
                             <span className="text-yellow-400 text-[10px]">(改)</span>
                           )}
                         </div>
@@ -6204,7 +6178,7 @@ print('\\n'.join(all_text))
                               </button>
                               <button
                                 onClick={() => {
-                                  setCustomTestPayload(currentAttack.testPayload || '');
+                                  setCustomTestPayload(currentAttack?.testPayload || '');
                                   setPayloadFiles([]);
                                   setIsEditingPayload(false);
                                 }}
@@ -6223,7 +6197,7 @@ print('\\n'.join(all_text))
                               </button>
                               <button
                                 onClick={() => {
-                                  setCustomTestPayload(currentAttack.testPayload || '');
+                                  setCustomTestPayload(currentAttack?.testPayload || '');
                                   setPayloadFiles([]);
                                 }}
                                 className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
