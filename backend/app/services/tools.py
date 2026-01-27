@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import time
 import base64
 import asyncio
@@ -7,6 +8,7 @@ from typing import Any, Callable, Dict, List
 from datetime import datetime
 from ..models.schemas import ToolType, ToolResult, LogEntry, LogType, LogStatus, FileEntry, FileType
 from .container import container_manager
+from .ssrf_guard import check_ssrf
 
 
 def _octal_to_permissions(mode_str: str) -> str:
@@ -107,6 +109,52 @@ def parse_find_output(output: bytes, base_path: str) -> List[FileEntry]:
     return entries
 
 
+_HTTP_HELPER_PY = r'''
+import sys, json, base64
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+
+params = json.loads(base64.b64decode(sys.argv[1]).decode())
+req = Request(params["url"], method=params.get("method", "GET"))
+for k, v in params.get("headers", {}).items():
+    req.add_header(k, v)
+body = params.get("body")
+data = body.encode() if body else None
+try:
+    resp = urlopen(req, data=data, timeout=30)
+    out = {"status_code": resp.status,
+           "headers": dict(resp.headers),
+           "body": resp.read().decode(errors="replace")[:10000]}
+except HTTPError as e:
+    out = {"status_code": e.code,
+           "headers": dict(e.headers),
+           "body": e.read().decode(errors="replace")[:10000]}
+except URLError as e:
+    out = {"error": str(e.reason)}
+print(json.dumps(out))
+'''
+
+_HTTP_HELPER_JS = r'''
+const params = JSON.parse(Buffer.from(process.argv[2], "base64").toString());
+(async () => {
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 30000);
+    const opts = {method: params.method || "GET", headers: params.headers || {}, signal: ctrl.signal};
+    if (params.body) opts.body = params.body;
+    const r = await fetch(params.url, opts);
+    clearTimeout(tid);
+    const hdrs = {};
+    r.headers.forEach((v, k) => { hdrs[k] = v; });
+    const text = await r.text();
+    console.log(JSON.stringify({status_code: r.status, headers: hdrs, body: text.slice(0, 10000)}));
+  } catch(e) {
+    console.log(JSON.stringify({error: e.message}));
+  }
+})();
+'''
+
+
 class ToolExecutor:
     """Executes tools in sandbox containers."""
 
@@ -122,6 +170,8 @@ class ToolExecutor:
         self._log_callbacks: List[Callable[[LogEntry], None]] = []
         # File-Parser 服务地址（内部 HTTP 调用）
         self._file_parser_url = "http://127.0.0.1:8000/file-parser/parse/base64"
+        # Track which sessions already have the HTTP helper script installed
+        self._http_helper_ready: set[str] = set()
 
     def register_log_callback(self, callback: Callable[[LogEntry], None]):
         """Register callback to receive log entries."""
@@ -328,8 +378,47 @@ class ToolExecutor:
 
         return result
 
+    async def _ensure_http_helper(self, session_id: str) -> str:
+        """Write the HTTP helper script into the container (once per session).
+
+        Returns the command prefix to invoke the helper, e.g.
+        "python3 /tmp/_http_helper.py" or "node /tmp/_http_helper.js".
+        """
+        if session_id in self._http_helper_ready:
+            image = container_manager._session_images.get(session_id, "")
+            if "node" in image:
+                return "node /tmp/_http_helper.js"
+            return "python3 /tmp/_http_helper.py"
+
+        image = container_manager._session_images.get(session_id, "")
+        if "node" in image:
+            script = _HTTP_HELPER_JS
+            path = "/tmp/_http_helper.js"
+            cmd_prefix = "node /tmp/_http_helper.js"
+        else:
+            script = _HTTP_HELPER_PY
+            path = "/tmp/_http_helper.py"
+            cmd_prefix = "python3 /tmp/_http_helper.py"
+
+        encoded = base64.b64encode(script.encode()).decode()
+        exit_code, _, stderr = await asyncio.to_thread(
+            container_manager.exec_in_container,
+            session_id,
+            f"/bin/sh -c \"echo '{encoded}' | base64 -d > '{path}'\""
+        )
+        if exit_code != 0:
+            raise RuntimeError(f"Failed to install HTTP helper: {stderr}")
+
+        self._http_helper_ready.add(session_id)
+        return cmd_prefix
+
     async def _http_request(self, session_id: str, params: dict) -> dict:
-        """Make HTTP request from container (or directly for simplicity)."""
+        """Make HTTP request inside the sandbox container.
+
+        SSRF pre-check runs on the host as defense-in-depth; the actual
+        request is executed inside the Docker container so network isolation
+        applies even if the check is bypassed.
+        """
         method = params.get("method", "GET").upper()
         url = params.get("url")
         headers = params.get("headers", {})
@@ -344,19 +433,39 @@ class ToolExecutor:
             LogStatus.NORMAL
         )
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.request(
-                method=method,
-                url=url,
-                headers=headers,
-                content=body
-            )
+        # Defense-in-depth: SSRF pre-check on host
+        ssrf_result = check_ssrf(url)
+        if not ssrf_result.get("allowed"):
+            raise ValueError(f"Request blocked: {ssrf_result.get('reason')}")
 
-            return {
-                "status_code": response.status_code,
-                "headers": dict(response.headers),
-                "body": response.text[:10000]  # Limit response size
-            }
+        # Prepare params for the in-container helper script
+        helper_params = {"method": method, "url": url}
+        if headers:
+            helper_params["headers"] = headers
+        if body:
+            helper_params["body"] = body
+
+        b64_params = base64.b64encode(json.dumps(helper_params).encode()).decode()
+
+        cmd_prefix = await self._ensure_http_helper(session_id)
+        exit_code, stdout, stderr = await asyncio.to_thread(
+            container_manager.exec_in_container,
+            session_id,
+            f'/bin/sh -c "{cmd_prefix} {b64_params}"'
+        )
+
+        if exit_code != 0:
+            raise RuntimeError(f"HTTP request failed: {stderr or stdout}")
+
+        try:
+            result = json.loads(stdout)
+        except json.JSONDecodeError:
+            raise RuntimeError(f"Invalid response from container: {stdout[:500]}")
+
+        if "error" in result:
+            raise RuntimeError(f"HTTP request error: {result['error']}")
+
+        return result
 
     async def _list_dir(self, session_id: str, params: dict) -> List[str]:
         """List directory contents in container."""

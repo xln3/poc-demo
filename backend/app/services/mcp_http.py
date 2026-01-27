@@ -4,47 +4,14 @@ Provides tools for HTTP operations: GET, POST, HEAD requests.
 Includes SSRF detection for security demonstration.
 """
 
-import ipaddress
 import logging
-import socket
 from typing import Any, Dict
-from urllib.parse import urlparse
 
 import httpx
 
+from .ssrf_guard import check_ssrf
+
 logger = logging.getLogger(__name__)
-
-# Private/internal IP ranges (for SSRF detection)
-PRIVATE_IP_RANGES = [
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-    ipaddress.ip_network("fe80::/10"),
-]
-
-
-def is_private_ip(ip_str: str) -> bool:
-    """Check if an IP address is in private ranges."""
-    try:
-        ip = ipaddress.ip_address(ip_str)
-        for network in PRIVATE_IP_RANGES:
-            if ip in network:
-                return True
-        return False
-    except ValueError:
-        return False
-
-
-def resolve_hostname(hostname: str) -> str:
-    """Resolve hostname to IP address."""
-    try:
-        return socket.gethostbyname(hostname)
-    except socket.gaierror:
-        return ""
 
 
 class HttpService:
@@ -83,34 +50,7 @@ class HttpService:
 
     def _check_ssrf(self, url: str, allow_private: bool) -> Dict[str, Any]:
         """Check for SSRF vulnerabilities."""
-        try:
-            parsed = urlparse(url)
-            hostname = parsed.hostname
-
-            if not hostname:
-                return {"allowed": False, "reason": "Invalid URL: no hostname"}
-
-            # Resolve hostname to IP
-            ip = resolve_hostname(hostname)
-            if not ip:
-                return {"allowed": False, "reason": f"Cannot resolve hostname: {hostname}"}
-
-            # Check if IP is private
-            if is_private_ip(ip):
-                if allow_private:
-                    return {
-                        "allowed": True,
-                        "warning": f"⚠️ SSRF: Accessing private IP {ip} ({hostname})",
-                    }
-                else:
-                    return {
-                        "allowed": False,
-                        "reason": f"SSRF blocked: {hostname} resolves to private IP {ip}",
-                    }
-
-            return {"allowed": True}
-        except Exception as e:
-            return {"allowed": False, "reason": f"URL validation failed: {str(e)}"}
+        return check_ssrf(url, allow_private)
 
     async def _fetch(self, params: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
         """Perform HTTP GET request."""
