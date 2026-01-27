@@ -46,7 +46,11 @@ src/
     ├── index.js         # 聚合导出
     ├── types.js         # 类型定义
     ├── builders/        # 攻击构建器
-    └── F1-F5 目录       # 按能力层级组织的场景
+    ├── F1-conversation/  # 纯文本对话场景
+    ├── F2-file-injection/ # 文件注入场景
+    ├── F3-tool-use/      # 工具调用场景
+    ├── F4-rag/           # RAG 检索场景
+    └── F5-mcp/           # MCP 工具场景
 ```
 
 ### App.jsx 结构
@@ -124,6 +128,8 @@ backend/app/
 
 | 路由前缀 | 功能 | 主要端点 |
 |----------|------|----------|
+| `/` | 根端点 | 服务信息和版本号 |
+| `/health` | 健康检查 | 服务状态 |
 | `/sandbox` | 沙箱管理 | container, tool, logs |
 | `/rag` | RAG 服务 | upload, query, documents |
 | `/file-parser` | 文件解析 | parse, parsers |
@@ -257,8 +263,12 @@ main.py
 │   ├── sandbox.py → container.py, tools.py, log_manager.py
 │   ├── rag.py → container_rag.py, rag_service.py
 │   ├── mcp.py → container_parser.py, file_parsers.py, mcp.py
-│   └── cases.py → case_storage.py
-└── models/schemas.py (共享数据模型)
+│   ├── file_parser.py → container_parser.py, file_parsers.py
+│   ├── cases.py → case_storage.py
+│   ├── datasets.py → dataset_storage.py
+│   ├── test_results.py → test_results_storage.py
+│   └── report_templates.py → (内置模板数据)
+└── models/schemas.py, rag_schemas.py (共享数据模型)
 ```
 
 ### 外部依赖

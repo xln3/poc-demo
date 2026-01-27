@@ -20,21 +20,23 @@ src/scenarios/
 │   ├── vehicleAssistant.js   # 车载助手
 │   └── autoRepair.js         # 汽修诊断
 ├── F2-file-injection/        # 文件注入场景
-│   └── index.js              # 间接注入攻击
+│   ├── index.js              # 场景聚合导出
+│   ├── resume.js             # 简历注入
+│   ├── contract.js           # 合同注入
+│   ├── bidding.js            # 标书注入
+│   ├── phishing.js           # 钓鱼文件
+│   ├── expense.js            # 报销单注入
+│   ├── report.js             # 报告注入
+│   ├── codeReview.js         # 代码审查注入
+│   └── ticket.js             # 工单注入
 ├── F3-tool-use/              # 工具调用场景
-│   ├── configPoison.js       # 配置投毒
-│   ├── jumpPad.js            # 跳板攻击
-│   ├── persistent.js         # 持久化后门
-│   ├── financialForgery.js   # 财务伪造
-│   └── financeConfig.js      # 财务配置
+│   ├── sandbox.js            # 沙箱工具攻击
+│   └── finbot.js             # 金融机器人
 ├── F4-rag/                   # RAG 检索场景
-│   ├── ragSecurity.js        # RAG 安全
-│   └── ragAttackChain.js     # RAG 攻击链
+│   └── rag.js                # RAG 投毒攻击
 └── F5-mcp/                   # MCP 工具场景
-    ├── salesData.js          # 销售数据
-    ├── financeQuery.js       # 财务查询
-    ├── email.js              # 邮件服务
-    └── payment.js            # 支付服务
+    ├── mcp.js                # MCP 多服务攻击
+    └── emailPdfAttack.js     # 邮件PDF攻击链
 ```
 
 ---
@@ -495,33 +497,29 @@ public/attack-samples/
 
 | 场景 | 说明 | 攻击数 |
 |------|------|--------|
-| `indirectInjection` | 间接提示注入 | 5 |
+| `indirectInjection` | 间接提示注入（含 8 个子攻击） | 8 |
+
+子攻击文件: resume, contract, bidding, phishing, expense, report, codeReview, ticket
 
 ### F3-tool-use (工具调用)
 
 | 场景 | 说明 | 攻击数 |
 |------|------|--------|
-| `configPoison` | 配置投毒 | 2 |
-| `jumpPad` | 跳板攻击 | 2 |
-| `persistent` | 持久化后门 | 2 |
-| `financialForgery` | 财务伪造 | 2 |
-| `financeConfig` | 财务配置投毒 | 2 |
+| `sandbox` | 沙箱工具测试 | 0 |
+| `finbot` | FinBot 财务助手 | 1 |
 
 ### F4-rag (RAG 检索)
 
 | 场景 | 说明 | 攻击数 |
 |------|------|--------|
-| `ragSecurity` | RAG 安全 | 3 |
-| `ragAttackChain` | RAG 攻击链 | 5 |
+| `rag` | RAG 知识库测试 | 0 |
 
 ### F5-mcp (MCP 工具)
 
 | 场景 | 说明 | 攻击数 |
 |------|------|--------|
-| `salesData` | 销售数据分析 | 2 |
-| `financeQuery` | 财务查询 | 2 |
-| `email` | 邮件服务 | 2 |
-| `payment` | 支付服务 | 2 |
+| `mcp` | MCP 服务测试 | 0 |
+| `emailPdfAttack` | 邮件助手(PDF注入) | 2 |
 
 ---
 

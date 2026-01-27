@@ -7,8 +7,7 @@
 ### 核心特性
 
 - **5 个能力层级 (F1-F5)**：从基础对话到 MCP 工具扩展，逐级递进
-- **20+ 攻击场景**：覆盖车贷审核、客服助手、财务分析等业务场景
-- **40+ 攻击样例**：包含各类提示注入、间接注入、工具滥用等攻击
+- **11 个攻击场景**：覆盖车贷审核、客服助手、财务分析等业务场景
 - **双模式测试**：Mock 模拟动画演示 + Real 真实 LLM API 测试
 - **自动评判**：使用评判模型判断攻击是否成功
 - **Docker 沙箱**：安全隔离的工具执行环境
@@ -67,21 +66,17 @@ cd backend && ./run.sh
 
 ## 文档导航
 
-| 文档 | 说明 | 适合读者 |
-|------|------|----------|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构总览、数据流图、模块依赖 | 所有开发者 |
-| [FRONTEND.md](./FRONTEND.md) | 前端状态管理、组件结构、API 客户端 | 前端开发者 |
-| [BACKEND.md](./BACKEND.md) | 后端服务架构、Docker 容器管理、工具执行 | 后端开发者 |
-| [TERMINAL.md](./TERMINAL.md) | F3 终端运行模块：架构、API、安全、扩展展望 | 后端/安全开发者 |
-| [FILE-PARSER.md](./FILE-PARSER.md) | 文件解析服务：解析器、API、扩展指南 | 后端/安全开发者 |
-| [MCP-ARCHITECTURE.md](./MCP-ARCHITECTURE.md) | MCP Server 架构：11 个外部工具服务 | 后端/安全开发者 |
-| [RAG-ARCHITECTURE.md](./RAG-ARCHITECTURE.md) | RAG 知识库服务：向量存储、检索攻击 | 后端/安全开发者 |
-| [SCENARIOS.md](./SCENARIOS.md) | 场景数据结构、Builder 模式、扩展指南 | 场景开发者 |
-| [TEST-CASE-SCHEMA.md](./TEST-CASE-SCHEMA.md) | 测试用例 JSON 格式规范、回放功能 | 所有开发者/外行 |
-| [BATCH-TESTING.md](./BATCH-TESTING.md) | 批量测试模块：执行流程、状态管理、API | 前后端开发者 |
-| [CONFIG.md](./CONFIG.md) | 配置项完整参考、环境变量说明 | 运维/配置人员 |
-| [API-REFERENCE.md](./API-REFERENCE.md) | API 接口文档、请求响应示例 | 前后端开发者 |
-| [CHANGELOG.md](./CHANGELOG.md) | 变更日志、文档维护规范 | 所有贡献者 |
+| 文档 | 说明 |
+|------|------|
+| [README.md](./README.md) | 文档索引与快速入门 |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构总览 |
+| [FRONTEND.md](./FRONTEND.md) | 前端开发指南（hooks、组件、批量测试、Schema） |
+| [BACKEND.md](./BACKEND.md) | 后端开发指南（路由、服务、子系统：终端/RAG/MCP/解析器） |
+| [SCENARIOS.md](./SCENARIOS.md) | 场景系统（构建器、类型、添加场景） |
+| [API-REFERENCE.md](./API-REFERENCE.md) | 完整 API 接口文档 |
+| [CONFIG.md](./CONFIG.md) | 配置参考 |
+| [DEPLOY.md](./DEPLOY.md) | 部署指南 |
+| [CHANGELOG.md](./CHANGELOG.md) | 变更历史 |
 
 ---
 
@@ -153,14 +148,20 @@ cd backend && ./run.sh
 ```
 poc-demo/
 ├── src/                      # 前端源码
-│   ├── App.jsx              # 主应用组件 (4000+ 行)
+│   ├── App.jsx              # 主组件
 │   ├── config.js            # 全局配置
 │   ├── sandbox.js           # 沙箱 API 客户端
 │   ├── rag.js               # RAG API 客户端
 │   ├── mcp.js               # MCP API 客户端
-│   ├── caseApi.js           # 用例存储 API 客户端
-│   └── scenarios/           # 攻击场景定义
-│       ├── index.js         # 场景聚合导出
+│   ├── caseApi.js           # 用例存储 API
+│   ├── datasetApi.js        # 数据集 API 客户端
+│   ├── testResultsApi.js    # 测试结果 API 客户端
+│   ├── datasetConverter.js  # 格式转换工具
+│   ├── hooks/               # React Hooks
+│   ├── components/          # UI 组件
+│   ├── schemas/             # 数据 Schema 定义
+│   └── scenarios/           # 攻击场景
+│       ├── index.js         # 场景聚合
 │       ├── types.js         # 类型定义
 │       ├── builders/        # 攻击构建器
 │       ├── constants/       # 隐藏技术库
@@ -173,12 +174,12 @@ poc-demo/
 │   └── app/
 │       ├── main.py          # FastAPI 入口
 │       ├── routers/         # API 路由
-│       ├── services/        # 业务服务
+│       ├── services/        # 业务逻辑
 │       └── models/          # 数据模型
 ├── public/                   # 静态资源
-│   └── attack-samples/      # 恶意文件样本
-├── docs/                     # 开发文档（本目录）
-└── CLAUDE.md                # AI 助手指南
+│   └── attack-samples/      # 攻击样本文件
+├── docs/                     # 开发文档 (9 files)
+└── CLAUDE.md                # Claude Code 指令
 ```
 
 ---
@@ -217,4 +218,4 @@ poc-demo/
 
 ---
 
-*最后更新: 2026-01-26*
+*最后更新: 2026-01-27*

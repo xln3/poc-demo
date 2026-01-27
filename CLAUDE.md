@@ -116,11 +116,11 @@ src/scenarios/
 ├── builders/
 │   ├── AttackBuilder.js     # Base builder for creating attack scenarios
 │   └── IndirectAttackBuilder.js  # Extended builder for indirect injection attacks
-├── business/           # Business agent scenarios (loan, service)
-├── system/             # System-level attacks (configPoison, jumpPad, persistent)
-├── industry/           # Industry-specific scenarios (salesData, autoRepair, finance)
-├── indirect/           # Indirect injection via malicious files
-└── confidentiality/    # Data leakage scenarios
+├── F1-conversation/   # Text conversation scenarios (loan, service, promptLeakage, vehicleAssistant, autoRepair)
+├── F2-file-injection/  # File injection scenarios (indirectInjection with 8 sub-attacks)
+├── F3-tool-use/       # Tool calling scenarios (sandbox, finbot)
+├── F4-rag/            # RAG retrieval scenarios (rag)
+└── F5-mcp/            # MCP tool scenarios (mcp, emailPdfAttack)
 ```
 
 ### Scenario Data Structure
@@ -217,13 +217,27 @@ backend/
 ├── app/
 │   ├── main.py           # FastAPI entry point
 │   ├── models/
-│   │   └── schemas.py    # Pydantic models
+│   │   ├── schemas.py    # Pydantic models
+│   │   └── rag_schemas.py # RAG-specific models
 │   ├── routers/
-│   │   └── sandbox.py    # API endpoints
+│   │   ├── sandbox.py        # Sandbox terminal management (/sandbox)
+│   │   ├── rag.py            # RAG service (/rag)
+│   │   ├── mcp.py            # MCP Server tools (/mcp)
+│   │   ├── file_parser.py    # File parsing (/file-parser)
+│   │   ├── cases.py          # Case storage (/cases)
+│   │   ├── datasets.py       # Dataset management (/datasets)
+│   │   ├── test_results.py   # Test results (/test-results)
+│   │   └── report_templates.py # Report templates (/report-templates)
 │   └── services/
-│       ├── container.py  # Docker container management
-│       ├── tools.py      # Tool execution logic
-│       └── log_manager.py # WebSocket log streaming
+│       ├── container.py      # Docker container management
+│       ├── tools.py          # Tool execution logic
+│       ├── log_manager.py    # WebSocket log streaming
+│       ├── rag_service.py    # RAG business logic
+│       ├── mcp.py            # MCP Server core
+│       ├── file_parsers.py   # File parser definitions
+│       ├── case_storage.py   # Case persistence
+│       ├── dataset_storage.py # Dataset persistence
+│       └── test_results_storage.py # Test results persistence
 ├── requirements.txt
 └── run.sh
 ```
@@ -237,12 +251,14 @@ backend/
 | `run_command` | Execute shell command | `command` |
 | `http_request` | Make HTTP request | `method`, `url`, `headers`, `body` |
 | `list_dir` | List directory contents | `path` |
+| `parse_file` | Parse file content using file-parser service | `path`, `parsers` |
 
 ### Container Images
 
-- `python:3.11-slim` - Python environment
-- `ubuntu:22.04` - Full Linux environment
-- `node:20-slim` - Node.js environment
+- `terminal-python:3.11` - Python environment
+- `terminal-ubuntu:22.04` - Full Linux environment
+- `terminal-node:20` - Node.js environment
+- `file-parser:latest` - File parsing tools (PyMuPDF, pdfplumber, python-docx, etc.)
 
 ### Frontend Integration (`src/sandbox.js`)
 
@@ -253,15 +269,21 @@ The frontend sandbox client provides:
 - `sandboxClient.readFile(path)` / `writeFile(path, content)`
 - `sandboxClient.connectLogs(callback)` - WebSocket log stream
 
-### API Endpoints
+### API Route Prefixes
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/sandbox/container` | Create or get container |
-| GET | `/sandbox/container/{session_id}` | Get container status |
-| DELETE | `/sandbox/container/{session_id}` | Destroy container |
-| POST | `/sandbox/tool` | Execute tool |
-| WS | `/sandbox/logs/{session_id}` | Real-time log stream |
+| Prefix | Description |
+|--------|-------------|
+| `/sandbox` | Terminal management, tool execution, file operations |
+| `/rag` | RAG knowledge base (upload, query, documents) |
+| `/file-parser` | File parsing service |
+| `/mcp` | MCP Server tools |
+| `/cases` | Case storage CRUD |
+| `/datasets` | Dataset management CRUD |
+| `/test-results` | Batch test results |
+| `/report-templates` | Report templates |
+| `/health` | Health check |
+
+See [docs/API-REFERENCE.md](docs/API-REFERENCE.md) for full endpoint documentation.
 
 ## Technology Stack
 
@@ -277,12 +299,13 @@ Comprehensive developer documentation is available in the `docs/` directory:
 |----------|-------------|
 | [docs/README.md](docs/README.md) | Documentation index and quick start guide |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture overview and data flow |
-| [docs/FRONTEND.md](docs/FRONTEND.md) | Frontend state management and components |
-| [docs/BACKEND.md](docs/BACKEND.md) | Backend services and Docker management |
+| [docs/FRONTEND.md](docs/FRONTEND.md) | Frontend: hooks, components, batch testing, test case schema |
+| [docs/BACKEND.md](docs/BACKEND.md) | Backend: routes, services, subsystems (terminal/RAG/MCP/parser) |
 | [docs/SCENARIOS.md](docs/SCENARIOS.md) | Attack scenario system and builders |
-| [docs/CONFIG.md](docs/CONFIG.md) | Complete configuration reference |
-| [docs/API-REFERENCE.md](docs/API-REFERENCE.md) | API endpoint documentation |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Change log and documentation guidelines |
+| [docs/API-REFERENCE.md](docs/API-REFERENCE.md) | Complete API endpoint documentation |
+| [docs/CONFIG.md](docs/CONFIG.md) | Configuration reference |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Deployment guide |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Change log |
 
 ### Documentation Maintenance Rules
 
@@ -308,6 +331,12 @@ poc-demo/
 │   ├── rag.js               # RAG API client
 │   ├── mcp.js               # MCP API client
 │   ├── caseApi.js           # Case storage API
+│   ├── datasetApi.js        # Dataset API client
+│   ├── testResultsApi.js    # Test results API client
+│   ├── datasetConverter.js  # LLM format converter
+│   ├── hooks/               # React Hooks
+│   ├── components/          # UI components
+│   ├── schemas/             # Data schema definitions
 │   └── scenarios/           # Attack scenarios
 │       ├── index.js         # Scenario aggregation
 │       ├── types.js         # Type definitions
@@ -321,19 +350,20 @@ poc-demo/
 ├── backend/                  # Backend source
 │   └── app/
 │       ├── main.py          # FastAPI entry
-│       ├── routers/         # API routes (sandbox, rag, mcp, cases)
+│       ├── routers/         # API routes (8 routers)
 │       ├── services/        # Business logic
 │       └── models/          # Data models
 ├── public/                   # Static assets
-│   └── attack-samples/      # Malicious file samples
-├── docs/                     # Developer documentation
+│   └── attack-samples/      # Attack sample files
+├── docs/                     # Developer documentation (9 files)
 │   ├── README.md            # Documentation index
 │   ├── ARCHITECTURE.md      # System architecture
-│   ├── FRONTEND.md          # Frontend details
-│   ├── BACKEND.md           # Backend details
+│   ├── FRONTEND.md          # Frontend guide
+│   ├── BACKEND.md           # Backend guide (incl. subsystems)
 │   ├── SCENARIOS.md         # Scenario system
-│   ├── CONFIG.md            # Configuration reference
 │   ├── API-REFERENCE.md     # API documentation
+│   ├── CONFIG.md            # Configuration reference
+│   ├── DEPLOY.md            # Deployment guide
 │   └── CHANGELOG.md         # Change log
 └── CLAUDE.md                # This file
 ```

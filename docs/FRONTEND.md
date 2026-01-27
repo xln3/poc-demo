@@ -6,33 +6,46 @@
 
 ```
 src/
-├── main.jsx             # 应用入口
-├── App.jsx              # 主应用组件（约 3700 行）
-├── config.js            # 全局配置和 LLM API
-├── sandbox.js           # 沙箱 API 客户端
-├── rag.js               # RAG API 客户端
-├── mcp.js               # MCP API 客户端
-├── caseApi.js           # 用例存储 API
-├── index.css            # Tailwind 入口
-├── hooks/               # 自定义 Hooks
-│   ├── index.js         # Hooks 导出入口
-│   ├── useSandbox.js    # 沙箱管理
-│   ├── useRAG.js        # RAG 管理
-│   ├── useCases.js      # 用例持久化
-│   ├── useMCP.js        # MCP 配置管理
+├── main.jsx               # 应用入口
+├── App.jsx                # 主应用组件（约 4000+ 行）
+├── config.js              # 全局配置和 LLM API
+├── sandbox.js             # 沙箱 API 客户端
+├── rag.js                 # RAG API 客户端
+├── mcp.js                 # MCP API 客户端
+├── caseApi.js             # 用例存储 API
+├── datasetApi.js          # 数据集 API 客户端
+├── testResultsApi.js      # 测试结果 API 客户端
+├── datasetConverter.js    # LLM 格式转换工具
+├── index.css              # Tailwind 入口
+├── hooks/                 # 自定义 Hooks
+│   ├── index.js           # Hooks 导出入口
+│   ├── useSandbox.js      # 沙箱管理
+│   ├── useRAG.js          # RAG 管理
+│   ├── useCases.js        # 用例持久化
+│   ├── useMCP.js          # MCP 配置管理
 │   ├── useConversation.js # 对话状态管理
-│   ├── useLLMConfig.js  # LLM 参数配置
-│   ├── usePlayback.js   # 用例回放
-│   └── useToast.js      # Toast 通知管理
-├── schemas/             # 数据结构定义
-│   └── testCase.js      # 测试用例 v1.0.0 Schema
-├── utils/               # 工具函数
-│   ├── index.js         # 工具导出入口
-│   └── export.js        # 导出功能
-├── components/          # UI 组件
-│   ├── index.js         # 组件导出入口
-│   └── Toast.jsx        # Toast 通知组件
-└── scenarios/           # 攻击场景定义
+│   ├── useLLMConfig.js    # LLM 参数配置
+│   ├── usePlayback.js     # 用例回放（v1/v2 兼容）
+│   ├── useStateCollector.js # 状态收集器（构建 PlaybackSequence）
+│   ├── useTestExecution.js  # 测试执行流程管理
+│   ├── useDatasets.js     # 数据集管理（CRUD、导入、格式转换）
+│   └── useToast.js        # Toast 通知管理
+├── schemas/               # 数据结构定义
+│   ├── testCase.js        # 测试用例 Schema（v1/v2）
+│   └── stateMachine.js    # 状态机定义
+├── utils/                 # 工具函数
+│   ├── index.js           # 工具导出入口
+│   └── export.js          # 导出功能
+├── components/            # UI 组件
+│   ├── index.js           # 组件导出入口
+│   ├── Toast.jsx          # Toast 通知组件
+│   ├── BatchTestModal.jsx # 批量测试用例选择弹窗
+│   ├── DatasetList.jsx    # 数据集列表浏览
+│   ├── DatasetDetailModal.jsx # 数据集详情弹窗
+│   ├── CaseBrowser.jsx    # 用例浏览器
+│   ├── CapabilityTabs.jsx # 能力级别标签页
+│   └── sandbox/           # 沙箱相关组件
+└── scenarios/             # 攻击场景定义
 ```
 
 ---
@@ -288,6 +301,51 @@ datasets.clearCapabilityFilter()          // 清除筛选
 | `pendingConversion` | `object \| null` | `null` | 待转换数据（含 data, detectedType, detectedVersion）|
 | `isConverting` | `boolean` | `false` | AI 转换进行中 |
 
+### useStateCollector
+
+测试执行状态收集器，在测试过程中捕获完整状态序列，用于构建 PlaybackSequence。
+
+```javascript
+import { useStateCollector } from './hooks/index.js';
+
+const collector = useStateCollector({ input });
+
+// 状态
+collector.states               // 已收集的状态序列
+collector.phase                // 当前执行阶段 (ExecutionPhase)
+collector.isCollecting         // 是否正在收集
+
+// 函数
+collector.startCollecting()    // 开始收集
+collector.captureState(patch)  // 捕获状态快照
+collector.transition(event)    // 触发状态机转换
+collector.buildSequence(result)// 构建 PlaybackSequence
+```
+
+### useTestExecution
+
+测试执行流程管理，支持单个录制和批量执行。
+
+```javascript
+import { useTestExecution } from './hooks/index.js';
+
+const execution = useTestExecution({ onStartTest, onStopTest, stateCollector });
+
+// 状态
+execution.executionMode        // 'idle' | 'single_recording' | 'batch_running'
+execution.currentCase          // 当前测试用例
+execution.currentDataset       // 当前数据集（批量测试时）
+execution.batchQueue           // 批量测试队列
+
+// 函数
+execution.startRecording(caseData)  // 开始单个录制
+execution.stopRecording()           // 停止录制
+execution.startBatch(cases)         // 开始批量执行
+execution.pauseBatch()              // 暂停批量
+execution.resumeBatch()             // 继续批量
+execution.cancelBatch()             // 取消批量
+```
+
 ### useToast
 
 管理 Toast 通知，支持两个维度分类。
@@ -363,6 +421,20 @@ import Toast from './components/Toast.jsx';
 | error | red-600 (红) |
 | warning | amber-600 (黄) |
 | info | blue-600 (蓝) |
+
+---
+
+## UI 组件
+
+除 `Toast.jsx` 外，`src/components/` 目录下还包含以下组件：
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| `BatchTestModal` | `BatchTestModal.jsx` | 批量测试用例选择弹窗，支持数据集浏览、F1/F2 筛选、多选 |
+| `DatasetList` | `DatasetList.jsx` | 数据集列表浏览组件，支持能力级别筛选 |
+| `DatasetDetailModal` | `DatasetDetailModal.jsx` | 数据集详情弹窗，查看和管理数据集中的用例 |
+| `CaseBrowser` | `CaseBrowser.jsx` | 用例浏览器，用于浏览和选择测试用例 |
+| `CapabilityTabs` | `CapabilityTabs.jsx` | 能力级别标签页切换组件 |
 
 ---
 
@@ -763,6 +835,62 @@ export async function updateCase(caseId, updates);
 export async function deleteCase(caseId);
 ```
 
+### datasetApi.js
+
+数据集 API 客户端，支持 v2.0.0 Dataset Schema 格式。
+
+```javascript
+// 列出所有数据集
+export async function listDatasets();
+
+// 保存新数据集
+export async function saveDataset(dataset);
+
+// 获取数据集详情
+export async function getDataset(datasetId);
+
+// 更新数据集
+export async function updateDataset(datasetId, dataset);
+
+// 删除数据集
+export async function deleteDataset(datasetId);
+
+// 添加用例到数据集
+export async function addCaseToDataset(datasetId, caseData);
+
+// 从数据集移除用例
+export async function removeCaseFromDataset(datasetId, caseId);
+```
+
+### testResultsApi.js
+
+批量测试结果 API 客户端。
+
+```javascript
+// 获取所有测试结果列表
+export async function listTestResults();
+
+// 获取单个测试结果详情
+export async function getTestResult(resultId);
+
+// 保存测试结果
+export async function saveTestResult(data);
+
+// 删除测试结果
+export async function deleteTestResult(resultId);
+```
+
+### datasetConverter.js
+
+LLM 格式转换工具，使用大模型将任意格式数据转换为标准 Dataset 格式。
+
+```javascript
+// 将任意格式数据转换为 Dataset 格式
+export async function convertToDatasetFormat(inputData, options);
+```
+
+加载 `public/templates/dataset-template.json` 作为目标格式模板，通过 `CONFIG.callModel()` 调用 LLM 执行格式转换。
+
 ---
 
 ## UI 布局结构
@@ -933,6 +1061,147 @@ useEffect(() => {
   }
 }, [apiStatus]);
 ```
+
+---
+
+## 批量测试
+
+批量测试模块允许用户从数据集中选择多个测试用例，自动执行真实 API 测试并评判攻击结果。
+
+### 执行流程
+
+```
+BatchTestModal（选择用例）
+       │ onStartBatchTest(selectedCases)
+       ▼
+startBatchTest(cases) → 初始化队列
+       │
+       ▼
+executeBatchTestCase(cases, index) ──循环──┐
+  1. 重置 UI 状态（flushSync）             │
+  2. 设置消息、日志、系统提示词            │
+  3. CONFIG.callModel() → 获取响应         │
+  4. CONFIG.judgeAttackSuccess() → 评判    │
+  5. 记录结果                              │
+  6. 检查暂停/取消                         │
+  7. 延迟后执行下一个 ←───────────────────┘
+       │ 全部完成
+       ▼
+完成状态栏：统计 + 导出/保存
+```
+
+### 关键组件
+
+| 组件/区域 | 说明 |
+|-----------|------|
+| `BatchTestModal` | 用例选择弹窗：数据集浏览、F1/F2 筛选、多选 |
+| 进度条区域 | 显示 X/Y 进度、统计、暂停/继续/取消/保存按钮 |
+| 主界面 | 实时展示当前用例的对话、思考、响应、评判过程 |
+
+### 能力限制
+
+仅支持 **F1（对话）** 和 **F2（文件注入）** 用例。F3/F4/F5 需要沙箱、RAG、MCP 等外部服务，批量自动化复杂度和风险较高。UI 中 F3/F4/F5 用例显示警告图标，禁止选择。
+
+### 测试结果存储 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/test-results` | 获取报告列表（仅元数据） |
+| GET | `/test-results/:id` | 获取报告详情（含完整结果） |
+| POST | `/test-results` | 保存测试报告 |
+| DELETE | `/test-results/:id` | 删除测试报告 |
+
+测试完成后可导出 JSON 到本地，或输入名称保存到服务器。已保存报告可通过左侧栏"已测试"视图浏览和管理。
+
+### 相关文件
+
+| 文件 | 说明 |
+|------|------|
+| `src/components/BatchTestModal.jsx` | 用例选择弹窗 |
+| `src/testResultsApi.js` | 测试结果 API 客户端 |
+| `src/hooks/useTestExecution.js` | 测试执行流程管理 |
+| `backend/app/routers/test_results.py` | 测试结果 API 路由 |
+| `backend/app/services/test_results_storage.py` | 测试结果存储服务 |
+
+---
+
+## 测试用例 Schema
+
+### 版本概览
+
+| 版本 | 说明 | 状态 |
+|------|------|------|
+| v2.1.0 | 基于结构检测类型，支持多版本兼容 | 当前版本 |
+| v2.0.0 | 新架构：TestInput + State + PlaybackSequence | 向后兼容 |
+| v1.0.0 | 传统架构：单一 TestCase 结构 | 向后兼容 |
+
+### 三层架构
+
+v2 区分三层数据结构，核心关系：`TestInput` 是 `State` 的子集，`PlaybackSequence` 是 `State[]` 序列。
+
+| 层 | 类型 | 职责 |
+|-----|------|------|
+| 输入层 | `TestInput` | 记录人为设定的测试输入（攻击定义、LLM 配置、payload、能力配置） |
+| 状态层 | `State` | 完整状态快照（UI、对话历史、工具调用、环境、结果、计时） |
+| 序列层 | `PlaybackSequence` | State 的有序序列，包含 input、states[]、result、playback markers |
+
+执行过程：`TestInput` --execute--> `PlaybackSequence`（State 序列）
+
+### 状态机
+
+v2 显式定义执行阶段（`ExecutionPhase`）：
+
+```
+idle → preparing → calling_llm ⇄ tool_calling → judging → completed
+                                                         → failed
+```
+
+| 阶段 | 说明 |
+|------|------|
+| `idle` | 空闲，等待测试 |
+| `preparing` | 准备环境（沙箱、RAG 等） |
+| `calling_llm` | 调用 LLM API |
+| `tool_calling` | 执行工具调用（可多轮循环回 calling_llm） |
+| `judging` | 攻击评判 |
+| `completed` | 测试完成 |
+| `failed` | 测试失败 |
+
+### 格式检测
+
+`detectSchemaVersion(data)` 基于结构检测类型，不严格依赖版本号：
+
+| 优先级 | 判断条件 | 识别为 |
+|--------|----------|--------|
+| 1 | `meta.type === 'Dataset'` 且有 `cases` | Dataset |
+| 2 | `meta.type === 'RecordingSession'` 且有 `states` | RecordingSession |
+| 3 | `meta.type === 'TestCase'` 且有 `input` 和 `criteria` | TestCase |
+| 4 | 有 `states` 数组 | PlaybackSequence |
+| 5 | 有 `attack` 和 `llmConfig` | TestInput |
+| 6 | 有 `source` 和 `execution` | TestCaseV1 |
+| 7 | 其他 | unknown |
+
+### 格式转换
+
+支持导入非标准格式数据，使用 LLM 自动转换为标准 Dataset 格式。
+
+**流程**：导入文件 → `detectSchemaVersion()` 检测 → 若非 Dataset 格式则弹出转换确认 → 用户确认后 `convertToDatasetFormat()` 调用 LLM 转换 → 保存结果。
+
+**相关文件**：
+
+| 文件 | 职责 |
+|------|------|
+| `src/datasetConverter.js` | LLM 格式转换逻辑（`convertToDatasetFormat`） |
+| `src/hooks/useDatasets.js` | 转换状态管理（`pendingConversion`、`isConverting`、`executeConversion`） |
+| `public/templates/dataset-template.json` | 目标格式模板 |
+
+### Schema 相关文件
+
+| 文件 | 职责 |
+|------|------|
+| `src/schemas/testCase.js` | v1/v2 Schema 定义、构建函数、检测函数 |
+| `src/schemas/stateMachine.js` | 状态机定义和事件 |
+| `src/hooks/useStateCollector.js` | 运行时状态收集器 |
+| `src/hooks/usePlayback.js` | v1/v2 回放支持 |
 
 ---
 

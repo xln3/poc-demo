@@ -88,27 +88,35 @@ CONFIG.api = {
 
 ```javascript
 CONFIG.ragApi = {
-  baseUrl: 'http://localhost:8001',
+  baseUrl: '/rag',
   enabled: true,
 }
 ```
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `baseUrl` | `string` | `'http://localhost:8001'` | RAG 服务端点 |
+| `baseUrl` | `string` | `'/rag'` | RAG 服务端点（相对路径，走 Vite 代理） |
 | `enabled` | `boolean` | `true` | 是否启用 RAG 功能 |
 
 ### Sandbox 配置
 
 ```javascript
 CONFIG.sandbox = {
-  baseUrl: 'http://localhost:8000',
+  baseUrl: '',  // 空字符串，使用相对路径 /sandbox
+  transfer: {
+    maxFileSize: 100 * 1024 * 1024,  // 100MB
+    chunkSize: 1024 * 1024,           // 1MB
+    allowedPaths: ['/workspace/', '/tmp/'],
+  },
 }
 ```
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `baseUrl` | `string` | `'http://localhost:8000'` | 沙箱后端端点 |
+| `baseUrl` | `string` | `''` | 沙箱后端端点（空字符串，使用相对路径 /sandbox） |
+| `transfer.maxFileSize` | `number` | `104857600` | 文件传输最大大小（100MB） |
+| `transfer.chunkSize` | `number` | `1048576` | 分块传输大小（1MB） |
+| `transfer.allowedPaths` | `string[]` | `['/workspace/', '/tmp/']` | 允许的文件路径前缀 |
 
 ### 可用模型列表
 
@@ -141,7 +149,7 @@ CONFIG.judgeModel = 'zai-glm-4.7'
 ```javascript
 CONFIG.llmParams = {
   temperature: 0.7,
-  max_tokens: 2048,
+  max_tokens: 8192,
   top_p: 0.9,
 }
 ```
@@ -149,7 +157,7 @@ CONFIG.llmParams = {
 | 参数 | 类型 | 默认值 | 范围 | 说明 |
 |------|------|--------|------|------|
 | `temperature` | `number` | `0.7` | 0-2 | 采样温度，越高越随机 |
-| `max_tokens` | `number` | `2048` | 1-128000 | 最大生成 token 数 |
+| `max_tokens` | `number` | `8192` | 1-128000 | 最大生成 token 数 |
 | `top_p` | `number` | `0.9` | 0-1 | 核采样概率阈值 |
 
 ---
@@ -199,10 +207,26 @@ CONFIG.tools = {
 | `run_command` | dangerous | `command` | 执行命令 |
 | `list_dir` | safe | `path?` | 列目录 |
 | `http_request` | risky | `url`, `method?`, `headers?`, `body?` | HTTP 请求 |
-| `query_database` | risky | `query`, `database?` | SQL 查询 |
-| `send_email` | risky | `to`, `subject?`, `body?` | 发送邮件 |
-| `get_system_info` | safe | (无) | 系统信息 |
-| `access_secret` | dangerous | `name`, `namespace?` | 访问密钥 |
+| `parse_file` | safe | `path`, `parsers?` | 解析文件（PDF/DOCX/XLSX/图片等） |
+
+### MCP 邮件工具
+
+标记 `mcpServer: 'email_receive'`，由 MCP email_receive 服务提供：
+
+| 工具 | 分类 | 参数 | 说明 |
+|------|------|------|------|
+| `email_list_inbox` | safe | `limit?`, `unread_only?` | 列出收件箱邮件列表 |
+| `email_receive` | safe | `id` | 读取邮件完整内容和附件列表 |
+| `email_download_attachment` | risky | `id`, `filename` | 下载邮件附件（base64） |
+
+### MCP 浏览器工具
+
+| 工具 | 分类 | MCP Server | 参数 | 说明 |
+|------|------|------------|------|------|
+| `firefox_get_cookies` | dangerous | `browser_firefox` | `domain?`, `limit?` | 读取 Firefox cookies（明文） |
+| `firefox_get_history` | dangerous | `browser_firefox` | `days?`, `limit?` | 读取 Firefox 浏览历史 |
+| `chrome_get_cookies` | dangerous | `browser_chrome` | `domain?`, `limit?` | 读取 Chrome cookies（AES 加密密文） |
+| `chrome_get_history` | dangerous | `browser_chrome` | `days?`, `limit?` | 读取 Chrome 浏览历史 |
 
 ---
 
@@ -211,7 +235,7 @@ CONFIG.tools = {
 ```javascript
 CONFIG.mcp = {
   enabled: true,
-  serverUrl: 'http://localhost:8000',
+  serverUrl: '',  // 使用相对路径，走 Vite 代理
 
   parsers: {
     pdf: {
@@ -267,17 +291,17 @@ CONFIG.mcp = {
 ```javascript
 CONFIG.mcpServers = {
   enabled: false,
-  apiUrl: 'http://localhost:8000/mcp',
+  apiUrl: '/mcp',
 
   available: {
     filesystem: {
       id: 'filesystem',
       name: 'Filesystem',
       icon: '📁',
-      description: '本地文件系统读写',
+      description: '本地文件系统读写访问',
       fields: [
-        { key: 'basePath', label: '根目录路径', type: 'text', required: true },
-        { key: 'allowWrite', label: '允许写入', type: 'checkbox', default: false }
+        { key: 'basePath', label: '根目录路径', type: 'text', required: true, placeholder: '/path/to/workspace' },
+        { key: 'allowWrite', label: '允许写入', type: 'checkbox', required: false, default: false }
       ],
       tools: ['fs_read_file', 'fs_write_file', 'fs_list_dir', 'fs_search']
     },
@@ -285,13 +309,13 @@ CONFIG.mcpServers = {
       id: 'email',
       name: 'Email',
       icon: '📧',
-      description: 'SMTP 邮件服务',
+      description: 'SMTP 邮件发送服务',
       fields: [
-        { key: 'smtpHost', label: 'SMTP 主机', type: 'text', required: true },
-        { key: 'smtpPort', label: 'SMTP 端口', type: 'number', default: 587 },
+        { key: 'smtpHost', label: 'SMTP 主机', type: 'text', required: true, placeholder: 'smtp.example.com' },
+        { key: 'smtpPort', label: 'SMTP 端口', type: 'number', required: true, default: 587 },
         { key: 'username', label: '用户名', type: 'text', required: true },
         { key: 'password', label: '密码', type: 'password', required: true },
-        { key: 'fromAddress', label: '发件人地址', type: 'text', required: true }
+        { key: 'fromAddress', label: '发件人地址', type: 'text', required: true, placeholder: 'bot@example.com' }
       ],
       tools: ['email_send', 'email_send_with_attachment']
     },
@@ -299,10 +323,10 @@ CONFIG.mcpServers = {
       id: 'payment',
       name: 'Payment (Stripe)',
       icon: '💳',
-      description: 'Stripe 支付网关',
+      description: 'Stripe 支付网关集成（sk_test_ 为测试模式，sk_live_ 为生产模式）',
       fields: [
-        { key: 'apiKey', label: 'Stripe Secret Key', type: 'password', required: true },
-        { key: 'merchantId', label: '商户标识', type: 'text', required: true }
+        { key: 'apiKey', label: 'Stripe Secret Key', type: 'password', required: true, placeholder: 'sk_test_xxx 或 sk_live_xxx' },
+        { key: 'merchantId', label: '商户标识', type: 'text', required: true, placeholder: '用于订单备注' }
       ],
       tools: ['payment_create_order', 'payment_query_status', 'payment_refund']
     },
@@ -310,66 +334,68 @@ CONFIG.mcpServers = {
       id: 'notion',
       name: 'Notion',
       icon: '📝',
-      description: 'Notion 文档管理',
+      description: 'Notion 知识库操作（读取/搜索/创建页面）',
       fields: [
-        { key: 'apiKey', label: 'Integration Token', type: 'password', required: true },
-        { key: 'workspaceId', label: '工作区 ID', type: 'text', required: false }
+        { key: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'secret_xxx (Integration Token)' }
       ],
-      tools: ['notion_search', 'notion_get_page', 'notion_create_page', 'notion_update_page']
+      tools: ['notion_read_page', 'notion_search', 'notion_list_databases', 'notion_create_page', 'notion_update_page', 'notion_append_block']
     },
     github: {
       id: 'github',
       name: 'GitHub',
       icon: '🐙',
-      description: 'GitHub 仓库操作',
+      description: 'GitHub 代码仓库操作（读取文件/搜索代码/管理Issue）',
       fields: [
-        { key: 'token', label: 'Personal Access Token', type: 'password', required: true },
-        { key: 'owner', label: '仓库所有者', type: 'text', required: true },
-        { key: 'repo', label: '仓库名称', type: 'text', required: true }
+        { key: 'token', label: 'Personal Access Token', type: 'password', required: true, placeholder: 'ghp_xxx 或 github_pat_xxx' }
       ],
-      tools: ['github_get_repo', 'github_list_issues', 'github_create_issue', 'github_get_file', 'github_search_code']
+      tools: ['github_read_file', 'github_list_repos', 'github_search_code', 'github_create_issue', 'github_list_commits', 'github_create_pr_comment', 'github_list_secrets']
     },
     database: {
       id: 'database',
       name: 'Database',
       icon: '🗄️',
-      description: 'SQL 数据库查询',
+      description: '数据库查询（支持 PostgreSQL 和 SQLite）',
       fields: [
-        { key: 'connectionString', label: '连接字符串', type: 'password', required: true },
-        { key: 'type', label: '数据库类型', type: 'select', options: ['mysql', 'postgres', 'sqlite'], required: true }
+        { key: 'type', label: '数据库类型', type: 'select', required: true, options: [{ value: 'postgres', label: 'PostgreSQL' }, { value: 'sqlite', label: 'SQLite' }], default: 'postgres' },
+        { key: 'host', label: '主机地址', type: 'text', required: false, placeholder: 'localhost (PostgreSQL)' },
+        { key: 'port', label: '端口', type: 'number', required: false, default: 5432 },
+        { key: 'user', label: '用户名', type: 'text', required: false },
+        { key: 'password', label: '密码', type: 'password', required: false },
+        { key: 'database', label: '数据库名', type: 'text', required: false },
+        { key: 'path', label: '文件路径', type: 'text', required: false, placeholder: '/path/to/db.sqlite (SQLite)' }
       ],
-      tools: ['db_query', 'db_list_tables', 'db_describe_table']
+      tools: ['db_query', 'db_execute', 'db_list_tables', 'db_describe_table']
     },
     http: {
       id: 'http',
-      name: 'HTTP',
+      name: 'HTTP/Fetch',
       icon: '🌐',
-      description: 'HTTP 请求代理',
+      description: 'HTTP 请求工具（含 SSRF 检测演示）',
       fields: [
-        { key: 'baseUrl', label: 'API 基础 URL', type: 'text', required: true },
-        { key: 'headers', label: '默认请求头 (JSON)', type: 'textarea', required: false }
+        { key: 'allowPrivate', label: '允许访问内网地址', type: 'checkbox', required: false, default: false },
+        { key: 'timeout', label: '超时时间（秒）', type: 'number', required: false, default: 30 },
+        { key: 'maxBodySize', label: '最大响应体（字节）', type: 'number', required: false, default: 1048576 }
       ],
-      tools: ['http_request', 'http_graphql']
+      tools: ['http_fetch', 'http_post', 'http_download']
     },
     slack: {
       id: 'slack',
       name: 'Slack',
       icon: '💬',
-      description: 'Slack 消息通知',
+      description: 'Slack 工作区通信（发送消息/搜索/获取用户信息）',
       fields: [
-        { key: 'token', label: 'Bot Token', type: 'password', required: true },
-        { key: 'channel', label: '默认频道', type: 'text', required: false }
+        { key: 'token', label: 'Bot User OAuth Token', type: 'password', required: true, placeholder: 'xoxb-xxx' }
       ],
-      tools: ['slack_send_message', 'slack_list_channels', 'slack_get_history']
+      tools: ['slack_send_message', 'slack_list_channels', 'slack_search_messages', 'slack_get_user_info']
     },
     calendar: {
       id: 'calendar',
       name: 'Calendar',
       icon: '📅',
-      description: '日历事件管理',
+      description: '日历管理（支持 Google Calendar 或 Mock 模式）',
       fields: [
-        { key: 'provider', label: '提供商', type: 'select', options: ['google', 'outlook'], required: true },
-        { key: 'credentials', label: 'OAuth 凭证', type: 'textarea', required: true }
+        { key: 'type', label: '服务类型', type: 'select', required: true, options: [{ value: 'mock', label: 'Mock (本地演示)' }, { value: 'google', label: 'Google Calendar' }], default: 'mock' },
+        { key: 'accessToken', label: 'OAuth Access Token', type: 'password', required: false, placeholder: 'Google OAuth Token (可选)' }
       ],
       tools: ['calendar_list_events', 'calendar_create_event', 'calendar_update_event', 'calendar_delete_event']
     },
@@ -377,24 +403,59 @@ CONFIG.mcpServers = {
       id: 'storage',
       name: 'Storage',
       icon: '☁️',
-      description: '对象存储服务',
+      description: '云存储操作（支持 AWS S3 和阿里云 OSS）',
       fields: [
-        { key: 'provider', label: '提供商', type: 'select', options: ['s3', 'gcs', 'azure'], required: true },
-        { key: 'bucket', label: '存储桶名称', type: 'text', required: true },
-        { key: 'credentials', label: '访问凭证', type: 'textarea', required: true }
+        { key: 'type', label: '存储类型', type: 'select', required: true, options: [{ value: 's3', label: 'AWS S3' }, { value: 'oss', label: '阿里云 OSS' }], default: 's3' },
+        { key: 'accessKeyId', label: 'Access Key ID', type: 'text', required: true },
+        { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', required: true },
+        { key: 'region', label: '区域', type: 'text', required: false, placeholder: 'us-east-1 (S3)' },
+        { key: 'endpoint', label: 'Endpoint', type: 'text', required: false, placeholder: 'oss-cn-hangzhou.aliyuncs.com (OSS)' }
       ],
-      tools: ['storage_list', 'storage_get', 'storage_put', 'storage_delete']
+      tools: ['storage_list_buckets', 'storage_list_objects', 'storage_download_url', 'storage_upload']
     },
     memory: {
       id: 'memory',
       name: 'Memory',
       icon: '🧠',
-      description: '会话记忆存储',
+      description: '持久化记忆存储（本地 JSON 文件）',
       fields: [
-        { key: 'sessionId', label: '会话 ID', type: 'text', required: false },
-        { key: 'maxItems', label: '最大条目数', type: 'number', default: 100 }
+        { key: 'storagePath', label: '存储路径', type: 'text', required: false, placeholder: '/tmp/mcp_memory', default: '/tmp/mcp_memory' }
       ],
-      tools: ['memory_store', 'memory_retrieve', 'memory_clear']
+      tools: ['memory_store', 'memory_recall', 'memory_search', 'memory_list', 'memory_delete']
+    },
+    email_receive: {
+      id: 'email_receive',
+      name: 'Email (Receive)',
+      icon: '📬',
+      description: 'IMAP 邮件接收服务（支持163、QQ、Gmail等）',
+      fields: [
+        { key: 'imapHost', label: 'IMAP 主机', type: 'text', required: true, placeholder: 'imap.163.com', default: 'imap.163.com' },
+        { key: 'imapPort', label: '端口', type: 'number', required: true, default: 993 },
+        { key: 'username', label: '邮箱账号', type: 'text', required: true, placeholder: 'your@163.com' },
+        { key: 'password', label: '授权码', type: 'password', required: true, placeholder: '163邮箱需在设置中开启IMAP并获取授权码' },
+        { key: 'useSSL', label: 'SSL', type: 'checkbox', required: false, default: true }
+      ],
+      tools: ['email_list_inbox', 'email_receive', 'email_download_attachment']
+    },
+    browser_chrome: {
+      id: 'browser_chrome',
+      name: 'Chrome Browser',
+      icon: '🔵',
+      description: 'Chrome 浏览器数据读取（cookies 为 AES 加密密文）',
+      fields: [
+        { key: 'profilePath', label: '配置目录', type: 'text', required: false, placeholder: '~/.config/google-chrome/Default（留空自动检测）' }
+      ],
+      tools: ['chrome_get_cookies', 'chrome_get_history']
+    },
+    browser_firefox: {
+      id: 'browser_firefox',
+      name: 'Firefox Browser',
+      icon: '🦊',
+      description: 'Firefox 浏览器数据读取（cookies 为明文）',
+      fields: [
+        { key: 'profilePath', label: '配置目录', type: 'text', required: false, placeholder: '~/.mozilla/firefox/*.default*（留空自动检测）' }
+      ],
+      tools: ['firefox_get_cookies', 'firefox_get_history']
     }
   }
 }
@@ -408,6 +469,7 @@ CONFIG.mcpServers = {
 | `number` | 数字输入 |
 | `password` | 密码输入 |
 | `checkbox` | 复选框 |
+| `select` | 下拉选择 |
 
 ---
 
@@ -457,20 +519,111 @@ async callModelWithTools(
 
 ### judgeAttackSuccess()
 
-使用评判模型判断攻击结果。
+使用评判模型判断攻击结果（五态风险等级）。
 
 ```javascript
 async judgeAttackSuccess(
   attack: Attack,
   systemPrompt: string,
   modelResponse: string,
-  actualPayload: string | null = null
-): Promise<{success: boolean | null, reason: string}>
+  actualPayload: string | null = null,
+  customJudgePrompt: string | null = null,
+  customJudgeModel: string | null = null
+): Promise<{riskLevel: string, reason: string}>
+```
+
+**参数**:
+- `attack`: 攻击对象
+- `systemPrompt`: 智能体系统提示词
+- `modelResponse`: 智能体响应
+- `actualPayload`: 可选，实际 payload（覆盖 attack 中的 payload）
+- `customJudgePrompt`: 可选，自定义评判提示词模板（支持 `{{attackName}}` 等占位符）
+- `customJudgeModel`: 可选，自定义评判模型（覆盖 `CONFIG.judgeModel`）
+
+**返回值**:
+- `riskLevel`: `'high'`|`'medium'`|`'low'`|`'safe'`|`'pending'`
+- `reason`: 判断理由
+
+### callModelStream()
+
+流式调用 LLM API。通过 `onDelta` 回调实现增量输出。
+
+```javascript
+async callModelStream(
+  messages: Array<{role, content}>,
+  systemPrompt: string = '',
+  modelId: string | null = null,
+  llmParams: object = {},
+  thinkingConfig: object | null = null,
+  onDelta: (deltaContent: string, deltaThinking: string) => void | null = null
+): Promise<{content, thinking, timing, raw}>
 ```
 
 **返回值**:
-- `success`: `true`=攻击成功, `false`=防御成功, `null`=无法判断
-- `reason`: 判断理由
+- `content`: 累积的模型响应内容
+- `thinking`: 累积的思考过程（如启用）
+- `timing.totalTime`: 总耗时(ms)
+- `raw`: `{ chunks, stream: true }` 原始 SSE 数据块数组
+
+### callModelWithToolsStream()
+
+流式调用 LLM API（带工具支持）。
+
+```javascript
+async callModelWithToolsStream(
+  messages: Array<{role, content}>,
+  systemPrompt: string = '',
+  modelId: string | null = null,
+  llmParams: object = {},
+  toolDefinitions: Array = [],
+  thinkingConfig: object | null = null,
+  onDelta: (deltaContent: string, deltaThinking: string) => void | null = null
+): Promise<{content, tool_calls, finish_reason, thinking, timing, raw}>
+```
+
+**返回值**:
+- `content`: 累积的模型响应内容
+- `tool_calls`: 工具调用数组（从流式增量中按 index 聚合）
+- `finish_reason`: 结束原因
+- `thinking`: 累积的思考过程
+- `timing.totalTime`: 总耗时(ms)
+- `raw`: `{ chunks, stream: true }` 原始 SSE 数据块数组
+
+### File Parser API 函数
+
+文件解析服务的辅助函数，通过 `/file-parser/*` 路由访问。
+
+#### checkFileParserHealth()
+
+```javascript
+async checkFileParserHealth(): Promise<{status: string, error?: string}>
+```
+
+检查文件解析服务健康状态。返回 `{status: 'UP'}` 或 `{status: 'DOWN', error: ...}`。
+
+#### getFileParsers()
+
+```javascript
+async getFileParsers(): Promise<object>
+```
+
+获取可用的解析器列表。
+
+#### parseFile()
+
+```javascript
+async parseFile(file: File, parserIds: string[]): Promise<object>
+```
+
+上传文件并使用指定解析器解析，返回各解析器的解析结果。
+
+#### parseFileToText()
+
+```javascript
+async parseFileToText(file: File, parserIds: string[]): Promise<object>
+```
+
+上传文件并返回纯文本解析结果。
 
 ---
 
@@ -515,8 +668,63 @@ export const LOG_TYPES = {
   success: { label: "成功", color: "text-green-400" },
   failure: { label: "防御", color: "text-blue-400" },
   thinking: { label: "思考", color: "text-pink-400" },
-  round: { label: "轮次", color: "text-teal-400" }
+  round: { label: "轮次", color: "text-teal-400" },
+  toast_tester: { label: "测试者", color: "text-blue-400" },
+  toast_testee: { label: "智能体", color: "text-purple-400" },
+  toast_world: { label: "环境", color: "text-gray-400" }
 };
+```
+
+### FIVE_LEVEL_RISK
+
+五态风险等级（用于测试结果评审）：
+
+```javascript
+export const FIVE_LEVEL_RISK = {
+  high: { label: '高风险', icon: '🔴', ... },
+  medium: { label: '中风险', icon: '🟠', ... },
+  low: { label: '低风险', icon: '🟡', ... },
+  safe: { label: '安全', icon: '🟢', ... },
+  pending: { label: '待定', icon: '⚪', ... },
+};
+```
+
+| 等级 | 标签 | 图标 |
+|------|------|------|
+| `high` | 高风险 | 🔴 |
+| `medium` | 中风险 | 🟠 |
+| `low` | 低风险 | 🟡 |
+| `safe` | 安全 | 🟢 |
+| `pending` | 待定 | ⚪ |
+
+### RECORD_TYPES
+
+测试记录面板显示的类型：
+
+```javascript
+export const RECORD_TYPES = {
+  thinking: { label: '思考', color: 'text-pink-400', icon: '🧠' },
+  response: { label: '回答', color: 'text-blue-400', icon: '💬' },
+  tool_call: { label: '工具', color: 'text-purple-400', icon: '🔧' },
+  judge: { label: '评判', color: 'text-violet-400', icon: '⚖️' },
+  timing: { label: '耗时', color: 'text-amber-400', icon: '⏱️' },
+  error: { label: '错误', color: 'text-red-500', icon: '❌' },
+  annotation: { label: '批注', color: 'text-cyan-400', icon: '📝' },
+};
+```
+
+### TOAST_ONLY_TYPES
+
+应路由到 Toast 通知的类型（不显示在测试记录面板）：
+
+```javascript
+export const TOAST_ONLY_TYPES = [
+  'container',
+  'info',
+  'toast_tester',
+  'toast_testee',
+  'toast_world',
+];
 ```
 
 ---

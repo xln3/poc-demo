@@ -56,7 +56,7 @@ backend/
 ```python
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import sandbox, mcp, rag, cases
+from .routers import sandbox, mcp, rag, cases, datasets, test_results, report_templates, file_parser
 from .services.container import container_manager
 
 @asynccontextmanager
@@ -87,8 +87,12 @@ app.add_middleware(
 # 注册路由
 app.include_router(sandbox.router)
 app.include_router(mcp.router)
+app.include_router(file_parser.router)
 app.include_router(rag.router)
 app.include_router(cases.router)
+app.include_router(datasets.router)
+app.include_router(test_results.router)
+app.include_router(report_templates.router)
 ```
 
 ---
@@ -188,7 +192,7 @@ async def query_documents(request: QueryRequest):
 
 ### File Parser 路由 (`/file-parser`)
 
-独立的文件解析服务。详见 [FILE-PARSER.md](./FILE-PARSER.md)。
+独立的文件解析服务。详见本文档"子系统 4: 文件解析"一节。
 
 | 方法 | 端点 | 功能 |
 |------|------|------|
@@ -235,6 +239,15 @@ async def execute_mcp_tool(request: McpToolRequest):
 | GET | `/cases/{id}` | 获取用例详情 |
 | PUT | `/cases/{id}` | 更新用例 |
 | DELETE | `/cases/{id}` | 删除用例 |
+
+### Report Templates 路由 (`/report-templates`)
+
+报告模板管理。从 `backend/data/report-templates/templates.json` 加载模板配置，提供模板列表和内容读取。
+
+| 方法 | 端点 | 功能 |
+|------|------|------|
+| GET | `/report-templates` | 列出所有报告模板 |
+| GET | `/report-templates/{template_id}` | 获取模板内容 |
 
 ---
 
@@ -314,7 +327,7 @@ container_manager = ContainerManager()
 
 ### ToolExecutor (tools.py)
 
-工具执行器，支持 9 种工具。
+工具执行器，支持 6 种工具。
 
 ```python
 class ToolExecutor:
@@ -325,10 +338,7 @@ class ToolExecutor:
             ToolType.RUN_COMMAND: self._run_command,
             ToolType.HTTP_REQUEST: self._http_request,
             ToolType.LIST_DIR: self._list_dir,
-            ToolType.QUERY_DATABASE: self._query_database,
-            ToolType.SEND_EMAIL: self._send_email,
-            ToolType.GET_SYSTEM_INFO: self._get_system_info,
-            ToolType.ACCESS_SECRET: self._access_secret,
+            ToolType.PARSE_FILE: self._parse_file,
         }
 
     async def execute(self, session_id, tool, params) -> ToolResult:
@@ -350,10 +360,7 @@ class ToolExecutor:
 | `run_command` | 容器执行 | shell 执行 | 执行任意命令 |
 | `http_request` | 直接执行 | httpx 库 | 发起 HTTP 请求 |
 | `list_dir` | 容器执行 | `ls -la` | 列出目录内容 |
-| `query_database` | 模拟 | Mock 数据 | 返回模拟 SQL 结果 |
-| `send_email` | 模拟 | 仅日志 | 模拟邮件发送 |
-| `get_system_info` | 容器执行 | 多命令组合 | 收集系统信息 |
-| `access_secret` | 模拟 | Mock 数据 | 返回模拟密钥 |
+| `parse_file` | HTTP 调用 | file-parser 服务 | 解析文件（PDF/DOCX/XLSX/Image） |
 
 ```python
 async def _read_file(self, session_id: str, params: dict) -> str:
@@ -371,21 +378,6 @@ async def _read_file(self, session_id: str, params: dict) -> str:
     if exit_code != 0:
         raise RuntimeError(f"Failed to read file: {output}")
     return output
-
-async def _query_database(self, session_id: str, params: dict) -> dict:
-    query = params.get("query", "")
-
-    # 检测危险 SQL
-    dangerous_patterns = ['drop', 'delete', 'truncate', 'update', 'insert']
-    if any(p in query.lower() for p in dangerous_patterns):
-        self._emit_log(LogType.WARNING, "⚠️ Dangerous SQL detected", LogStatus.WARNING)
-
-    # 返回模拟数据
-    return {
-        "rows": [...],
-        "row_count": 2,
-        "query_executed": query
-    }
 ```
 
 ### 终端沙箱调用文件解析流程
@@ -770,26 +762,6 @@ class ToolCallRequest(BaseModel):
     params: Dict[str, Any]
 ```
 
-### 模拟工具
-
-数据库、邮件、密钥等敏感操作仅返回模拟数据：
-
-```python
-async def _query_database(self, session_id, params):
-    # 不执行真实 SQL，返回 Mock 数据
-    return {
-        "rows": [...],
-        "warning": "MOCK DATA - No real database connection"
-    }
-
-async def _access_secret(self, session_id, params):
-    # 返回模拟密钥
-    return {
-        "data": mock_secrets[secret_name],
-        "warning": "MOCK DATA - Demonstrates credential exposure risk"
-    }
-```
-
 ### CORS 限制
 
 ```python
@@ -924,10 +896,7 @@ class ToolType(str, Enum):
     RUN_COMMAND = "run_command"
     HTTP_REQUEST = "http_request"
     LIST_DIR = "list_dir"
-    QUERY_DATABASE = "query_database"
-    SEND_EMAIL = "send_email"
-    GET_SYSTEM_INFO = "get_system_info"
-    ACCESS_SECRET = "access_secret"
+    PARSE_FILE = "parse_file"
 
 class LogType(str, Enum):
     CONTAINER = "container"
@@ -1010,6 +979,217 @@ sudo systemctl start docker
 # 构建 file-parser 镜像（如需要）
 docker build -t file-parser:latest -f Dockerfile.file-parser .
 ```
+
+---
+
+## 子系统
+
+以下四个子系统是后端的核心服务模块，各自独立运行，通过 HTTP API 或 Docker 容器交互。
+
+---
+
+### 子系统 1: 终端沙箱
+
+多终端架构：每个终端对应一个独立的 Docker 容器，以 `tag` 作为唯一标识。容器工作目录挂载到宿主机 `poc-data/sandbox/active/{tag}/`，销毁时存档到 `poc-data/sandbox/deleted/{tag}-{timestamp}/`。
+
+#### 容器镜像
+
+| 镜像 | 标识 | 用途 |
+|------|------|------|
+| `python:3.11-slim` | PYTHON | Python 环境（默认） |
+| `ubuntu:22.04` | UBUNTU | 通用 Linux 环境 |
+| `node:20-slim` | NODE | Node.js 环境 |
+| `file-parser:latest` | FILE_PARSER | 文件解析专用镜像 |
+
+#### 资源限制
+
+| 资源 | 限制 |
+|------|------|
+| 内存 | 2GB (`mem_limit: "2g"`) |
+| CPU | 50% (`cpu_quota: 50000`) |
+| 网络 | bridge 模式（允许外网） |
+| 存储 | 宿主机目录挂载，无硬限制 |
+
+#### 可用工具
+
+| 工具 | 参数 | 说明 |
+|------|------|------|
+| `read_file` | `path` | 读取容器内文件内容 |
+| `write_file` | `path`, `content`, `is_base64?` | 写入/创建文件 |
+| `run_command` | `command` | 执行 shell 命令 |
+| `list_dir` | `path` | 列出目录内容 |
+| `http_request` | `method`, `url`, `headers?`, `body?` | 发送 HTTP 请求 |
+| `parse_file` | `path`, `parsers?` | 调用 file-parser 服务解析文件 |
+
+#### 终端锁机制
+
+防止多用户同时操作同一终端。同 IP 允许抢夺锁（同一用户多标签页），不同 IP 互斥访问。心跳续期 30 秒间隔，5 分钟超时。锁文件持久化存储于 `poc-data/terminals/.locks/`。
+
+#### 关键路由
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| POST | `/sandbox/terminals` | 创建终端 `{tag, image}` |
+| GET | `/sandbox/terminals` | 列出所有终端 |
+| GET | `/sandbox/terminals/{tag}` | 获取终端状态 |
+| DELETE | `/sandbox/terminals/{tag}` | 销毁终端 |
+| POST | `/sandbox/terminals/{tag}/tool` | 执行工具 `{tool, params}` |
+| POST | `/sandbox/terminals/{tag}/lock` | 获取锁 |
+| DELETE | `/sandbox/terminals/{tag}/lock` | 释放锁 |
+| POST | `/sandbox/terminals/{tag}/lock/heartbeat` | 心跳续期 |
+| GET | `/sandbox/terminals/{tag}/files` | 列出文件 |
+| POST | `/sandbox/terminals/{tag}/files` | 上传文件 |
+| GET | `/sandbox/terminals/{tag}/files/download` | 下载文件 |
+| WS | `/sandbox/logs/{session_id}` | 实时日志流 |
+| WS | `/sandbox/terminals/{tag}/watch` | 文件变化监控 |
+
+---
+
+### 子系统 2: RAG 检索
+
+基于 ChromaDB 的向量检索增强生成系统，用于演示知识库投毒、检索操控等安全攻击。
+
+#### 技术栈
+
+| 组件 | 技术 | 说明 |
+|------|------|------|
+| 向量存储 | ChromaDB | 持久化向量数据库 |
+| 嵌入模型 | all-MiniLM-L6-v2 (sentence-transformers) | 文本向量化 |
+| 文件解析 | PyMuPDF, python-docx, openpyxl, pytesseract | 多格式文档支持 |
+| 容器化 | Docker (file-parser:latest) | 隔离执行环境 |
+
+#### 数据流
+
+**上传流程**: 文件 -> 文本提取 -> 分块（500字符，50字符重叠，句子边界智能分割） -> 向量化 -> 存入 ChromaDB
+
+**查询流程**: 问题文本 -> 向量化 -> 余弦相似度匹配 -> 返回 top_k 结果（含分数和来源元数据）
+
+#### ChromaDB 存储结构
+
+```
+Collection: "rag_documents"
+├── Metadata: {"hnsw:space": "cosine"}
+└── Items:
+    ├── IDs: "{document_id}_chunk_{index}"
+    ├── Documents: 文本块内容
+    └── Metadatas: document_id, source_name, document_type, chunk_index, total_chunks, created_at
+```
+
+#### 关键路由
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/rag/health` | 健康检查 |
+| POST | `/rag/init` | 初始化并导入预置数据 |
+| POST | `/rag/reset` | 重置为预置数据 |
+| POST | `/rag/upload` | 上传文件（自动解析、分块、向量化） |
+| POST | `/rag/ingest` | 直接输入文本 |
+| POST | `/rag/query` | 向量查询 `{query, top_k, score_threshold}` |
+| GET | `/rag/documents` | 列出所有文档 |
+| DELETE | `/rag/documents/{id}` | 删除文档 |
+
+预置测试数据位于 `backend/docker/preset-data/`，包含正常政策文档、投毒文档、敏感数据和越狱文档。
+
+---
+
+### 子系统 3: MCP 服务
+
+MCP (Model Context Protocol) 为 LLM Agent 提供外部工具调用能力，支持 14 个模拟/真实 Server。
+
+#### MCP Server 列表
+
+| Server ID | 名称 | 工具数 | 说明 |
+|-----------|------|--------|------|
+| `filesystem` | Filesystem | 4 | 本地文件系统读写 |
+| `email` | Email | 2 | SMTP 邮件发送 |
+| `email_receive` | Email (Receive) | 3 | IMAP 邮件接收 |
+| `payment` | Payment | 3 | Stripe 支付网关 |
+| `notion` | Notion | 4 | Notion 文档管理 |
+| `github` | GitHub | 5 | GitHub 仓库操作 |
+| `database` | Database | 3 | SQL 数据库查询 |
+| `http` | HTTP | 2 | HTTP 请求代理 |
+| `slack` | Slack | 3 | Slack 消息通知 |
+| `calendar` | Calendar | 4 | 日历事件管理 |
+| `storage` | Storage | 4 | 对象存储服务 |
+| `memory` | Memory | 3 | 会话记忆存储 |
+| `browser_chrome` | Chrome Browser | 2 | Chrome 浏览器数据读取 |
+| `browser_firefox` | Firefox Browser | 2 | Firefox 浏览器数据读取 |
+
+#### 扩展新 MCP Server
+
+1. **前端**: `src/config.js` 中的 `mcpServers.available` 添加服务定义（id, name, fields, tools）
+2. **后端枚举**: `backend/app/models/schemas.py` 的 `McpServerType` 添加枚举值
+3. **后端服务**: `backend/app/services/` 下新建 `mcp_xxx.py` 实现工具逻辑
+4. **路由分发**: `backend/app/routers/mcp.py` 的 `test_mcp_connection` 和 `execute_mcp_tool` 添加分支
+
+#### 关键路由
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/mcp/health` | 健康检查 |
+| GET | `/mcp/servers` | 列出所有可用 MCP Server |
+| POST | `/mcp/test` | 测试 Server 连接 `{server_id, config}` |
+| POST | `/mcp/tool` | 执行 MCP 工具 `{server_id, tool_name, params, config}` |
+| GET | `/mcp/status/{server_id}` | 获取 Server 状态 |
+
+---
+
+### 子系统 4: 文件解析
+
+独立的文件解析服务，用于对比不同解析器提取隐藏内容的能力差异。这是间接注入攻击演示的核心能力。
+
+#### 解析器分类
+
+**PDF 解析器**:
+
+| 解析器 ID | 底层库 | 提取隐藏内容 | 说明 |
+|-----------|--------|:------------:|------|
+| `pymupdf` | PyMuPDF (fitz) | Yes | 提取所有文字层，包括白色/透明文字 |
+| `pdfplumber` | pdfplumber | Yes | 结构化文本 + 表格提取 |
+| `pdf2image_ocr` | pdf2image + pytesseract | No | 转图片后 OCR，仅识别可见内容 |
+
+**DOCX 解析器**:
+
+| 解析器 ID | 底层库 | 提取隐藏内容 | 说明 |
+|-----------|--------|:------------:|------|
+| `python-docx` | python-docx | Yes | 提取所有段落和表格，包括隐藏文本 |
+| `mammoth` | mammoth | No | 转换为 HTML/纯文本，格式简化 |
+
+**XLSX 解析器**:
+
+| 解析器 ID | 底层库 | 提取隐藏内容 | 说明 |
+|-----------|--------|:------------:|------|
+| `openpyxl` | openpyxl | No | 仅读取可见工作表 |
+| `openpyxl_hidden` | openpyxl | Yes | 读取所有工作表，包括 hidden/veryHidden |
+
+**图片解析器**:
+
+| 解析器 ID | 底层库 | 提取隐藏内容 | 说明 |
+|-----------|--------|:------------:|------|
+| `exiftool` | exiftool CLI | Yes | 提取 EXIF、XMP、IPTC 元数据 |
+| `pytesseract` | pytesseract | No | OCR 文字识别，仅可见内容 |
+| `pillow_meta` | Pillow | Yes | 提取图片注释、描述字段 |
+
+#### 容器集成
+
+解析服务运行在 `file-parser:latest` Docker 容器内，通过 CLI 调用：
+
+1. `ContainerParser` 检查/创建容器
+2. 将文件写入容器 `/workspace/`
+3. 执行 `python /app/file_parser_cli.py <filename> <parser_ids>`
+4. 解析 JSON 输出并返回
+
+沙箱的 `parse_file` 工具通过 HTTP 调用 `/file-parser/parse/base64` 端点，实现松耦合。
+
+#### 关键路由
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/file-parser/health` | 健康检查（含各解析器可用状态） |
+| GET | `/file-parser/parsers` | 获取可用解析器（按文件类型分组） |
+| POST | `/file-parser/parse` | 解析文件（multipart/form-data，返回结构化结果） |
+| POST | `/file-parser/parse/text` | 解析文件（返回合并纯文本） |
+| POST | `/file-parser/parse/base64` | 解析 base64 编码文件（供沙箱 parse_file 工具调用） |
 
 ---
 

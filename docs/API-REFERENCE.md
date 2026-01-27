@@ -34,115 +34,124 @@
 | 200 | 成功 |
 | 400 | 请求参数错误 |
 | 404 | 资源不存在 |
+| 409 | 资源冲突（如 tag 已被使用） |
+| 413 | 请求体过大（如文件超出大小限制） |
 | 500 | 服务器内部错误 |
 
 ---
 
 ## Sandbox API
 
-### 创建/获取容器
+多终端沙箱管理 API。每个终端对应一个独立的 Docker 容器，通过 `tag` 标识。
 
-**POST** `/sandbox/container`
+### 终端管理
 
-创建新容器或获取现有容器。
+#### 创建终端
+
+**POST** `/sandbox/terminals`
+
+创建一个新的终端容器。
 
 **请求体**:
 ```json
 {
-  "image": "python:3.11-slim",
-  "session_id": "optional-session-id"
+  "tag": "my-terminal",
+  "image": "terminal-python:3.11"
 }
 ```
 
 | 字段 | 类型 | 必需 | 说明 |
 |------|------|------|------|
-| `image` | `string` | 否 | 容器镜像，默认 `python:3.11-slim` |
-| `session_id` | `string` | 否 | 会话ID，不提供则自动生成 |
+| `tag` | `string` | 是 | 终端标识，用于后续操作 |
+| `image` | `string` | 否 | 容器镜像，默认 `terminal-python:3.11` |
 
 **可选镜像**:
-- `python:3.11-slim`
-- `ubuntu:22.04`
-- `node:20-slim`
-- `file-parser:latest`
+- `terminal-python:3.11`
+- `terminal-ubuntu:22.04`
+- `terminal-node:20`
 
 **响应**:
 ```json
 {
+  "tag": "my-terminal",
   "session_id": "abc12345",
   "container_id": "d4e5f6g7h8i9",
-  "image": "python:3.11-slim",
+  "image": "terminal-python:3.11",
   "status": "running",
-  "created_at": "2024-01-21T10:30:00.000Z"
+  "created_at": "2026-01-21T10:30:00.000Z",
+  "mount_path": "/data/terminals/my-terminal",
+  "size_bytes": null
+}
+```
+
+**错误**:
+- `400`: tag 格式无效
+- `409`: tag 已被使用
+
+---
+
+#### 列出所有终端
+
+**GET** `/sandbox/terminals`
+
+**响应**:
+```json
+{
+  "terminals": [
+    {
+      "tag": "my-terminal",
+      "session_id": "abc12345",
+      "container_id": "d4e5f6g7h8i9",
+      "image": "terminal-python:3.11",
+      "status": "running",
+      "created_at": "2026-01-21T10:30:00.000Z",
+      "mount_path": "/data/terminals/my-terminal",
+      "size_bytes": 102400
+    }
+  ],
+  "count": 1
 }
 ```
 
 ---
 
-### 获取容器状态
+#### 获取终端状态
 
-**GET** `/sandbox/container/{session_id}`
+**GET** `/sandbox/terminals/{tag}`
 
-**响应**:
-```json
-{
-  "session_id": "abc12345",
-  "container_id": "d4e5f6g7h8i9",
-  "image": "python:3.11-slim",
-  "status": "running",
-  "created_at": "2024-01-21T10:30:00.000Z"
-}
-```
+**响应**: 同创建终端的响应格式（`TerminalInfo`）。
 
-**status 可选值**:
-- `running` - 运行中
-- `stopped` - 已停止
-- `not_found` - 不存在
+**错误**:
+- `404`: 终端不存在
 
 ---
 
-### 销毁容器
+#### 销毁终端
 
-**DELETE** `/sandbox/container/{session_id}`
+**DELETE** `/sandbox/terminals/{tag}`
 
 **响应**:
 ```json
 {
   "success": true,
-  "message": "Session abc12345 destroyed"
+  "message": "终端 'my-terminal' 已销毁"
 }
 ```
 
----
-
-### 列出所有会话
-
-**GET** `/sandbox/sessions`
-
-**响应**:
-```json
-[
-  {
-    "session_id": "abc12345",
-    "container_id": "d4e5f6g7h8i9",
-    "image": "python:3.11-slim",
-    "status": "running",
-    "created_at": "2024-01-21T10:30:00.000Z"
-  }
-]
-```
+**错误**:
+- `404`: 终端不存在
 
 ---
 
-### 执行工具
+### 工具执行
 
-**POST** `/sandbox/tool`
+#### 在终端中执行工具
 
-在沙箱中执行工具。
+**POST** `/sandbox/terminals/{tag}/tool`
 
 **请求体**:
 ```json
 {
-  "session_id": "abc12345",
   "tool": "read_file",
   "params": {
     "path": "/workspace/test.txt"
@@ -152,8 +161,7 @@
 
 | 字段 | 类型 | 必需 | 说明 |
 |------|------|------|------|
-| `session_id` | `string` | 是 | 会话ID |
-| `tool` | `string` | 是 | 工具名称 |
+| `tool` | `string` | 是 | 工具名称（ToolType 枚举值） |
 | `params` | `object` | 是 | 工具参数 |
 
 **工具及参数**:
@@ -181,9 +189,244 @@
 }
 ```
 
+**错误**:
+- `404`: 终端不存在
+- `400`: 容器未运行
+
 ---
 
-### WebSocket 日志流
+### 文件操作
+
+#### 获取文件列表
+
+**GET** `/sandbox/terminals/{tag}/files`
+
+| 参数 | 类型 | 位置 | 默认 | 说明 |
+|------|------|------|------|------|
+| `path` | `string` | query | `/workspace` | 目录路径 |
+| `recursive` | `boolean` | query | `false` | 是否递归列出 |
+
+**响应**:
+```json
+{
+  "path": "/workspace",
+  "entries": [
+    {
+      "name": "test.txt",
+      "type": "file",
+      "size": 1024,
+      "modified": "2026-01-21T10:30:00"
+    }
+  ],
+  "total": 1
+}
+```
+
+**错误**:
+- `404`: 终端不存在
+- `400`: 容器未运行
+
+---
+
+#### 上传文件
+
+**POST** `/sandbox/terminals/{tag}/files`
+
+**请求**: `multipart/form-data`
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `file` | `file` | 是 | 要上传的文件 |
+| `path` | `string` | 否 | 目标目录路径，默认 `/workspace` |
+
+**请求头** (可选):
+
+| Header | 说明 |
+|--------|------|
+| `X-Source` | 上传来源标识（如 `ui`、`api`） |
+
+**响应**:
+```json
+{
+  "success": true,
+  "path": "/workspace/test.txt",
+  "size": 1024,
+  "source": "api"
+}
+```
+
+**错误**:
+- `400`: 路径包含 `..` 或不在允许路径范围内
+- `404`: 终端不存在
+- `413`: 文件过大
+
+---
+
+#### 下载文件
+
+**GET** `/sandbox/terminals/{tag}/files/download`
+
+| 参数 | 类型 | 位置 | 必需 | 说明 |
+|------|------|------|------|------|
+| `path` | `string` | query | 是 | 文件或目录路径 |
+
+单文件返回 `application/octet-stream`；目录返回 `application/x-tar` 归档。
+
+**错误**:
+- `400`: 路径包含 `..`
+- `404`: 终端不存在
+
+---
+
+### 终端锁
+
+提供终端独占锁机制，防止多用户同时操作同一终端。
+
+#### 获取锁
+
+**POST** `/sandbox/terminals/{tag}/lock`
+
+**请求体**:
+```json
+{
+  "user_id": "uuid-string"
+}
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "holder": "uuid-string",
+  "holder_ip": "192.168.1.1",
+  "message": "锁获取成功"
+}
+```
+
+**错误**:
+- `404`: 终端不存在
+
+---
+
+#### 释放锁
+
+**DELETE** `/sandbox/terminals/{tag}/lock`
+
+| 参数 | 类型 | 位置 | 必需 | 说明 |
+|------|------|------|------|------|
+| `user_id` | `string` | query | 是 | 用户标识 |
+
+**响应**:
+```json
+{
+  "success": true,
+  "message": "锁已释放"
+}
+```
+
+---
+
+#### 锁心跳续期
+
+**POST** `/sandbox/terminals/{tag}/lock/heartbeat`
+
+前端应每 30 秒调用一次以保持锁有效。
+
+**请求体**:
+```json
+{
+  "user_id": "uuid-string"
+}
+```
+
+---
+
+#### 查询锁状态
+
+**GET** `/sandbox/terminals/{tag}/lock`
+
+**响应**:
+```json
+{
+  "locked": true,
+  "holder": "uuid-string",
+  "holder_ip": "192.168.1.1",
+  "acquired_at": "2026-01-21T10:30:00.000Z",
+  "expired": false,
+  "is_same_ip": true
+}
+```
+
+`is_same_ip` 字段通过比对请求者 IP 与持锁者 IP 自动计算。
+
+---
+
+### 已删除终端管理
+
+#### 列出已删除终端
+
+**GET** `/sandbox/deleted-terminals`
+
+**响应**:
+```json
+{
+  "terminals": [
+    {
+      "original_tag": "old-terminal",
+      "deleted_at": "2026-01-21T10:30:00.000Z",
+      "path": "/data/deleted/old-terminal-20260121",
+      "size_bytes": 51200
+    }
+  ],
+  "count": 1,
+  "total_size_bytes": 51200
+}
+```
+
+---
+
+#### 清理单个已删除终端
+
+**DELETE** `/sandbox/deleted-terminals/{name}`
+
+`name` 为已删除终端的目录名（格式: `{tag}-{timestamp}`）。
+
+**响应**:
+```json
+{
+  "cleaned_count": 1,
+  "freed_bytes": 51200,
+  "errors": []
+}
+```
+
+---
+
+#### 清理所有已删除终端
+
+**DELETE** `/sandbox/deleted-terminals`
+
+| 参数 | 类型 | 位置 | 必需 | 说明 |
+|------|------|------|------|------|
+| `confirm` | `boolean` | query | 是 | 必须为 `true` 才会执行 |
+
+**响应**:
+```json
+{
+  "cleaned_count": 3,
+  "freed_bytes": 153600,
+  "errors": []
+}
+```
+
+**错误**:
+- `400`: 未传入 `confirm=true`
+
+---
+
+### WebSocket
+
+#### 实时日志流
 
 **WS** `/sandbox/logs/{session_id}`
 
@@ -195,15 +438,328 @@
   "type": "tool",
   "content": "Executing: ls -la",
   "status": "normal",
-  "timestamp": "2024-01-21T10:30:00.000Z",
+  "timestamp": "2026-01-21T10:30:00.000Z",
   "details": {}
 }
 ```
 
-**心跳消息**:
+**心跳消息**（每 30 秒）:
 ```json
 {"type": "heartbeat"}
 ```
+
+---
+
+#### 文件变更监控
+
+**WS** `/sandbox/terminals/{tag}/watch`
+
+| 参数 | 类型 | 位置 | 默认 | 说明 |
+|------|------|------|------|------|
+| `path` | `string` | query | `/workspace` | 监控路径 |
+
+使用 `inotifywait` 监控文件变化，通过 WebSocket 推送事件。
+
+**连接成功消息**:
+```json
+{
+  "type": "watching",
+  "path": "/workspace",
+  "timestamp": "2026-01-21T10:30:00.000Z"
+}
+```
+
+**文件变更事件**: 由 inotifywait 产生的事件数据。
+
+**心跳消息**（每 30 秒）:
+```json
+{"type": "heartbeat"}
+```
+
+**关闭码**:
+- `4004`: 终端不存在
+- `4000`: 终端未运行
+
+---
+
+### 兼容旧接口
+
+#### 执行工具（Legacy）
+
+**POST** `/sandbox/tool`
+
+通过 `session_id` 查找容器并执行工具。新代码应使用 `/sandbox/terminals/{tag}/tool`。
+
+**请求体**:
+```json
+{
+  "session_id": "abc12345",
+  "tool": "read_file",
+  "params": {
+    "path": "/workspace/test.txt"
+  }
+}
+```
+
+**响应**: 同 `/sandbox/terminals/{tag}/tool`。
+
+---
+
+## Datasets API
+
+测试数据集管理 API。
+
+### 列出数据集
+
+**GET** `/datasets`
+
+**响应**:
+```json
+[
+  {
+    "id": "ds_abc123",
+    "savedAt": "2026-01-21T10:30:00.000Z",
+    "schemaVersion": "2.1.0",
+    "name": "基础安全测试集",
+    "description": "覆盖四大攻击类型的基础测试用例",
+    "caseCount": 20,
+    "totalSize": 10240,
+    "capabilities": ["F1", "F2"],
+    "source": {
+      "type": "manual",
+      "reference": null,
+      "url": null
+    },
+    "tags": ["基础", "安全"]
+  }
+]
+```
+
+---
+
+### 创建数据集
+
+**POST** `/datasets`
+
+**请求体**:
+```json
+{
+  "meta": {
+    "schemaVersion": "2.1.0",
+    "name": "数据集名称",
+    "description": "数据集描述",
+    "caseCount": 0,
+    "totalSize": 0,
+    "capabilities": ["F1"],
+    "source": {
+      "type": "manual",
+      "reference": null,
+      "url": null
+    },
+    "tags": ["标签"]
+  },
+  "cases": []
+}
+```
+
+**响应**: 返回完整数据集（含生成的 `id` 和 `savedAt`）。
+
+---
+
+### 获取数据集详情
+
+**GET** `/datasets/{dataset_id}`
+
+**响应**:
+```json
+{
+  "id": "ds_abc123",
+  "savedAt": "2026-01-21T10:30:00.000Z",
+  "meta": {
+    "schemaVersion": "2.1.0",
+    "name": "数据集名称",
+    "description": "...",
+    "caseCount": 5,
+    "totalSize": 2048,
+    "capabilities": ["F1"],
+    "source": {...},
+    "tags": [...]
+  },
+  "cases": [...]
+}
+```
+
+**错误**:
+- `404`: 数据集不存在
+
+---
+
+### 更新数据集
+
+**PUT** `/datasets/{dataset_id}`
+
+**请求体**（所有字段可选）:
+```json
+{
+  "name": "新名称",
+  "description": "新描述",
+  "tags": ["新标签"],
+  "capabilities": ["F1", "F3"],
+  "source": {
+    "type": "paper",
+    "reference": "论文引用",
+    "url": "https://example.com"
+  }
+}
+```
+
+**响应**: 返回更新后的完整数据集。
+
+**错误**:
+- `404`: 数据集不存在
+
+---
+
+### 删除数据集
+
+**DELETE** `/datasets/{dataset_id}`
+
+**响应**:
+```json
+{
+  "success": true,
+  "message": "Dataset ds_abc123 deleted"
+}
+```
+
+**错误**:
+- `404`: 数据集不存在
+
+---
+
+### 数据集用例管理
+
+#### 列出用例
+
+**GET** `/datasets/{dataset_id}/cases`
+
+**响应**: 返回用例数组。
+
+**错误**:
+- `404`: 数据集不存在
+
+---
+
+#### 添加用例
+
+**POST** `/datasets/{dataset_id}/cases`
+
+**请求体**:
+```json
+{
+  "id": "case-001",
+  "name": "用例名称",
+  "capability": "F1",
+  "input": {
+    "systemPrompt": "...",
+    "payload": "..."
+  },
+  "criteria": {
+    "expectedBehavior": "期望行为",
+    "riskLevelConditions": {
+      "high": "高风险条件",
+      "medium": "中风险条件",
+      "low": "低风险条件",
+      "safe": "安全条件"
+    }
+  }
+}
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "caseId": "case-001",
+  "caseCount": 6
+}
+```
+
+**错误**:
+- `404`: 数据集不存在
+
+---
+
+#### 获取单个用例
+
+**GET** `/datasets/{dataset_id}/cases/{case_id}`
+
+**响应**: 返回用例对象。
+
+**错误**:
+- `404`: 用例不存在
+
+---
+
+#### 删除用例
+
+**DELETE** `/datasets/{dataset_id}/cases/{case_id}`
+
+**响应**:
+```json
+{
+  "success": true,
+  "caseCount": 4
+}
+```
+
+**错误**:
+- `404`: 数据集或用例不存在
+
+---
+
+## Report Templates API
+
+报告模板管理 API。模板存储在 `backend/data/report-templates/` 目录。
+
+### 列出模板
+
+**GET** `/report-templates`
+
+**响应**:
+```json
+[
+  {
+    "id": "default",
+    "name": "默认报告模板",
+    "default": true
+  },
+  {
+    "id": "detailed",
+    "name": "详细报告模板",
+    "default": false
+  }
+]
+```
+
+---
+
+### 获取模板内容
+
+**GET** `/report-templates/{template_id}`
+
+**响应**:
+```json
+{
+  "id": "default",
+  "name": "默认报告模板",
+  "content": "# 测试报告\n\n## 概述\n...",
+  "default": true
+}
+```
+
+**错误**:
+- `404`: 模板不存在或模板文件不存在
 
 ---
 
@@ -224,6 +780,8 @@
   "chunk_count": 45
 }
 ```
+
+`status` 可选值: `healthy`、`degraded`、`unhealthy`
 
 ---
 
@@ -374,7 +932,7 @@
       "source_name": "report.pdf",
       "document_type": "pdf",
       "chunk_count": 12,
-      "created_at": "2024-01-21T10:30:00.000Z"
+      "created_at": "2026-01-21T10:30:00.000Z"
     }
   ],
   "total_count": 5
@@ -502,7 +1060,7 @@ curl -X POST http://localhost:8000/file-parser/parse \
 
 **POST** `/file-parser/parse/text`
 
-与 `/file-parser/parse` 相同，但返回合并的纯文本。
+与 `/file-parser/parse` 相同的请求格式，但返回合并的纯文本。
 
 **响应**:
 ```json
@@ -517,9 +1075,44 @@ curl -X POST http://localhost:8000/file-parser/parse \
 
 ---
 
+### 解析 Base64 内容
+
+**POST** `/file-parser/parse/base64`
+
+接收 Base64 编码的文件内容进行解析。供智能体工具调用，如从邮件附件下载后解析。
+
+**请求体**:
+```json
+{
+  "content_base64": "JVBERi0xLjQK...",
+  "filename": "document.pdf",
+  "parsers": ["pymupdf", "pdfplumber"]
+}
+```
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `content_base64` | `string` | 是 | 文件内容的 Base64 编码 |
+| `filename` | `string` | 是 | 文件名（用于确定文件类型） |
+| `parsers` | `string[]` | 是 | 解析器 ID 列表 |
+
+**响应**:
+```json
+{
+  "filename": "document.pdf",
+  "file_type": "pdf",
+  "file_size": 102400,
+  "parsers_used": ["pymupdf"],
+  "text": "--- pymupdf 解析结果 ---\n[第1页]\n文件内容...",
+  "extracts_hidden": false
+}
+```
+
+---
+
 ## MCP API
 
-MCP Server 工具调用服务。
+MCP Server 工具调用服务。支持 14 种 MCP Server。
 
 ### MCP 健康检查
 
@@ -529,18 +1122,7 @@ MCP Server 工具调用服务。
 ```json
 {
   "status": "healthy",
-  "mode": "container",
-  "container_available": true,
-  "parsers": {
-    "pymupdf": true,
-    "pdfplumber": true,
-    "python-docx": true,
-    "mammoth": true,
-    "openpyxl": true,
-    "pytesseract": true,
-    "pillow": true,
-    "exiftool": true
-  }
+  "servers_available": 14
 }
 ```
 
@@ -568,6 +1150,61 @@ MCP Server 工具调用服务。
       "id": "payment",
       "name": "Payment",
       "tools": ["payment_create_order", "payment_query_status", "payment_refund"]
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "tools": ["notion_read_page", "notion_search", "notion_list_databases", "notion_create_page", "notion_update_page", "notion_append_block"]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "tools": ["github_read_file", "github_list_repos", "github_search_code", "github_create_issue", "github_list_commits", "github_create_pr_comment", "github_list_secrets"]
+    },
+    {
+      "id": "database",
+      "name": "Database",
+      "tools": ["db_query", "db_execute", "db_list_tables", "db_describe_table"]
+    },
+    {
+      "id": "http",
+      "name": "HTTP/Fetch",
+      "tools": ["http_fetch", "http_post", "http_download"]
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "tools": ["slack_send_message", "slack_list_channels", "slack_search_messages", "slack_get_user_info"]
+    },
+    {
+      "id": "calendar",
+      "name": "Calendar",
+      "tools": ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"]
+    },
+    {
+      "id": "storage",
+      "name": "Storage",
+      "tools": ["storage_list_buckets", "storage_list_objects", "storage_download_url", "storage_upload"]
+    },
+    {
+      "id": "memory",
+      "name": "Memory",
+      "tools": ["memory_store", "memory_recall", "memory_search", "memory_list", "memory_delete"]
+    },
+    {
+      "id": "email_receive",
+      "name": "Email (Receive)",
+      "tools": ["email_list_inbox", "email_receive", "email_download_attachment"]
+    },
+    {
+      "id": "browser_chrome",
+      "name": "Chrome Browser",
+      "tools": ["chrome_get_cookies", "chrome_get_history"]
+    },
+    {
+      "id": "browser_firefox",
+      "name": "Firefox Browser",
+      "tools": ["firefox_get_cookies", "firefox_get_history"]
     }
   ]
 }
@@ -614,9 +1251,18 @@ MCP Server 工具调用服务。
   },
   "config": {
     "basePath": "/tmp/test"
-  }
+  },
+  "sandbox_session_id": "optional-session-id"
 }
 ```
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `server_id` | `string` | 是 | MCP Server ID |
+| `tool_name` | `string` | 是 | 工具名称 |
+| `params` | `object` | 是 | 工具参数 |
+| `config` | `object` | 否 | Server 配置 |
+| `sandbox_session_id` | `string` | 否 | 关联的沙箱 session（某些工具需要） |
 
 **响应**:
 ```json
@@ -656,7 +1302,7 @@ MCP Server 工具调用服务。
 [
   {
     "id": "case_abc123",
-    "savedAt": "2024-01-21T10:30:00.000Z",
+    "savedAt": "2026-01-21T10:30:00.000Z",
     "name": "PDF注入测试",
     "sourceScenario": {
       "name": "间接注入场景",
@@ -717,7 +1363,7 @@ MCP Server 工具调用服务。
 ```json
 {
   "id": "case_abc123",
-  "savedAt": "2024-01-21T10:30:00.000Z",
+  "savedAt": "2026-01-21T10:30:00.000Z",
   "name": "PDF注入测试",
   "sourceScenario": {...},
   "testConfig": {...},
@@ -730,7 +1376,7 @@ MCP Server 工具调用服务。
   "systemPrompt": "...",
   "tags": ["pdf", "injection"],
   "notes": "备注信息",
-  "updatedAt": "2024-01-21T11:00:00.000Z"
+  "updatedAt": "2026-01-21T11:00:00.000Z"
 }
 ```
 
@@ -900,6 +1546,134 @@ MCP Server 工具调用服务。
 
 ---
 
+### 删除单个测试用例
+
+**DELETE** `/test-results/{result_id}/cases/{case_index}`
+
+从测试报告中删除指定索引的用例。
+
+**响应**:
+```json
+{
+  "success": true,
+  "data": {...}
+}
+```
+
+---
+
+### 更新用例评审
+
+**PATCH** `/test-results/{result_id}/cases/{case_index}/review`
+
+**请求体**:
+```json
+{
+  "type": "human",
+  "riskLevel": "high",
+  "reason": "该攻击成功获取了敏感数据",
+  "notes": "需要关注",
+  "reviewer": "张三"
+}
+```
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `type` | `string` | 否 | `llm` 或 `human`，默认 `human` |
+| `riskLevel` | `string` | 是 | `high`/`medium`/`low`/`safe`/`pending` |
+| `reason` | `string` | 是 | 评审理由 |
+| `notes` | `string` | 否 | 备注 |
+| `reviewer` | `string` | 否 | 评审人 |
+
+**响应**:
+```json
+{
+  "success": true,
+  "data": {...}
+}
+```
+
+---
+
+### 更新文本报告
+
+**PATCH** `/test-results/{result_id}/report`
+
+**请求体**:
+```json
+{
+  "content": "# 测试报告\n\n## 概述\n...",
+  "editedBy": "human"
+}
+```
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `content` | `string` | 是 | 报告内容（Markdown） |
+| `editedBy` | `string` | 否 | `llm` 或 `human`，默认 `human` |
+
+**响应**:
+```json
+{
+  "success": true,
+  "data": {...}
+}
+```
+
+---
+
+### 生成报告（LLM）
+
+**POST** `/test-results/{result_id}/report/generate`
+
+请求 LLM 生成测试报告。返回 prompt 和数据，由前端调用 LLM API。
+
+**请求体**:
+```json
+{
+  "prompt": "请根据以下测试结果生成报告...",
+  "model": "glm-4-plus"
+}
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "prompt": "请根据以下测试结果生成报告...",
+  "model": "glm-4-plus",
+  "resultData": {...}
+}
+```
+
+---
+
+### 生成用例评审（LLM）
+
+**POST** `/test-results/{result_id}/cases/{case_index}/review/generate`
+
+请求 LLM 生成单个用例的评审。返回 prompt 和数据，由前端调用 LLM API。
+
+**请求体**:
+```json
+{
+  "prompt": "请评估以下攻击测试...",
+  "model": "glm-4-flash"
+}
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "prompt": "请评估以下攻击测试...",
+  "model": "glm-4-flash",
+  "caseData": {...}
+}
+```
+
+---
+
 ## 健康检查
 
 ### 根路径
@@ -932,8 +1706,10 @@ MCP Server 工具调用服务。
 
 | HTTP 状态码 | 场景 |
 |-------------|------|
-| 400 | 请求参数错误、不支持的文件类型、JSON 解析失败 |
-| 404 | 会话/容器/文档/用例不存在 |
+| 400 | 请求参数错误、不支持的文件类型、JSON 解析失败、路径安全检查失败 |
+| 404 | 终端/文档/用例/数据集/模板不存在 |
+| 409 | 终端 tag 已被使用 |
+| 413 | 上传文件超出大小限制 |
 | 500 | 服务器内部错误、容器操作失败、解析失败 |
 
 **错误响应格式**:
