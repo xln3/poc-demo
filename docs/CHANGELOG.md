@@ -75,6 +75,29 @@
 
 ## 变更记录
 
+### [1.6.2] - 2026-01-27
+
+#### Fixed
+- **部署版本报告模板缺失**
+  - **问题原因**: `Dockerfile.backend` 只复制了 `backend/app`，未复制 `backend/data`（报告模板目录）
+  - **修复方案**: 添加 `COPY backend/data ./data`
+  - **修改文件**: `Dockerfile.backend`
+
+- **部署版本数据不持久化**
+  - **问题原因**: `docker-compose.yml` 挂载路径 `/app/data/saved-cases` 与实际数据存储路径 `/poc-data` 不匹配
+  - **影响**: 重新部署后，数据集、测试结果、保存的案例全部丢失
+  - **修复方案**: 使用 Named Volume 挂载到正确路径 `poc-demo-data:/poc-data`
+  - **修改文件**: `docker-compose.yml`
+
+#### Docs
+- **更新 BACKEND.md** - 新增"数据持久化"章节
+  - 问题分析：开发版 vs 部署版数据路径差异
+  - 技术选型：Named Volume vs Bind Mount 对比
+  - 解决方案：docker-compose.yml 配置示例
+  - 数据管理：备份、恢复、删除命令
+
+---
+
 ### [1.6.1] - 2026-01-27
 
 #### Fixed

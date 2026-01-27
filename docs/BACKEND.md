@@ -807,6 +807,101 @@ app.add_middleware(
 
 ---
 
+## 数据持久化
+
+### 问题
+
+部署版本重新构建后，用户导入的数据集、批量测试结果、保存的案例全部丢失。
+
+### 原因分析
+
+运行时数据存储路径由 `backend/app/config.py` 配置：
+
+```python
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+DATA_ROOT = Path(os.environ.get('POC_DATA_ROOT', str(PROJECT_ROOT.parent / 'poc-data')))
+
+DATA_PATHS = {
+    'datasets': DATA_ROOT / 'datasets',
+    'saved_cases': DATA_ROOT / 'saved-cases',
+    'test_results': DATA_ROOT / 'test-results',
+}
+```
+
+| 环境 | `DATA_ROOT` 解析结果 |
+|------|---------------------|
+| 开发版 | `poc-demo/../poc-data`（与项目目录同级） |
+| 部署版（容器内） | `/poc-data` |
+
+如果不挂载 volume，容器内的 `/poc-data` 数据会随容器重建丢失。
+
+### 技术选型：Named Volume vs Bind Mount
+
+| 特性 | Named Volume | Bind Mount |
+|------|--------------|------------|
+| **语法** | `volume-name:/path` | `./host-path:/path` |
+| **存储位置** | Docker 管理 (`/var/lib/docker/volumes/`) | 指定的宿主机目录 |
+| **可见性** | 需要 `docker volume` 命令查看 | 直接在宿主机目录查看 |
+| **备份** | `docker cp` 或 `docker run --volumes-from` | 直接 `cp`/`rsync` |
+| **权限** | Docker 自动处理 | 可能有 uid/gid 不匹配问题 |
+| **性能 (Linux)** | 相同 | 相同 |
+| **性能 (Mac/Win)** | 更快 | 较慢（跨文件系统） |
+| **移植性** | 更好（不依赖宿主机目录结构） | 需确保目录存在 |
+| **Git 追踪** | 不涉及 | 需要 `.gitignore` |
+| **生命周期** | 独立于容器，`docker-compose down` 不删除 | 与宿主机目录相同 |
+
+**选择：Named Volume**
+
+理由：
+1. 部署环境下数据与代码完全隔离，更干净
+2. 不需要预先创建目录，Docker 自动管理
+3. `docker-compose down` 不会删除数据（需 `-v` 显式删除）
+4. 跨平台性能一致
+
+### 解决方案
+
+`docker-compose.yml` 配置：
+
+```yaml
+services:
+  backend:
+    volumes:
+      - poc-demo-data:/poc-data  # 持久化运行时数据
+
+volumes:
+  poc-demo-data:
+    name: poc-demo-data
+```
+
+### 数据管理命令
+
+```bash
+# 查看 volume 详情
+docker volume inspect poc-demo-data
+
+# 备份数据
+docker run --rm -v poc-demo-data:/data -v $(pwd):/backup alpine \
+  tar czf /backup/poc-data-backup.tar.gz -C /data .
+
+# 恢复数据
+docker run --rm -v poc-demo-data:/data -v $(pwd):/backup alpine \
+  tar xzf /backup/poc-data-backup.tar.gz -C /data
+
+# 删除数据（谨慎）
+docker volume rm poc-demo-data
+```
+
+### 注意事项
+
+| 操作 | 数据是否保留 |
+|------|-------------|
+| `docker-compose up --build` | ✅ 保留 |
+| `docker-compose down` | ✅ 保留 |
+| `docker-compose down -v` | ❌ 删除 |
+| `docker volume rm poc-demo-data` | ❌ 删除 |
+
+---
+
 ## 数据模型 (schemas.py)
 
 ### 枚举类型

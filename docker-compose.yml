@@ -18,8 +18,8 @@ services:
     volumes:
       # 挂载 Docker socket，让后端能操作主机的 Docker
       - /var/run/docker.sock:/var/run/docker.sock
-      # 持久化案例数据
-      - poc-demo-cases:/app/data/saved-cases
+      # 持久化运行时数据（数据集、测试结果、保存的案例）
+      - poc-demo-data:/poc-data
     environment:
       - PYTHONUNBUFFERED=1
     # 不对外暴露端口，只通过 nginx 访问
@@ -35,5 +35,5 @@ networks:
     name: poc-demo-network
 
 volumes:
-  poc-demo-cases:
-    name: poc-demo-cases
+  poc-demo-data:
+    name: poc-demo-data
