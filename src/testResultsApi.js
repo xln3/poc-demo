@@ -4,7 +4,8 @@
  * 批量测试结果存储 API
  */
 
-const API_BASE = 'http://localhost:8000';
+const BACKEND_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const API_BASE = `http://${BACKEND_HOST}:8000`;
 
 /**
  * 获取所有测试结果列表

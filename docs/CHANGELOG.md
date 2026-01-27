@@ -75,6 +75,19 @@
 
 ## 变更记录
 
+### [1.6.1] - 2026-01-27
+
+#### Fixed
+- **外网部署模式 API 连接失败**
+  - **问题原因**: `datasetApi.js` 和 `testResultsApi.js` 硬编码了 `localhost:8000`，导致从外网访问时浏览器请求 `localhost:8000` 而非部署服务器
+  - **影响**: 数据集列表、测试结果列表、报告模板列表均无法加载
+  - **修复方案**: 使用 `window.location.hostname` 动态获取访问主机名，与 `config.js` 保持一致
+  - **修改文件**:
+    - `src/datasetApi.js` - 第 7 行
+    - `src/testResultsApi.js` - 第 7 行
+
+---
+
 ### [1.6.0] - 2026-01-26
 
 #### Added

@@ -4,7 +4,8 @@
  * 数据集管理 API，支持 v2.0.0 Dataset Schema 格式
  */
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const BACKEND_URL = `http://${BACKEND_HOST}:8000`;
 
 /**
  * 列出所有数据集
