@@ -255,18 +255,21 @@ async def execute_mcp_tool(request: McpToolRequest):
 
 ### ContainerManager (container.py)
 
-Docker 容器生命周期管理。
+Docker 容器生命周期管理。容器运行在隔离网络 `poc-sandbox-isolated`（10.200.0.0/16）中，配合宿主机 iptables 规则阻止访问内网私有 IP 段。
 
 ```python
 class ContainerManager:
     CONTAINER_PREFIX = "poc-sandbox-"
     WORK_DIR = "/workspace"
+    ISOLATED_NETWORK_NAME = "poc-sandbox-isolated"
+    ISOLATED_NETWORK_SUBNET = "10.200.0.0/16"
 
     def __init__(self):
         self.client = docker.from_env()
         self._sessions: Dict[str, str] = {}        # session_id -> container_id
         self._session_images: Dict[str, str] = {}  # session_id -> image
         self._session_created: Dict[str, str] = {} # session_id -> created_at
+        self._network = self._ensure_isolated_network()
 
     def get_or_create_container(self, image: ImageType, session_id: str = None):
         """获取现有容器或创建新容器"""
@@ -288,7 +291,7 @@ class ContainerManager:
             mem_limit="512m",       # 内存限制
             cpu_period=100000,
             cpu_quota=50000,        # 50% CPU
-            network_mode="bridge",
+            network=self.ISOLATED_NETWORK_NAME,
             command="tail -f /dev/null"
         )
 

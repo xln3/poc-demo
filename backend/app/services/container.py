@@ -21,12 +21,40 @@ class ContainerManager:
 
     CONTAINER_PREFIX = "poc-sandbox-"
     WORK_DIR = "/workspace"
+    ISOLATED_NETWORK_NAME = "poc-sandbox-isolated"
+    ISOLATED_NETWORK_SUBNET = "10.200.0.0/16"
 
     def __init__(self):
         self.client = docker.from_env() if DOCKER_AVAILABLE else None
         self._sessions: Dict[str, str] = {}  # session_id -> container_id
         self._session_images: Dict[str, str] = {}  # session_id -> image
         self._session_created: Dict[str, str] = {}  # session_id -> created_at
+        self._network = self._ensure_isolated_network()
+
+    def _ensure_isolated_network(self):
+        """Ensure the isolated Docker network exists, create if not.
+
+        The isolated network restricts container access to internal/private IPs
+        while allowing public internet access. Requires companion iptables rules
+        from setup-sandbox-network.sh on the host to be effective.
+        """
+        if not self.client:
+            return None
+
+        try:
+            network = self.client.networks.get(self.ISOLATED_NETWORK_NAME)
+            return network
+        except docker.errors.NotFound:
+            pass
+
+        ipam_pool = docker.types.IPAMPool(subnet=self.ISOLATED_NETWORK_SUBNET)
+        ipam_config = docker.types.IPAMConfig(pool_configs=[ipam_pool])
+        network = self.client.networks.create(
+            self.ISOLATED_NETWORK_NAME,
+            driver="bridge",
+            ipam=ipam_config,
+        )
+        return network
 
     def is_available(self) -> bool:
         """Check if Docker is available."""
@@ -100,7 +128,7 @@ class ContainerManager:
             mem_limit=mem_limit,  # 使用传入的参数
             cpu_period=100000,
             cpu_quota=50000,  # 50% CPU
-            network_mode="bridge",  # Allow network access
+            network=self.ISOLATED_NETWORK_NAME,  # Isolated network; see setup-sandbox-network.sh
             # Volume mounts for file persistence
             volumes=volumes or {},
             # Keep container alive

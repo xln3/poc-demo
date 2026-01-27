@@ -39,6 +39,16 @@
 
 ## 变更记录
 
+### [1.7.0] - 2026-01-27
+
+#### Security
+
+- 沙箱容器网络隔离：容器从默认 bridge 网络切换到独立子网 `poc-sandbox-isolated`（10.200.0.0/16）
+- 新增 `backend/setup-sandbox-network.sh` iptables 脚本，阻止沙箱容器访问内网私有 IP 段（RFC 1918 + 链路本地/云元数据）
+- `docker-compose.yml` 新增 `poc-sandbox-isolated` 网络定义
+
+---
+
 ### [1.6.2] - 2026-01-27
 
 - 修复部署版本报告模板缺失（Dockerfile 未复制 `backend/data`）

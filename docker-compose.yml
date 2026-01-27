@@ -33,6 +33,14 @@ services:
 networks:
   default:
     name: poc-demo-network
+  # Isolated network for sandbox containers — blocks private IP access.
+  # Companion iptables rules: backend/setup-sandbox-network.sh
+  poc-sandbox-isolated:
+    name: poc-sandbox-isolated
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.200.0.0/16
 
 volumes:
   poc-demo-data:

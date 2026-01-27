@@ -131,8 +131,28 @@ docker compose down
 
 2. `deploy.sh` 第 42-43 行的 URL
 
+## 沙箱网络隔离
+
+沙箱容器运行在独立的 Docker 网络 `poc-sandbox-isolated`（子网 10.200.0.0/16）中。需要在宿主机上配置 iptables 规则，阻止容器访问内网：
+
+```bash
+# 应用规则（需要 root 权限）
+sudo bash backend/setup-sandbox-network.sh
+
+# 移除规则
+sudo bash backend/setup-sandbox-network.sh --remove
+```
+
+规则写入 DOCKER-USER 链，阻止沙箱子网访问 RFC 1918 私有地址和链路本地地址（含云元数据 169.254.169.254），但保留公网访问。
+
+**持久化**：iptables 规则在宿主机重启后丢失，需通过以下方式之一持久化：
+- `apt install iptables-persistent` 并 `netfilter-persistent save`
+- 创建 systemd 服务在启动时运行脚本
+- 加入 `/etc/rc.local`
+
 ## 注意事项
 
 1. **两环境可同时运行**：端口不冲突，互不影响
 2. **代码隔离**：改本地代码不影响已部署的生产环境
 3. **sandbox 镜像**：首次部署需确保 `terminal-python:3.11` 等镜像已构建
+4. **沙箱网络隔离**：首次部署后需运行 `setup-sandbox-network.sh` 配置 iptables 规则
