@@ -1,9 +1,6 @@
 // ============ 配置文件 ============
 // 敏感配置请在 .env 文件中设置，参考 .env.example
 
-// 动态获取后端主机地址（与前端同主机）
-const BACKEND_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-
 export const CONFIG = {
   // 动画配置
   typingSpeed: 18,        // 打字速度(ms/字符)
@@ -17,15 +14,15 @@ export const CONFIG = {
     model: 'mock',
   },
 
-  // RAG API 配置
+  // RAG API 配置（使用相对路径，走 Vite 代理）
   ragApi: {
-    baseUrl: `http://${BACKEND_HOST}:8001`,
+    baseUrl: '/rag',
     enabled: true,
   },
 
-  // Sandbox 配置
+  // Sandbox 配置（使用相对路径，走 Vite 代理）
   sandbox: {
-    baseUrl: `http://${BACKEND_HOST}:8000`,
+    baseUrl: '',  // 空字符串，让 sandbox.js 使用相对路径如 /sandbox
     // 文件传输配置
     transfer: {
       maxFileSize: 100 * 1024 * 1024,  // 100MB
@@ -275,10 +272,10 @@ export const CONFIG = {
     }
   },
 
-  // MCP Server 配置
+  // MCP Server 配置（使用相对路径，走 Vite 代理）
   mcpServers: {
     enabled: false,
-    apiUrl: `http://${BACKEND_HOST}:8000/mcp`,
+    apiUrl: '/mcp',
     available: {
       filesystem: {
         id: 'filesystem',

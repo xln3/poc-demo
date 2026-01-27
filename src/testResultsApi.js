@@ -4,8 +4,8 @@
  * 批量测试结果存储 API
  */
 
-const BACKEND_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const API_BASE = `http://${BACKEND_HOST}:8000`;
+// 使用相对路径，走 Vite 代理（避免外网部署时 8000 端口不开放的问题）
+const API_BASE = '';
 
 /**
  * 获取所有测试结果列表

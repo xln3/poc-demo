@@ -41,6 +41,51 @@ Edit `src/config.js` to modify API settings:
 - `models`: Array of available models for real testing
 - `judgeModel`: Model used for attack success evaluation (default: `glm-4.7`)
 
+## Frontend API Path Configuration (IMPORTANT)
+
+**所有前端到后端的 API 请求必须使用相对路径，通过 Vite 代理转发。**
+
+### 原因
+
+部署环境中，只有 Vite 开发服务器端口（5173）对外开放，后端端口（8000）被防火墙拦截：
+
+```
+外网用户 ──→ 防火墙(只开放5173) ──→ 服务器
+                                    ├── Vite (5173) ✓ 可访问
+                                    └── FastAPI (8000) ✗ 被拦截
+```
+
+如果前端使用绝对路径 `http://hostname:8000/api`，外网用户的浏览器会直接请求 8000 端口，导致连接失败。
+
+### 正确做法
+
+```javascript
+// ✗ 错误 - 绝对路径，外网无法访问
+const API_URL = `http://${window.location.hostname}:8000`;
+fetch(`${API_URL}/datasets`);
+
+// ✓ 正确 - 相对路径，走 Vite 代理
+const API_URL = '';
+fetch(`${API_URL}/datasets`);  // 请求 /datasets
+```
+
+### 代理配置
+
+`vite.config.js` 中配置了代理规则，将前端的相对路径请求转发到后端：
+
+| 前端请求 | 代理转发到 |
+|----------|------------|
+| `/sandbox/*` | `http://127.0.0.1:8000/sandbox/*` |
+| `/datasets/*` | `http://127.0.0.1:8000/datasets/*` |
+| `/rag/*` | `http://127.0.0.1:8000/rag/*` |
+| `/mcp/*` | `http://127.0.0.1:8000/mcp/*` |
+| ... | ... |
+
+### 添加新 API 端点时
+
+1. 在 `vite.config.js` 的 `server.proxy` 中添加对应路径
+2. 前端代码使用相对路径（如 `/new-endpoint`）
+
 ## Architecture
 
 ### Entry Points

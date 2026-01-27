@@ -4,8 +4,8 @@
  * 数据集管理 API，支持 v2.0.0 Dataset Schema 格式
  */
 
-const BACKEND_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const BACKEND_URL = `http://${BACKEND_HOST}:8000`;
+// 使用相对路径，走 Vite 代理（避免外网部署时 8000 端口不开放的问题）
+const BACKEND_URL = '';
 
 /**
  * 列出所有数据集

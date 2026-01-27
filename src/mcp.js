@@ -1,7 +1,8 @@
 // MCP (Model Context Protocol) 客户端封装
 import { CONFIG } from './config';
 
-const MCP_API_URL = CONFIG.mcpServers?.apiUrl || 'http://localhost:8000/mcp';
+// 使用相对路径，走 Vite 代理
+const MCP_API_URL = CONFIG.mcpServers?.apiUrl || '/mcp';
 
 export const mcpClient = {
   /**
