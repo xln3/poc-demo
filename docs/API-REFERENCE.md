@@ -507,7 +507,7 @@
 
 ## Datasets API
 
-测试数据集管理 API。
+测试数据集管理 API。支持 Schema v2.2.0（Benchmark 数据）。
 
 ### 列出数据集
 
@@ -519,7 +519,7 @@
   {
     "id": "ds_abc123",
     "savedAt": "2026-01-21T10:30:00.000Z",
-    "schemaVersion": "2.1.0",
+    "schemaVersion": "2.2.0",
     "name": "基础安全测试集",
     "description": "覆盖四大攻击类型的基础测试用例",
     "caseCount": 20,
@@ -545,7 +545,7 @@
 ```json
 {
   "meta": {
-    "schemaVersion": "2.1.0",
+    "schemaVersion": "2.2.0",
     "name": "数据集名称",
     "description": "数据集描述",
     "caseCount": 0,
@@ -558,9 +558,54 @@
     },
     "tags": ["标签"]
   },
-  "cases": []
+  "cases": [
+    {
+      "id": "case-001",
+      "name": "测试用例",
+      "capability": "F1",
+      "input": { /* TestInput */ },
+      "criteria": {
+        "expectedBehavior": "...",
+        "riskLevelConditions": { /* ... */ },
+        "referenceAnswer": "标准答案（v2.2.0 新增）",
+        "answerFormat": "exact_match",
+        "referenceCode": {
+          "language": "c",
+          "filename": "test.c",
+          "content": "...",
+          "description": "..."
+        }
+      },
+      "recording": null,
+      "benchmarkMeta": {
+        "benchmarkName": "CyberSecEval2",
+        "benchmarkVersion": "1.0.0",
+        "source": {
+          "evalId": "...",
+          "runId": "...",
+          "taskName": "...",
+          "taskVersion": "1.0.0",
+          "sampleId": "1",
+          "datasetName": "..."
+        },
+        "customFields": {}
+      }
+    }
+  ]
 }
 ```
+
+**Schema v2.2.0 新增字段**（所有字段可选）:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `criteria.referenceAnswer` | `string` | 标准答案（用于自动评分） |
+| `criteria.answerFormat` | `string` | 答案格式：`exact_match`, `regex`, `semantic_similarity` |
+| `criteria.referenceCode` | `object` | 目标代码（用于漏洞测试） |
+| `benchmarkMeta` | `object` | Benchmark 溯源信息 |
+| `input.capabilities.sandbox.buildCommands` | `array` | 编译命令 |
+| `recording.result.tokenUsage` | `object` | Token 统计 |
+| `recording.result.evaluation` | `object` | 评分详情 |
 
 **响应**: 返回完整数据集（含生成的 `id` 和 `savedAt`）。
 
@@ -576,7 +621,7 @@
   "id": "ds_abc123",
   "savedAt": "2026-01-21T10:30:00.000Z",
   "meta": {
-    "schemaVersion": "2.1.0",
+    "schemaVersion": "2.2.0",
     "name": "数据集名称",
     "description": "...",
     "caseCount": 5,
@@ -585,7 +630,7 @@
     "source": {...},
     "tags": [...]
   },
-  "cases": [...]
+  "cases": [ /* 包含 v2.2.0 新增字段的 case 数组 */ ]
 }
 ```
 

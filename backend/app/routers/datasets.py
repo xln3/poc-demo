@@ -18,7 +18,7 @@ class DatasetSource(BaseModel):
 
 class DatasetMeta(BaseModel):
     """Dataset metadata."""
-    schemaVersion: str = "2.1.0"
+    schemaVersion: str = "2.2.0"
     type: str = "Dataset"
     datasetId: Optional[str] = None
     name: str
@@ -40,10 +40,40 @@ class RiskLevelConditions(BaseModel):
     safe: str = ""      # 安全判定条件
 
 
+class ReferenceCodeModel(BaseModel):
+    """Reference code (v2.2.0)."""
+    language: Optional[str] = None
+    filename: Optional[str] = None
+    content: Optional[str] = None
+    description: Optional[str] = None
+
+
 class TestCriteria(BaseModel):
     """Test case evaluation criteria (five-level risk)."""
     expectedBehavior: str = ""
     riskLevelConditions: RiskLevelConditions = RiskLevelConditions()
+    # v2.2.0: 参考答案和代码
+    referenceAnswer: Optional[str] = None
+    answerFormat: Optional[str] = None  # 'exact_match' | 'regex' | etc.
+    referenceCode: Optional[ReferenceCodeModel] = None
+
+
+class BenchmarkSourceModel(BaseModel):
+    """Benchmark data source (v2.2.0)."""
+    evalId: Optional[str] = None
+    runId: Optional[str] = None
+    taskName: Optional[str] = None
+    taskVersion: Optional[str] = None
+    sampleId: Optional[str] = None
+    datasetName: Optional[str] = None
+
+
+class BenchmarkMetaModel(BaseModel):
+    """Benchmark metadata (v2.2.0)."""
+    benchmarkName: Optional[str] = None
+    benchmarkVersion: Optional[str] = None
+    source: Optional[BenchmarkSourceModel] = None
+    customFields: Optional[Dict[str, Any]] = None
 
 
 class DatasetCase(BaseModel):
@@ -54,6 +84,8 @@ class DatasetCase(BaseModel):
     input: Dict[str, Any] = {}
     criteria: TestCriteria = TestCriteria()
     recording: Optional[Dict[str, Any]] = None
+    # v2.2.0: Benchmark 溯源信息
+    benchmarkMeta: Optional[BenchmarkMetaModel] = None
 
 
 class SaveDatasetRequest(BaseModel):
@@ -75,7 +107,7 @@ class DatasetSummary(BaseModel):
     """Summary of a dataset for list display."""
     id: str
     savedAt: str
-    schemaVersion: str = "2.1.0"
+    schemaVersion: str = "2.2.0"
     name: str
     description: str = ""
     caseCount: int = 0

@@ -39,6 +39,48 @@
 
 ## 变更记录
 
+### [1.8.0] - 2026-01-28
+
+#### Added
+
+**Schema v2.2.0 - Benchmark 数据支持**
+
+- **Dataset Case 扩展**：
+  - 新增 `benchmarkMeta` 字段：记录 Benchmark 数据溯源（evalId, runId, taskName, sampleId 等）
+  - 新增 `criteria.referenceAnswer`：标准答案（用于自动评分）
+  - 新增 `criteria.answerFormat`：答案匹配方式（exact_match, regex, semantic_similarity）
+  - 新增 `criteria.referenceCode`：目标代码（用于代码漏洞测试）
+
+- **RecordingSession 扩展**：
+  - 新增 `result.tokenUsage`：记录实际 Token 消耗（inputTokens, outputTokens, reasoningTokens, totalTokens）
+  - 新增 `result.evaluation`：记录评分信息（rawScore, score, details）
+  - 支持 Inspect-AI 风格的评分历史和约束满足度统计
+
+- **Sandbox 扩展**：
+  - 新增 `capabilities.sandbox.buildCommands`：编译命令数组（用于 CyberSecEval2 等需要编译的测试）
+
+#### Changed
+
+- Schema 版本从 2.1.0 升级到 2.2.0
+- 前端 `testCase.js` 更新 `createDatasetCase()` 支持新字段
+- 后端新增 7 个 Pydantic 模型：`BenchmarkMeta`, `BenchmarkSource`, `ReferenceCode`, `TokenUsage`, `RawScore`, `EvaluationDetails`, `Evaluation`
+- 后端 `datasets.py` 扩展 `TestCriteria` 和 `DatasetCase` 模型
+- 模板文件 `dataset-template.json` 更新，包含 v2.2.0 所有新字段示例
+
+#### Docs
+
+- 更新 [ARCHITECTURE.md](./ARCHITECTURE.md) 新增 v2.2.0 schema 说明
+- 更新 [API-REFERENCE.md](./API-REFERENCE.md) 新增 Dataset/RecordingSession schema
+- 更新 [CHANGELOG.md](./CHANGELOG.md) 记录此次变更
+
+#### Notes
+
+- **向后兼容**：所有新字段均为可选，v2.1.0 数据可直接导入
+- **用途**：支持 CyberSecEval2、AgentHarm 等学术 Benchmark 数据导入
+- **测试**：新增 `backend/test_v2_2_0_schema.py` 验证兼容性
+
+---
+
 ### [1.7.0] - 2026-01-27
 
 #### Security

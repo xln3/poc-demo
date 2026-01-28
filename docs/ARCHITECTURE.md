@@ -351,6 +351,126 @@ container = client.containers.run(
 
 ---
 
+## 数据 Schema
+
+### Schema 版本演进
+
+| 版本 | 发布日期 | 主要变更 |
+|------|----------|----------|
+| 1.0.0 | 2026-01 | 初始版本：TestCaseV1 |
+| 2.0.0 | 2026-01 | 三层架构：TestInput, State, PlaybackSequence |
+| 2.1.0 | 2026-01 | Dataset + RecordingSession 架构 |
+| **2.2.0** | **2026-01** | **Benchmark 数据支持（本版本）** |
+
+### Schema v2.2.0 新增字段
+
+**目标**：支持 CyberSecEval2、AgentHarm 等学术 Benchmark 数据导入。
+
+#### Dataset Case 扩展
+
+```javascript
+{
+  "id": "case-001",
+  "name": "测试用例名",
+  "capability": "F3",
+  "input": { /* TestInput */ },
+  "criteria": {
+    "expectedBehavior": "...",
+    "riskLevelConditions": { /* ... */ },
+
+    // v2.2.0 新增字段
+    "referenceAnswer": "标准答案（用于自动评分）",
+    "answerFormat": "exact_match | regex | semantic_similarity",
+    "referenceCode": {
+      "language": "c",
+      "filename": "vulnerable.c",
+      "content": "...",
+      "description": "目标代码说明"
+    }
+  },
+  "recording": { /* RecordingSession */ },
+
+  // v2.2.0 新增字段
+  "benchmarkMeta": {
+    "benchmarkName": "CyberSecEval2",
+    "benchmarkVersion": "1.0.0",
+    "source": {
+      "evalId": "eval_abc123",
+      "runId": "run_xyz789",
+      "taskName": "cyse2_vulnerability_exploit",
+      "taskVersion": "1.0.0",
+      "sampleId": "42",
+      "datasetName": "constraint_satisfaction"
+    },
+    "customFields": { /* benchmark 特有字段 */ }
+  }
+}
+```
+
+#### RecordingSession 扩展
+
+```javascript
+{
+  "meta": { /* ... */ },
+  "states": [ /* State 数组 */ ],
+  "result": {
+    "status": "success",
+    "finalResponse": "...",
+    "judgment": { /* ... */ },
+    "timing": { /* ... */ },
+
+    // v2.2.0 新增字段
+    "tokenUsage": {
+      "inputTokens": 1234,
+      "outputTokens": 567,
+      "reasoningTokens": 890,
+      "totalTokens": 2691
+    },
+    "evaluation": {
+      "rawScore": {
+        "value": 0.8,         // float 或 "C"/"I" 等类别值
+        "type": "float"       // "float" | "categorical"
+      },
+      "score": 0.8,           // 归一化分数（0.0-1.0）
+      "details": {
+        "history": [ /* 评分步骤 */ ],
+        "constraintsSatisfied": 16,
+        "constraintsTotal": 20,
+        "metadata": { /* inspector/judge 输出 */ }
+      }
+    }
+  }
+}
+```
+
+#### Sandbox 扩展
+
+```javascript
+{
+  "capabilities": {
+    "sandbox": {
+      "enabled": true,
+      "image": "python:3.11-slim",
+      "presetFiles": {},
+
+      // v2.2.0 新增字段
+      "buildCommands": [
+        "gcc -o vulnerable vulnerable.c",
+        "./vulnerable"
+      ]
+    }
+  }
+}
+```
+
+### 向后兼容性
+
+- 所有 v2.2.0 新增字段均为 `Optional`，默认值为 `null`
+- v2.1.0 和 v2.0.0 数据可直接导入，无需迁移
+- Pydantic 验证层不会剥离未知字段
+
+---
+
 ## 扩展点
 
 ### 添加新能力层级

@@ -13,7 +13,7 @@
 
 // ============ Schema 版本 ============
 
-export const SCHEMA_VERSION = '2.1.0';
+export const SCHEMA_VERSION = '2.2.0';
 export const SCHEMA_VERSION_V1 = '1.0.0';
 
 // ============ 工具函数 ============
@@ -665,6 +665,7 @@ export function buildTestInput({
       enabled: true,
       image: sandboxImage || SandboxImage.PYTHON,
       presetFiles: presetSandboxFiles || {},
+      buildCommands: [], // v2.2.0: 编译命令
     };
   }
 
@@ -1763,6 +1764,7 @@ export function createDatasetCase({
   input,
   criteria,
   recording = null,
+  benchmarkMeta = null,
 }) {
   return {
     id: id || generateUUID(),
@@ -1777,8 +1779,14 @@ export function createDatasetCase({
         low: criteria?.riskLevelConditions?.low || '',
         safe: criteria?.riskLevelConditions?.safe || '',
       },
+      // v2.2.0: 参考答案和代码
+      referenceAnswer: criteria?.referenceAnswer || null,
+      answerFormat: criteria?.answerFormat || null,
+      referenceCode: criteria?.referenceCode || null,
     },
     recording: recording || null,
+    // v2.2.0: Benchmark 溯源信息
+    benchmarkMeta: benchmarkMeta || null,
   };
 }
 
@@ -1949,6 +1957,10 @@ export function createEmptyRecordingSession() {
         toolCallMs: null,
         judgeMs: null,
       },
+      // v2.2.0: Token 统计
+      tokenUsage: null,
+      // v2.2.0: 评分信息
+      evaluation: null,
     },
   };
 }

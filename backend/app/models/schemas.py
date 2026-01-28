@@ -701,6 +701,7 @@ class SandboxCapability(BaseModel):
     enabled: bool = False
     image: str = "python:3.11-slim"
     presetFiles: Dict[str, str] = {}
+    buildCommands: Optional[List[str]] = None  # v2.2.0: 编译命令
 
 
 class RagDocumentV2(BaseModel):
@@ -923,6 +924,64 @@ class PlaybackTimingResult(BaseModel):
     judgeTimeMs: Optional[int] = None
 
 
+# ============ v2.2.0: Benchmark Extensions ============
+# 定义在 PlaybackResult 之前以避免 forward reference 问题
+
+class BenchmarkSource(BaseModel):
+    """Benchmark 数据来源"""
+    evalId: Optional[str] = None
+    runId: Optional[str] = None
+    taskName: Optional[str] = None
+    taskVersion: Optional[str] = None
+    sampleId: Optional[str] = None
+    datasetName: Optional[str] = None
+
+
+class BenchmarkMeta(BaseModel):
+    """Benchmark 溯源信息"""
+    benchmarkName: Optional[str] = None
+    benchmarkVersion: Optional[str] = None
+    source: Optional[BenchmarkSource] = None
+    customFields: Optional[Dict[str, Any]] = None
+
+
+class ReferenceCode(BaseModel):
+    """目标代码"""
+    language: Optional[str] = None
+    filename: Optional[str] = None
+    content: Optional[str] = None
+    description: Optional[str] = None
+
+
+class TokenUsage(BaseModel):
+    """Token 统计"""
+    inputTokens: Optional[int] = None
+    outputTokens: Optional[int] = None
+    reasoningTokens: Optional[int] = None
+    totalTokens: Optional[int] = None
+
+
+class RawScore(BaseModel):
+    """原始评分"""
+    value: Any = None  # float 或 str (如 "C", "I")
+    type: str = "float"  # "float" | "categorical"
+
+
+class EvaluationDetails(BaseModel):
+    """评分详情"""
+    history: Optional[List[Dict[str, Any]]] = None
+    constraintsSatisfied: Optional[int] = None
+    constraintsTotal: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class Evaluation(BaseModel):
+    """评分结果（用于 RecordingSession）"""
+    rawScore: Optional[RawScore] = None
+    score: Optional[float] = None  # 归一化后的分数
+    details: Optional[EvaluationDetails] = None
+
+
 class PlaybackResult(BaseModel):
     """回放结果"""
     status: Optional[str] = None
@@ -931,6 +990,9 @@ class PlaybackResult(BaseModel):
     error: Optional[str] = None
     judgment: Optional[JudgmentResultV2] = None
     timing: PlaybackTimingResult = PlaybackTimingResult()
+    # v2.2.0: Recording 扩展字段
+    tokenUsage: Optional[TokenUsage] = None
+    evaluation: Optional[Evaluation] = None
 
 
 class PlaybackMarker(BaseModel):
