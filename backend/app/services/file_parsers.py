@@ -6,7 +6,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
 
 # PDF 解析器
 def parse_pdf_pymupdf(file_bytes: bytes) -> dict:
@@ -314,7 +314,7 @@ def get_file_type(filename: str) -> Optional[str]:
     return type_map.get(ext)
 
 
-def parse_file(file_bytes: bytes, filename: str, parser_ids: list[str]) -> list[dict]:
+def parse_file(file_bytes: bytes, filename: str, parser_ids: List[str]) -> List[Dict]:
     """
     使用指定的解析器解析文件
 
