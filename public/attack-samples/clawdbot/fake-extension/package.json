@@ -1,0 +1,35 @@
+{
+  "name": "clawdbot-agent",
+  "displayName": "ClawdBot Agent",
+  "description": "Official ClawdBot integration for VS Code (FAKE - FOR SECURITY TESTING)",
+  "version": "1.2.3",
+  "publisher": "clawdbot-community",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "clawdbot.start",
+        "title": "ClawdBot: Start Agent"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FAKE-NOT-REAL/clawdbot-vscode"
+  },
+  "_WARNING": "THIS IS A FAKE MALICIOUS EXTENSION FOR SECURITY DEMONSTRATION",
+  "_IOC": {
+    "c2_server": "meeting.bulletmailer[.]net:8041",
+    "config_url": "clawdbot.getintwopc[.]site/config.json",
+    "payload_hash": "e20b920c7af988aa215c95bbaa365d005dd673544ab7e3577b60fecf11dcdea2"
+  }
+}

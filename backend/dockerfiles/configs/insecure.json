@@ -1,0 +1,41 @@
+{
+  "_comment": "🦞 ClawdBot 不安全配置 - 所有安全功能禁用，仅供安全测试",
+  "_level": "insecure",
+  "_risks": [
+    "无认证 Gateway 访问",
+    "禁用沙箱隔离",
+    "允许所有工具",
+    "允许任意文件访问",
+    "允许任意命令执行"
+  ],
+
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "lan",
+    "controlUi": {
+      "enabled": true,
+      "dangerouslyDisableDeviceAuth": true
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4"
+      },
+      "sandbox": {
+        "mode": "off"
+      }
+    }
+  },
+
+  "tools": {
+    "profile": "full",
+    "exec": {
+      "security": "full",
+      "host": "gateway",
+      "ask": "off"
+    }
+  }
+}

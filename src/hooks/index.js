@@ -11,3 +11,4 @@ export { usePlayback } from './usePlayback.js';
 export { useStateCollector, buildPartialStateFromAppState } from './useStateCollector.js';
 export { useDatasets, CAPABILITY_CONFIG } from './useDatasets.js';
 export { useTestExecution, ExecutionMode, BatchResultStatus } from './useTestExecution.js';
+export { useClawdBotSandbox, SandboxState } from './useClawdBotSandbox.js';

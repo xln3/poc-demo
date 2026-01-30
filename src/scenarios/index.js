@@ -22,6 +22,18 @@ import { rag } from './F4-rag/rag.js';
 import { mcp } from './F5-mcp/mcp.js';
 import { emailPdfAttack } from './F5-mcp/emailPdfAttack.js';
 
+// ============ F6-messaging-agent: 消息代理 (ClawdBot) ============
+import {
+  emailInjection,
+  skillPoisoning,
+  gatewayExposure,
+  mcpHijacking,
+  covertToolCall,
+  dmBypass,
+  tokenTheft,
+  supplyChain
+} from './F6-messaging-agent/index.js';
+
 // 导出与原 scenarios.js 兼容的 SCENARIOS 对象
 export const SCENARIOS = {
   // F1-conversation: 文本对话
@@ -43,7 +55,17 @@ export const SCENARIOS = {
 
   // F5-mcp: MCP 扩展工具
   mcp,
-  emailPdfAttack
+  emailPdfAttack,
+
+  // F6-messaging-agent: 消息代理 (ClawdBot)
+  emailInjection,
+  skillPoisoning,
+  gatewayExposure,
+  mcpHijacking,
+  covertToolCall,
+  dmBypass,
+  tokenTheft,
+  supplyChain
 };
 
 // 按能力层级分组导出
@@ -68,6 +90,16 @@ export const SCENARIOS_BY_LEVEL = {
   'F5-mcp': {
     mcp,
     emailPdfAttack
+  },
+  'F6-messaging-agent': {
+    emailInjection,
+    skillPoisoning,
+    gatewayExposure,
+    mcpHijacking,
+    covertToolCall,
+    dmBypass,
+    tokenTheft,
+    supplyChain
   }
 };
 
@@ -88,7 +120,16 @@ export {
   rag,
   // F5-mcp
   mcp,
-  emailPdfAttack
+  emailPdfAttack,
+  // F6-messaging-agent
+  emailInjection,
+  skillPoisoning,
+  gatewayExposure,
+  mcpHijacking,
+  covertToolCall,
+  dmBypass,
+  tokenTheft,
+  supplyChain
 };
 
 // 导出类型定义

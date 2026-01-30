@@ -19,7 +19,8 @@ export const CapabilityLevel = {
   FILE_INJECTION: 'F2-file-injection',
   TOOL_USE: 'F3-tool-use',
   RAG: 'F4-rag',
-  MCP: 'F5-mcp'
+  MCP: 'F5-mcp',
+  MESSAGING_AGENT: 'F6-messaging-agent'
 };
 
 // 能力层级中文名（前端显示用）
@@ -28,7 +29,8 @@ export const CapabilityLevelNames = {
   'F2-file-injection': '文件解析',
   'F3-tool-use': '终端运行',
   'F4-rag': 'RAG知识',
-  'F5-mcp': 'MCP连接'
+  'F5-mcp': 'MCP连接',
+  'F6-messaging-agent': '消息代理'
 };
 
 // @deprecated 旧枚举，保留向后兼容

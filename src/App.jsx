@@ -7,7 +7,7 @@ import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
 import { listTestResults, getTestResult, saveTestResult, deleteTestResult, deleteTestCase, updateCaseReview, updateReport, listReportTemplates, getReportTemplate } from './testResultsApi.js';
 import { mcpClient } from './mcp.js';
-import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast, useDatasets, CAPABILITY_CONFIG, useTestExecution, ExecutionMode } from './hooks/index.js';
+import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast, useDatasets, CAPABILITY_CONFIG, useTestExecution, ExecutionMode, useClawdBotSandbox, SandboxState } from './hooks/index.js';
 import {
   buildTestInput,
   buildRecordingSession,
@@ -191,6 +191,7 @@ export default function App() {
   const [scenarioListExpanded, setScenarioListExpanded] = useState(false); // 场景列表折叠状态（默认折叠）
   const [runningTerminalsExpanded, setRunningTerminalsExpanded] = useState(false); // 运行中终端列表展开状态（默认折叠）
   const [deletedTerminalsExpanded, setDeletedTerminalsExpanded] = useState(false); // 已删除终端列表展开状态（默认折叠）
+  const [clawdbotExpanded, setClawdbotExpanded] = useState(false); // ClawdBot 测试面板展开状态
   const [isPlaying, setIsPlaying] = useState(false);
   const [typingMsg, setTypingMsg] = useState(null);
   const [apiStatus, setApiStatus] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
@@ -518,6 +519,24 @@ export default function App() {
     // File watch functions
     startFileWatch, stopFileWatch,
   } = sandbox;
+
+  // ClawdBot Sandbox hook (黑盒 Agent 测试)
+  const clawdbot = useClawdBotSandbox();
+  const {
+    sandbox: clawdbotSandbox,
+    state: clawdbotState,
+    error: clawdbotError,
+    isRunning: clawdbotRunning,
+    isCreating: clawdbotCreating,
+    behaviors: clawdbotBehaviors,
+    honeypotTriggers,
+    serviceStatus: clawdbotServiceStatus,
+    configLevels,
+    selectedConfigLevel,
+    setSelectedConfigLevel,
+    createSandbox: createClawdbotSandbox,
+    destroySandbox: destroyClawdbotSandbox,
+  } = clawdbot;
 
   // RAG hook
   const rag = useRAG({ addLog });
@@ -3982,6 +4001,141 @@ print('\\n'.join(all_text))
                 isExpanded={deletedTerminalsExpanded}
                 setIsExpanded={setDeletedTerminalsExpanded}
               />
+
+              {/* 🦞 ClawdBot 黑盒 Agent 测试 */}
+              <div className="mt-2 pt-2 border-t border-slate-600">
+                <button
+                  onClick={() => setClawdbotExpanded(!clawdbotExpanded)}
+                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-400 mb-1 w-full"
+                >
+                  <span className={`transition-transform ${clawdbotExpanded ? 'rotate-90' : ''}`}>▶</span>
+                  <span>🦞 黑盒 Agent 测试</span>
+                  {clawdbotRunning && (
+                    <span className="ml-auto text-green-400 text-[10px]">● 运行中</span>
+                  )}
+                </button>
+
+                {clawdbotExpanded && (
+                  <div className="space-y-2 pl-3">
+                    {/* 服务状态 */}
+                    {!clawdbotServiceStatus?.available ? (
+                      <div className="text-xs text-slate-500">
+                        <div>ClawdBot 服务未就绪</div>
+                        {!clawdbotServiceStatus?.image_exists && (
+                          <div className="text-slate-600 mt-1">
+                            运行 build-moltbot-sandbox.sh 构建镜像
+                          </div>
+                        )}
+                      </div>
+                    ) : !clawdbotRunning ? (
+                      <>
+                        {/* 配置级别选择 */}
+                        <div className="flex gap-1 items-center">
+                          <span className="text-xs text-slate-500">配置:</span>
+                          <select
+                            value={selectedConfigLevel}
+                            onChange={(e) => setSelectedConfigLevel(e.target.value)}
+                            className="flex-1 bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-cyan-500"
+                          >
+                            {configLevels.map(level => (
+                              <option key={level.id} value={level.id}>
+                                {level.icon} {level.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* 配置说明 */}
+                        {configLevels.find(l => l.id === selectedConfigLevel) && (
+                          <div className="text-[10px] text-slate-500">
+                            {configLevels.find(l => l.id === selectedConfigLevel)?.description}
+                          </div>
+                        )}
+
+                        {/* 启动按钮 */}
+                        <button
+                          onClick={() => createClawdbotSandbox({ config_level: selectedConfigLevel })}
+                          disabled={clawdbotCreating}
+                          className={`w-full px-2 py-1.5 rounded text-xs transition ${
+                            clawdbotCreating
+                              ? 'bg-slate-600 cursor-not-allowed text-slate-400'
+                              : 'bg-orange-600 hover:bg-orange-500 text-white'
+                          }`}
+                        >
+                          {clawdbotCreating ? '启动中...' : '🦞 启动 ClawdBot'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {/* 运行中状态 */}
+                        <div className="text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">ID:</span>
+                            <span className="font-mono text-cyan-400">{clawdbotSandbox?.sandbox_id}</span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-slate-400">配置:</span>
+                            <span className="text-white">
+                              {configLevels.find(l => l.id === clawdbotSandbox?.config_level)?.icon}{' '}
+                              {configLevels.find(l => l.id === clawdbotSandbox?.config_level)?.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-slate-400">Gateway:</span>
+                            <span className="font-mono text-green-400 text-[10px]">
+                              :{clawdbotSandbox?.gateway_port}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 行为监控摘要 */}
+                        {clawdbotBehaviors.length > 0 && (
+                          <div className="text-xs bg-slate-800 rounded p-1.5">
+                            <div className="text-slate-400 mb-1">最近行为:</div>
+                            <div className="max-h-16 overflow-y-auto custom-scroll space-y-0.5">
+                              {clawdbotBehaviors.slice(0, 5).map((b, i) => (
+                                <div key={i} className="text-[10px] text-slate-300 truncate">
+                                  <span className={
+                                    b.severity === 'critical' ? 'text-red-400' :
+                                    b.severity === 'danger' ? 'text-orange-400' :
+                                    b.severity === 'warning' ? 'text-yellow-400' :
+                                    'text-slate-400'
+                                  }>●</span>
+                                  {' '}{b.description}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 蜜罐触发警告 */}
+                        {honeypotTriggers.length > 0 && (
+                          <div className="text-xs bg-red-900/30 border border-red-700 rounded p-1.5">
+                            <div className="text-red-400 font-medium">
+                              ⚠️ 蜜罐触发 ({honeypotTriggers.length})
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 停止按钮 */}
+                        <button
+                          onClick={destroyClawdbotSandbox}
+                          className="w-full px-2 py-1 rounded text-xs bg-red-700 hover:bg-red-600 text-white"
+                        >
+                          停止 ClawdBot
+                        </button>
+                      </>
+                    )}
+
+                    {/* 错误显示 */}
+                    {clawdbotError && (
+                      <div className="text-xs text-red-400 bg-red-900/20 rounded p-1.5">
+                        {clawdbotError}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <div className="text-xs text-slate-500 text-center py-2">

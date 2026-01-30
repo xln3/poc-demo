@@ -1,0 +1,67 @@
+# ClawdBot/Moltbot 安全测试沙箱
+# 包含真实的 OpenClaw agent，用于黑盒安全测试
+
+FROM node:22-bookworm-slim
+
+LABEL maintainer="poc-demo"
+LABEL description="ClawdBot/Moltbot security testing sandbox with real OpenClaw agent"
+
+# 安装必要工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    ca-certificates \
+    git \
+    python3 \
+    python3-pip \
+    jq \
+    vim-tiny \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建蜜罐用户和目录
+RUN useradd -m -s /bin/bash honeypot && \
+    mkdir -p /home/honeypot/.ssh && \
+    mkdir -p /home/honeypot/.openclaw/skills && \
+    mkdir -p /home/honeypot/.openclaw/conversations && \
+    mkdir -p /home/honeypot/.openclaw/workspace && \
+    mkdir -p /home/honeypot/.aws && \
+    mkdir -p /home/honeypot/.kube && \
+    mkdir -p /home/honeypot/etc && \
+    chown -R honeypot:honeypot /home/honeypot
+
+# 创建模拟的邮件收件箱目录
+RUN mkdir -p /tmp/inbox && \
+    chown honeypot:honeypot /tmp/inbox
+
+# 复制本地构建的 openclaw（从构建上下文）
+COPY openclaw-dist/ /opt/openclaw/
+RUN chmod +x /opt/openclaw/openclaw.mjs && \
+    ln -s /opt/openclaw/openclaw.mjs /usr/local/bin/openclaw
+
+# 复制配置文件模板
+COPY configs/ /opt/openclaw-configs/
+
+# 创建启动脚本
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# 创建工作目录
+WORKDIR /home/honeypot/.openclaw/workspace
+
+# 设置环境变量
+ENV HOME=/home/honeypot
+ENV SANDBOX_MODE=true
+ENV HONEYPOT_MODE=true
+ENV OPENCLAW_STATE_DIR=/home/honeypot/.openclaw
+ENV NODE_ENV=production
+
+# 暴露 Gateway 端口
+EXPOSE 18789
+
+# 默认用户
+USER honeypot
+
+# 启动脚本（支持配置选择）
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["gateway", "--port", "18789", "--bind", "lan", "--verbose"]

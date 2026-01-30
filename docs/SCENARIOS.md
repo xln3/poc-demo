@@ -34,9 +34,19 @@ src/scenarios/
 │   └── finbot.js             # 金融机器人
 ├── F4-rag/                   # RAG 检索场景
 │   └── rag.js                # RAG 投毒攻击
-└── F5-mcp/                   # MCP 工具场景
-    ├── mcp.js                # MCP 多服务攻击
-    └── emailPdfAttack.js     # 邮件PDF攻击链
+├── F5-mcp/                   # MCP 工具场景
+│   ├── mcp.js                # MCP 多服务攻击
+│   └── emailPdfAttack.js     # 邮件PDF攻击链
+└── F6-messaging-agent/       # 消息代理场景 (ClawdBot)
+    ├── index.js              # 场景聚合
+    ├── emailInjection.js     # 邮件注入攻击
+    ├── skillPoisoning.js     # 技能库投毒
+    ├── gatewayExposure.js    # Gateway 暴露
+    ├── mcpHijacking.js       # MCP 会话劫持
+    ├── covertToolCall.js     # 隐蔽工具调用
+    ├── dmBypass.js           # DM 策略绕过
+    ├── tokenTheft.js         # Token 窃取
+    └── supplyChain.js        # 供应链攻击
 ```
 
 ---
@@ -143,7 +153,8 @@ export const CapabilityLevel = {
   FILE_INJECTION: 'F2-file-injection', // 文件注入
   TOOL_USE: 'F3-tool-use',            // 工具调用
   RAG: 'F4-rag',                      // RAG 检索
-  MCP: 'F5-mcp'                       // MCP 工具
+  MCP: 'F5-mcp',                      // MCP 工具
+  MESSAGING_AGENT: 'F6-messaging-agent' // 消息代理 (ClawdBot)
 };
 
 export const CapabilityLevelNames = {
@@ -151,7 +162,8 @@ export const CapabilityLevelNames = {
   'F2-file-injection': '文件注入',
   'F3-tool-use': '工具调用',
   'F4-rag': 'RAG检索',
-  'F5-mcp': 'MCP工具'
+  'F5-mcp': 'MCP工具',
+  'F6-messaging-agent': '消息代理'
 };
 ```
 
@@ -520,6 +532,28 @@ public/attack-samples/
 |------|------|--------|
 | `mcp` | MCP 服务测试 | 0 |
 | `emailPdfAttack` | 邮件助手(PDF注入) | 2 |
+
+### F6-messaging-agent (消息代理)
+
+专门针对 ClawdBot/Moltbot 类消息集成 AI 助手的攻击场景。
+
+| 场景 | 说明 | 攻击数 | CVE |
+|------|------|--------|-----|
+| `emailInjection` | 邮件 Prompt Injection | 3 | OWASP LLM Top 10 |
+| `skillPoisoning` | ClawdHub 技能库投毒 | 3 | 供应链攻击 |
+| `gatewayExposure` | Gateway 未授权访问 | 3 | CVE-2025-49596 |
+| `mcpHijacking` | MCP 会话劫持 | 3 | CVE-2025-6514 |
+| `covertToolCall` | 隐蔽工具调用 | 2 | CVE-2025-52882 |
+| `dmBypass` | DM 策略绕过 | 1 | 配置漏洞 |
+| `tokenTheft` | Token 窃取 | 1 | 明文存储 |
+| `supplyChain` | 供应链攻击 | 2 | VS Code 扩展 |
+
+#### 信息来源
+
+- [The Register](https://www.theregister.com/2026/01/27/clawdbot_moltbot_security_concerns/) - Clawdbot becomes Moltbot
+- [Bitdefender](https://www.bitdefender.com/en-us/blog/hotforsecurity/moltbot-security-alert-exposed-clawdbot-control-panels-risk-credential-leaks-and-account-takeovers) - Moltbot Security Alert
+- [Aikido](https://www.aikido.dev/blog/fake-clawdbot-vscode-extension-malware) - Fake Clawdbot VS Code Extension
+- [Palo Alto Unit42](https://unit42.paloaltonetworks.com/model-context-protocol-attack-vectors/) - MCP Attack Vectors
 
 ---
 

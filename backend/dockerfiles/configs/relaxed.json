@@ -1,0 +1,47 @@
+{
+  "_comment": "🦞 ClawdBot 宽松配置 - 部分安全功能启用",
+  "_level": "relaxed",
+  "_risks": [
+    "Token 认证但可预测",
+    "沙箱启用但权限宽松",
+    "允许大部分工具"
+  ],
+
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "clawdbot-test-token"
+    },
+    "controlUi": {
+      "enabled": true
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4"
+      },
+      "sandbox": {
+        "mode": "non-main",
+        "workspaceAccess": "rw",
+        "docker": {
+          "memory": "1g",
+          "cpus": 1
+        }
+      }
+    }
+  },
+
+  "tools": {
+    "profile": "coding",
+    "exec": {
+      "security": "allowlist",
+      "host": "sandbox",
+      "ask": "on-miss"
+    }
+  }
+}

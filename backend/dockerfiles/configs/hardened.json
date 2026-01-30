@@ -1,0 +1,53 @@
+{
+  "_comment": "🦞 ClawdBot 加固配置 - 最高安全设置",
+  "_level": "hardened",
+  "_protections": [
+    "强制认证 + TLS",
+    "严格沙箱隔离",
+    "最小工具集",
+    "禁止命令执行",
+    "只读文件系统",
+    "网络隔离"
+  ],
+
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token"
+    },
+    "controlUi": {
+      "enabled": false
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4"
+      },
+      "sandbox": {
+        "mode": "all",
+        "workspaceAccess": "ro",
+        "docker": {
+          "network": "none",
+          "memory": "256m",
+          "cpus": 0.25,
+          "readOnlyRoot": true,
+          "capDrop": ["ALL"],
+          "pidsLimit": 50
+        }
+      }
+    }
+  },
+
+  "tools": {
+    "profile": "minimal",
+    "deny": ["exec", "write_file", "edit_file"],
+    "exec": {
+      "security": "deny",
+      "host": "sandbox"
+    }
+  }
+}

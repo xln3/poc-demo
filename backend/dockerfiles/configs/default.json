@@ -1,0 +1,49 @@
+{
+  "_comment": "🦞 ClawdBot 默认配置 - 标准安全设置",
+  "_level": "default",
+  "_protections": [
+    "强制 Token 认证",
+    "沙箱隔离启用",
+    "工具白名单",
+    "命令执行需确认"
+  ],
+
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token"
+    },
+    "controlUi": {
+      "enabled": true
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4"
+      },
+      "sandbox": {
+        "mode": "all",
+        "workspaceAccess": "rw",
+        "docker": {
+          "network": "none",
+          "memory": "512m",
+          "cpus": 0.5,
+          "readOnlyRoot": true
+        }
+      }
+    }
+  },
+
+  "tools": {
+    "profile": "coding",
+    "exec": {
+      "security": "allowlist",
+      "host": "sandbox",
+      "ask": "always"
+    }
+  }
+}

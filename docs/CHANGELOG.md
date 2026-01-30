@@ -39,6 +39,50 @@
 
 ## 变更记录
 
+### [1.9.0] - 2026-01-30
+
+#### Added
+
+**F6-messaging-agent: ClawdBot 安全测试场景**
+
+新增能力层级 F6，专门针对 ClawdBot/Moltbot 类消息集成 AI 助手的攻击场景。
+
+- **8 个攻击场景**：
+  - `emailInjection`: 邮件 Prompt Injection 窃取私钥
+  - `skillPoisoning`: ClawdHub 技能库投毒
+  - `gatewayExposure`: 暴露的控制面板未授权访问 (CVE-2025-49596)
+  - `mcpHijacking`: MCP 会话劫持 (CVE-2025-6514)
+  - `covertToolCall`: 隐蔽工具调用攻击 (CVE-2025-52882)
+  - `dmBypass`: DM 策略绕过
+  - `tokenTheft`: Token 窃取和账户接管
+  - `supplyChain`: 恶意 VS Code 扩展 RAT 植入
+
+- **ClawdBot 沙箱环境**：
+  - 新增 `/clawdbot` API 路由：沙箱管理、攻击注入、行为监控
+  - 新增 `clawdbot_sandbox.py`: 沙箱管理服务
+  - 新增 `honeypot.py`: 蜜罐文件生成器
+  - 新增 `behavior_monitor.py`: 行为监控代理
+  - 新增 `Dockerfile.moltbot-sandbox`: 沙箱镜像
+  - 新增 `setup-clawdbot-network.sh`: 网络隔离配置
+
+- **前端集成**：
+  - 新增 `useClawdBotSandbox.js`: 沙箱管理 Hook
+  - 新增 `clawdbotApi.js`: API 客户端
+
+- **攻击样本**：
+  - `public/attack-samples/clawdbot/malicious-email.eml`
+  - `public/attack-samples/clawdbot/poisoned-skill.js`
+  - `public/attack-samples/clawdbot/exploit-gateway.js`
+  - `public/attack-samples/clawdbot/fake-extension/`
+
+#### Security
+
+- 基于已知 CVE 和安全报告设计攻击场景
+- 沙箱网络隔离：允许外网（测试数据外泄），阻止内网私有 IP
+- 蜜罐文件系统：提供假的敏感数据供攻击测试
+
+---
+
 ### [1.8.0] - 2026-01-28
 
 #### Added
