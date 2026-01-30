@@ -120,7 +120,8 @@ src/scenarios/
 ├── F2-file-injection/  # File injection scenarios (indirectInjection with 8 sub-attacks)
 ├── F3-tool-use/       # Tool calling scenarios (sandbox, finbot)
 ├── F4-rag/            # RAG retrieval scenarios (rag)
-└── F5-mcp/            # MCP tool scenarios (mcp, emailPdfAttack)
+├── F5-mcp/            # MCP tool scenarios (mcp, emailPdfAttack)
+└── F6-messaging-agent/ # Messaging agent scenarios (ClawdBot/Moltbot, 8 attacks)
 ```
 
 ### Scenario Data Structure
@@ -346,7 +347,8 @@ poc-demo/
 │       ├── F2-file-injection/ # File injection scenarios
 │       ├── F3-tool-use/     # Tool calling scenarios
 │       ├── F4-rag/          # RAG retrieval scenarios
-│       └── F5-mcp/          # MCP tool scenarios
+│       ├── F5-mcp/          # MCP tool scenarios
+│       └── F6-messaging-agent/ # Messaging agent scenarios (ClawdBot)
 ├── backend/                  # Backend source
 │   └── app/
 │       ├── main.py          # FastAPI entry
@@ -379,3 +381,4 @@ The platform organizes attack scenarios by agent capability level:
 | F3 | Tool Use | Sandbox tools | LLM API + Docker Sandbox |
 | F4 | RAG | Vector retrieval | LLM API + ChromaDB |
 | F5 | MCP | External services | LLM API + MCP Servers |
+| F6 | Messaging Agent | Chat platform integration | LLM API + ClawdBot Sandbox |

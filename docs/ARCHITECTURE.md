@@ -50,7 +50,8 @@ src/
     ├── F2-file-injection/ # 文件注入场景
     ├── F3-tool-use/      # 工具调用场景
     ├── F4-rag/           # RAG 检索场景
-    └── F5-mcp/           # MCP 工具场景
+    ├── F5-mcp/           # MCP 工具场景
+    └── F6-messaging-agent/ # 消息代理场景 (ClawdBot)
 ```
 
 ### App.jsx 结构
