@@ -6,8 +6,8 @@
 
 ### 核心特性
 
-- **5 个能力层级 (F1-F5)**：从基础对话到 MCP 工具扩展，逐级递进
-- **11 个攻击场景**：覆盖车贷审核、客服助手、财务分析等业务场景
+- **6 个能力层级 (F1-F6)**：从基础对话到消息代理（ClawdBot），逐级递进
+- **19+ 攻击场景**：覆盖车贷审核、客服助手、财务分析、消息平台集成等场景
 - **双模式测试**：Mock 模拟动画演示 + Real 真实 LLM API 测试
 - **自动评判**：使用评判模型判断攻击是否成功
 - **Docker 沙箱**：安全隔离的工具执行环境
@@ -77,6 +77,7 @@ cd backend && ./run.sh
 | [CONFIG.md](./CONFIG.md) | 配置参考 |
 | [DEPLOY.md](./DEPLOY.md) | 部署指南 |
 | [CHANGELOG.md](./CHANGELOG.md) | 变更历史 |
+| [CLAWDBOT-TEST-GUIDE.md](./CLAWDBOT-TEST-GUIDE.md) | F6 ClawdBot 场景复现指南 |
 
 ---
 
@@ -115,7 +116,7 @@ cd backend && ./run.sh
 
 ### 能力层级 (Capability Levels)
 
-平台按智能体能力复杂度分为 5 个层级：
+平台按智能体能力复杂度分为 6 个层级：
 
 | 层级 | 名称 | 说明 | 典型场景 |
 |------|------|------|----------|
@@ -124,6 +125,7 @@ cd backend && ./run.sh
 | F3 | 终端运行 | 执行沙箱工具 | 配置投毒、持久化后门 |
 | F4 | RAG知识 | 向量知识库查询 | 知识库投毒、检索劫持 |
 | F5 | MCP连接 | 外部服务集成 | 邮件/支付服务滥用 |
+| F6 | 消息代理 | 消息平台 AI 助手 | ClawdBot 邮件注入、Gateway 暴露 |
 
 ### 攻击类型
 
@@ -169,7 +171,8 @@ poc-demo/
 │       ├── F2-file-injection/ # 文件注入场景
 │       ├── F3-tool-use/     # 工具调用场景
 │       ├── F4-rag/          # RAG 检索场景
-│       └── F5-mcp/          # MCP 工具场景
+│       ├── F5-mcp/          # MCP 工具场景
+│       └── F6-messaging-agent/ # 消息代理场景 (ClawdBot)
 ├── backend/                  # 后端源码
 │   └── app/
 │       ├── main.py          # FastAPI 入口
@@ -218,4 +221,4 @@ poc-demo/
 
 ---
 
-*最后更新: 2026-01-27*
+*最后更新: 2026-01-30*
