@@ -1,14 +1,18 @@
 version: '3.8'
 
 services:
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    ports:
-      - "5175:80"
-    depends_on:
-      - backend
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-poc_demo}
+      POSTGRES_USER: ${POSTGRES_USER:-poc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poc}"]
+      interval: 5s
+      retries: 5
     restart: unless-stopped
 
   backend:
@@ -16,25 +20,39 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     volumes:
-      # 挂载 Docker socket，让后端能操作主机的 Docker
       - /var/run/docker.sock:/var/run/docker.sock
-      # 持久化运行时数据（数据集、测试结果、保存的案例）
       - poc-demo-data:/poc-data
+      - backend-logs:/app/logs
     environment:
-      - PYTHONUNBUFFERED=1
-    # 不对外暴露端口，只通过 nginx 访问
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-poc}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-poc_demo}"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RATE_LIMIT_DEFAULT: ${RATE_LIMIT_DEFAULT:-120/minute}
     expose:
       - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
-    # 需要 Docker socket 权限
     group_add:
       - ${DOCKER_GID:-999}
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "${FRONTEND_PORT:-5175}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
 
 networks:
   default:
     name: poc-demo-network
-  # Isolated network for sandbox containers — blocks private IP access.
-  # Companion iptables rules: backend/setup-sandbox-network.sh
   poc-sandbox-isolated:
     name: poc-sandbox-isolated
     driver: bridge
@@ -43,5 +61,9 @@ networks:
         - subnet: 10.200.0.0/16
 
 volumes:
+  pgdata:
+    name: poc-demo-pgdata
   poc-demo-data:
     name: poc-demo-data
+  backend-logs:
+    name: poc-demo-logs
