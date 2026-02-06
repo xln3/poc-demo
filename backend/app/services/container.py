@@ -4,7 +4,7 @@ import io
 import tarfile
 import base64
 from datetime import datetime
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Union
 from ..models.schemas import ContainerStatus, ContainerInfo
 
 # Docker is optional
@@ -65,7 +65,8 @@ class ContainerManager:
         image: str,  # 改为 str，支持任意镜像名
         session_id: Optional[str] = None,
         mem_limit: str = "512m",
-        volumes: Optional[Dict[str, dict]] = None  # 宿主机挂载卷
+        volumes: Optional[Dict[str, dict]] = None,  # 宿主机挂载卷
+        run_as_root: bool = True,  # 默认 root（兼容现有行为），生产环境建议 False
     ) -> ContainerInfo:
         """Get existing container for session or create new one.
 
@@ -74,6 +75,7 @@ class ContainerManager:
             session_id: 会话 ID，用于标识容器
             mem_limit: 内存限制
             volumes: 挂载卷映射，如 {'/host/path': {'bind': '/container/path', 'mode': 'rw'}}
+            run_as_root: 是否以 root 用户运行容器（默认 True 兼容现有行为，生产环境建议 False）
 
         Returns:
             ContainerInfo: 容器信息
@@ -117,18 +119,32 @@ class ContainerManager:
         except docker.errors.NotFound:
             pass
 
+        # Security hardening options
+        security_opts = {
+            # Drop dangerous capabilities; keep basics for tool execution
+            "cap_drop": ["NET_RAW", "SYS_ADMIN", "SYS_PTRACE", "MKNOD",
+                         "AUDIT_WRITE", "NET_BIND_SERVICE", "SYS_CHROOT"],
+            "security_opt": ["no-new-privileges:true"],
+            "pids_limit": 256,
+            "tmpfs": {"/dev/shm": "size=64m"},
+        }
+        if not run_as_root:
+            security_opts["user"] = "1000:1000"
+
         # Create new container
         container = self.client.containers.run(
-            image=image,  # 直接使用字符串
+            image=image,
             name=container_name,
             detach=True,
             tty=True,
             working_dir=self.WORK_DIR,
             # Security: limit resources
-            mem_limit=mem_limit,  # 使用传入的参数
+            mem_limit=mem_limit,
             cpu_period=100000,
             cpu_quota=50000,  # 50% CPU
-            network=self.ISOLATED_NETWORK_NAME,  # Isolated network; see setup-sandbox-network.sh
+            network=self.ISOLATED_NETWORK_NAME,
+            # Security hardening
+            **security_opts,
             # Volume mounts for file persistence
             volumes=volumes or {},
             # Keep container alive
@@ -235,8 +251,12 @@ class ContainerManager:
         container_id = self._sessions[session_id]
         return self.client.containers.get(container_id)
 
-    def exec_in_container(self, session_id: str, command: str) -> Tuple[int, str, str]:
+    def exec_in_container(self, session_id: str, command: Union[str, List[str]]) -> Tuple[int, str, str]:
         """Execute command in container and return (exit_code, stdout, stderr).
+
+        Args:
+            command: Either a string (passed to shell) or a list of strings
+                     (exec'd directly, no shell interpretation — preferred for safety).
 
         Returns stdout and stderr separately so callers can parse JSON from stdout
         while keeping logs/progress from stderr separate.
@@ -255,7 +275,7 @@ class ContainerManager:
         return result.exit_code, stdout.strip(), stderr.strip()
 
     def exec_in_container_binary(
-        self, session_id: str, command: str
+        self, session_id: str, command: Union[str, List[str]]
     ) -> Tuple[int, bytes, bytes]:
         """执行命令并返回二进制输出（用于处理含特殊字符的文件名）
 

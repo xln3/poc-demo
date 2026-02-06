@@ -3,12 +3,48 @@ import json
 import time
 import base64
 import asyncio
+import posixpath
 import httpx
 from typing import Any, Callable, Dict, List
 from datetime import datetime
 from ..models.schemas import ToolType, ToolResult, LogEntry, LogType, LogStatus, FileEntry, FileType
 from .container import container_manager
 from .ssrf_guard import check_ssrf
+
+
+# Allowed base directories for file operations inside containers
+_ALLOWED_BASES = ("/workspace", "/tmp")
+
+
+async def _resolve_and_validate_path(session_id: str, path: str) -> str:
+    """Resolve a path inside the container and validate it stays within allowed directories.
+
+    Uses readlink -f inside the container to resolve symlinks and ../ sequences,
+    then checks the resolved path is under an allowed base.
+
+    Raises ValueError if path escapes allowed directories.
+    """
+    # Normalize on the host side first (catches obvious ../  without a round-trip)
+    if not path.startswith("/"):
+        path = f"/workspace/{path}"
+
+    # Resolve inside the container to handle symlinks
+    exit_code, resolved, _ = await asyncio.to_thread(
+        container_manager.exec_in_container,
+        session_id,
+        ["/usr/bin/readlink", "-f", path]
+    )
+    if exit_code != 0 or not resolved:
+        # readlink -f failed — fall back to pure posixpath normalization
+        resolved = posixpath.normpath(path)
+    else:
+        resolved = resolved.strip()
+
+    if not any(resolved == base or resolved.startswith(base + "/") for base in _ALLOWED_BASES):
+        raise ValueError(
+            f"Path escapes allowed directories: {path!r} resolves to {resolved!r}"
+        )
+    return resolved
 
 
 def _octal_to_permissions(mode_str: str) -> str:
@@ -270,18 +306,12 @@ class ToolExecutor:
         if not path:
             raise ValueError("Missing required parameter: path")
 
-        # Sanitize path to prevent escape
-        if ".." in path:
-            raise ValueError("Path traversal not allowed")
-
-        # 如果是相对路径，转换为 /workspace 下的绝对路径
-        if not path.startswith('/'):
-            path = f"/workspace/{path}"
+        path = await _resolve_and_validate_path(session_id, path)
 
         exit_code, stdout, stderr = await asyncio.to_thread(
             container_manager.exec_in_container,
             session_id,
-            f"/bin/sh -c \"cat '{path}'\""
+            ["/bin/cat", path]
         )
 
         if exit_code != 0:
@@ -295,6 +325,8 @@ class ToolExecutor:
         Content can be:
         - Plain text (is_base64=False, default for backwards compat)
         - Base64 encoded binary (is_base64=True)
+
+        Both paths use Docker's put_archive API to avoid shell interpretation.
         """
         path = params.get("path")
         content = params.get("content", "")
@@ -303,43 +335,29 @@ class ToolExecutor:
         if not path:
             raise ValueError("Missing required parameter: path")
 
-        if ".." in path:
-            raise ValueError("Path traversal not allowed")
+        path = await _resolve_and_validate_path(session_id, path)
 
         if is_base64:
-            # Content is base64 encoded binary - decode and use Docker API to copy
-            try:
-                file_bytes = base64.b64decode(content)
-                await asyncio.to_thread(
-                    container_manager.copy_file_to_container, session_id, path, file_bytes
-                )
-                return f"File written: {path} ({len(file_bytes)} bytes)"
-            except Exception as e:
-                raise RuntimeError(f"Failed to write binary file: {e}")
+            file_bytes = base64.b64decode(content)
         else:
-            # Plain text content - use shell command
-            # 如果是相对路径，转换为 /workspace 下的绝对路径
-            if not path.startswith('/'):
-                path = f"/workspace/{path}"
-            safe_path = path.replace("'", "'\\''")
-            encoded = base64.b64encode(content.encode()).decode()
-            # 确保父目录存在
-            dir_path = '/'.join(safe_path.rsplit('/', 1)[:-1]) or '/'
+            file_bytes = content.encode()
+
+        # Ensure parent directory exists (list form, no shell)
+        dir_path = posixpath.dirname(path)
+        await asyncio.to_thread(
+            container_manager.exec_in_container,
+            session_id,
+            ["/bin/mkdir", "-p", dir_path]
+        )
+
+        # Use Docker put_archive API — no shell involved
+        try:
             await asyncio.to_thread(
-                container_manager.exec_in_container,
-                session_id,
-                f"/bin/sh -c 'mkdir -p {dir_path}'"
+                container_manager.copy_file_to_container, session_id, path, file_bytes
             )
-            exit_code, stdout, stderr = await asyncio.to_thread(
-                container_manager.exec_in_container,
-                session_id,
-                f"/bin/sh -c \"echo '{encoded}' | base64 -d > '{safe_path}'\""
-            )
-
-            if exit_code != 0:
-                raise RuntimeError(f"Failed to write file: {stderr or stdout}")
-
-            return f"File written: {path}"
+            return f"File written: {path} ({len(file_bytes)} bytes)"
+        except Exception as e:
+            raise RuntimeError(f"Failed to write file: {e}")
 
     async def _run_command(self, session_id: str, params: dict) -> str:
         """Run command in container."""
@@ -354,12 +372,12 @@ class ToolExecutor:
             LogStatus.NORMAL
         )
 
-        # 通过 shell 执行命令，确保管道、重定向等功能正常
-        escaped_command = command.replace('"', '\\"')
+        # Pass command to a single shell invocation via list form,
+        # avoiding double-shell expansion from string concatenation.
         exit_code, stdout, stderr = await asyncio.to_thread(
             container_manager.exec_in_container,
             session_id,
-            f'/bin/sh -c "{escaped_command}"'
+            ["/bin/sh", "-c", command]
         )
 
         # 合并 stdout 和 stderr 用于输出
@@ -400,14 +418,16 @@ class ToolExecutor:
             path = "/tmp/_http_helper.py"
             cmd_prefix = "python3 /tmp/_http_helper.py"
 
-        encoded = base64.b64encode(script.encode()).decode()
-        exit_code, _, stderr = await asyncio.to_thread(
-            container_manager.exec_in_container,
-            session_id,
-            f"/bin/sh -c \"echo '{encoded}' | base64 -d > '{path}'\""
-        )
-        if exit_code != 0:
-            raise RuntimeError(f"Failed to install HTTP helper: {stderr}")
+        # Use Docker put_archive API to write the helper script (no shell)
+        try:
+            await asyncio.to_thread(
+                container_manager.copy_file_to_container,
+                session_id,
+                path,
+                script.encode()
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to install HTTP helper: {e}")
 
         self._http_helper_ready.add(session_id)
         return cmd_prefix
@@ -448,10 +468,12 @@ class ToolExecutor:
         b64_params = base64.b64encode(json.dumps(helper_params).encode()).decode()
 
         cmd_prefix = await self._ensure_http_helper(session_id)
+        # cmd_prefix is e.g. "python3 /tmp/_http_helper.py" — split and append param
+        cmd_parts = cmd_prefix.split() + [b64_params]
         exit_code, stdout, stderr = await asyncio.to_thread(
             container_manager.exec_in_container,
             session_id,
-            f'/bin/sh -c "{cmd_prefix} {b64_params}"'
+            cmd_parts
         )
 
         if exit_code != 0:
@@ -471,17 +493,15 @@ class ToolExecutor:
         """List directory contents in container."""
         path = params.get("path", ".")
 
-        if ".." in path:
-            raise ValueError("Path traversal not allowed")
+        if path == ".":
+            path = "/workspace"
 
-        # 如果是相对路径，转换为 /workspace 下的绝对路径
-        if not path.startswith('/'):
-            path = f"/workspace/{path}" if path != "." else "/workspace"
+        path = await _resolve_and_validate_path(session_id, path)
 
         exit_code, stdout, stderr = await asyncio.to_thread(
             container_manager.exec_in_container,
             session_id,
-            f"/bin/sh -c \"ls -la '{path}'\""
+            ["/bin/ls", "-la", path]
         )
 
         if exit_code != 0:
@@ -502,19 +522,16 @@ class ToolExecutor:
         Returns:
             dict: {"path": str, "entries": List[FileEntry], "total": int}
         """
-        if ".." in path:
-            raise ValueError("Path traversal not allowed")
+        if path == ".":
+            path = "/workspace"
+        path = await _resolve_and_validate_path(session_id, path)
 
-        # 转换为绝对路径
-        if not path.startswith('/'):
-            path = f"/workspace/{path}" if path != "." else "/workspace"
-
-        # 构建 find 命令
-        # -printf 格式: 路径\0类型\0大小\0修改时间\0权限\0
-        depth_arg = "" if recursive else "-maxdepth 1"
-        # 对路径进行转义，处理特殊字符
-        escaped_path = path.replace("'", "'\\''")
-        cmd = f"/bin/sh -c \"find '{escaped_path}' {depth_arg} -printf '%p\\0%y\\0%s\\0%TY-%Tm-%Td %TH:%TM:%TS\\0%m\\0'\""
+        # 构建 find 命令 — 列表形式直接执行，避免 shell 解释
+        find_cmd = ["/usr/bin/find", path]
+        if not recursive:
+            find_cmd += ["-maxdepth", "1"]
+        find_cmd += ["-printf", "%p\\0%y\\0%s\\0%TY-%Tm-%Td %TH:%TM:%TS\\0%m\\0"]
+        cmd = find_cmd
 
         exit_code, stdout, stderr = await asyncio.to_thread(
             container_manager.exec_in_container_binary,
@@ -562,17 +579,12 @@ class ToolExecutor:
         if not path:
             raise ValueError("Missing required parameter: path")
 
-        if ".." in path:
-            raise ValueError("Path traversal not allowed")
-
-        # 如果是相对路径，转换为 /workspace 下的绝对路径
-        if not path.startswith('/'):
-            path = f"/workspace/{path}"
+        path = await _resolve_and_validate_path(session_id, path)
 
         parsers = params.get("parsers", [])
 
         # 提取文件名
-        filename = path.split('/')[-1]
+        filename = posixpath.basename(path)
 
         self._emit_log(
             LogType.INFO,
@@ -580,11 +592,11 @@ class ToolExecutor:
             LogStatus.NORMAL
         )
 
-        # 1. 从容器读取文件（Base64 编码）
+        # 1. 从容器读取文件（Base64 编码，列表形式避免 shell）
         exit_code, stdout, stderr = await asyncio.to_thread(
             container_manager.exec_in_container,
             session_id,
-            f"/bin/sh -c \"base64 '{path}'\""
+            ["/usr/bin/base64", path]
         )
 
         if exit_code != 0:

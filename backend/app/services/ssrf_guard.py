@@ -29,16 +29,25 @@ def is_private_ip(ip_str: str) -> bool:
         return False
 
 
-def resolve_hostname(hostname: str) -> str:
-    """Resolve hostname to IP address. Returns empty string on failure."""
+def resolve_all_addresses(hostname: str) -> list[str]:
+    """Resolve hostname to all IP addresses (IPv4 + IPv6).
+
+    Uses getaddrinfo to cover all address families, preventing IPv6 bypass.
+    """
     try:
-        return socket.gethostbyname(hostname)
+        results = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        # results: list of (family, type, proto, canonname, sockaddr)
+        # sockaddr is (ip, port) for IPv4, (ip, port, flow, scope) for IPv6
+        return list({r[4][0] for r in results})
     except socket.gaierror:
-        return ""
+        return []
 
 
 def check_ssrf(url: str, allow_private: bool = False) -> dict:
     """Check a URL for SSRF risk.
+
+    Resolves all address families (IPv4 + IPv6) and blocks if any resolved
+    address is private. This prevents bypass via IPv6 literals like [::1].
 
     Returns:
         dict with keys:
@@ -53,19 +62,21 @@ def check_ssrf(url: str, allow_private: bool = False) -> dict:
         if not hostname:
             return {"allowed": False, "reason": "Invalid URL: no hostname"}
 
-        ip = resolve_hostname(hostname)
-        if not ip:
+        addresses = resolve_all_addresses(hostname)
+        if not addresses:
             return {"allowed": False, "reason": f"Cannot resolve hostname: {hostname}"}
 
-        if is_private_ip(ip):
+        # Block if ANY resolved address is private
+        private_hits = [ip for ip in addresses if is_private_ip(ip)]
+        if private_hits:
             if allow_private:
                 return {
                     "allowed": True,
-                    "warning": f"SSRF: Accessing private IP {ip} ({hostname})",
+                    "warning": f"SSRF: Accessing private IP {private_hits[0]} ({hostname})",
                 }
             return {
                 "allowed": False,
-                "reason": f"SSRF blocked: {hostname} resolves to private IP {ip}",
+                "reason": f"SSRF blocked: {hostname} resolves to private IP {private_hits[0]}",
             }
 
         return {"allowed": True}

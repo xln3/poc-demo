@@ -116,7 +116,8 @@ async function play(){
       const l=logs[logIdx];
       const ld=document.createElement('div');
       ld.className='log log-'+l.status;
-      ld.innerHTML='<span class="log-label">['+{query:'查询',rule:'规则',tool:'工具',data:'数据',alert:'告警'}[l.type]+']</span>'+l.content;
+      const sp=document.createElement('span');sp.className='log-label';sp.textContent='['+({query:'查询',rule:'规则',tool:'工具',data:'数据',alert:'告警'}[l.type]||l.type)+']';
+      ld.appendChild(sp);ld.appendChild(document.createTextNode(l.content));
       logsEl.appendChild(ld);
     }
     await new Promise(r=>setTimeout(r,600));
@@ -127,7 +128,8 @@ async function play(){
     const l=logs[logIdx++];
     const ld=document.createElement('div');
     ld.className='log log-'+l.status;
-    ld.innerHTML='<span class="log-label">['+{query:'查询',rule:'规则',tool:'工具',data:'数据',alert:'告警'}[l.type]+']</span>'+l.content;
+    const sp2=document.createElement('span');sp2.className='log-label';sp2.textContent='['+({query:'查询',rule:'规则',tool:'工具',data:'数据',alert:'告警'}[l.type]||l.type)+']';
+    ld.appendChild(sp2);ld.appendChild(document.createTextNode(l.content));
     logsEl.appendChild(ld);
   }
 }
