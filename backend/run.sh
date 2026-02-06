@@ -16,5 +16,8 @@ source venv/bin/activate
 uv pip install -r requirements.txt -q
 
 # Start server
-echo "Starting sandbox API server on http://localhost:8000"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+HOST="${BACKEND_HOST:-127.0.0.1}"
+PORT="${BACKEND_PORT:-8000}"
+echo "Starting sandbox API server on http://${HOST}:${PORT}"
+# Security: bind to localhost by default. If you explicitly need LAN access, set BACKEND_HOST=0.0.0.0.
+uvicorn app.main:app --reload --host "${HOST}" --port "${PORT}"

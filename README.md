@@ -24,6 +24,8 @@ npm install && npm run dev
 cd backend && ./run.sh
 ```
 
+安全提示：`npm run dev` / `./run.sh` 属于开发模式服务，不要在公网机器上直接暴露端口；远程开发请用 SSH/VS Code 端口转发。
+
 ## 配置
 
 复制 `.env.example` 为 `.env`，填入 API 密钥。

@@ -52,7 +52,10 @@ npm run dev
 cd backend && ./run.sh
 ```
 
-访问 http://localhost:5173
+访问 http://127.0.0.1:5173
+
+注意：`npm run dev` / `./run.sh` 是开发模式服务，默认只绑定本机地址（安全考虑），不要直接在公网机器上暴露端口。
+如果你在远程服务器上开发，用 SSH/VS Code 端口转发访问即可。
 
 ### 部署生产
 

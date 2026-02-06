@@ -1,5 +1,125 @@
 # 沙箱环境安全整改报告
 
+## 0. 版本与结论（v2.0 / 2026-02-06）
+
+本报告在原 v1（主要解决“沙箱容器可达内网”）基础上，新增覆盖 **“开发模式服务对公网暴露导致的 RCE”** 风险。
+
+**v2.0 结论**：
+
+- **已修复（默认安全）**：开发模式下，前端 Vite dev server 与后端 `uvicorn --reload` 默认仅监听 `127.0.0.1`，避免公网直接访问，也避免通过 Vite proxy 旁路访问本机后端高危 API。
+- **仍需落地（强烈建议）**：为 `/sandbox`、`/mcp` 等高危能力增加鉴权（即使端口未暴露，也要做纵深防御），并在反向代理层做二次保护（IP 白名单/BasicAuth/SSO）。
+
+**v2.0 变更文件清单（本次新增）**：
+
+| 文件 | 变更 | 目的 |
+|------|------|------|
+| `vite.config.js` | 修改 | `npm run dev` 默认仅监听 `127.0.0.1`，显式设置 `VITE_DEV_HOST=0.0.0.0` 才允许对外 |
+| `backend/run.sh` | 修改 | 默认 `BACKEND_HOST=127.0.0.1`，显式设置 `BACKEND_HOST=0.0.0.0` 才允许对外 |
+| `README.md` / `docs/README.md` / `docs/DEPLOY.md` / `docs/BACKEND.md` | 修改 | 明确“开发模式不要公网暴露端口；远程开发用端口转发” |
+
+## 0.1 新增漏洞概述（开发模式公网暴露 → RCE）
+
+| 项目 | 内容 |
+|------|------|
+| 漏洞名称 | 开发模式服务外网可访问导致高危 API 被滥用（RCE） |
+| 漏洞类型 | 访问控制缺失 + 服务监听地址不安全（绑定 `0.0.0.0`） |
+| 影响范围 | 任意外部访问者可调用后端高危能力（沙箱命令执行、MCP 工具等），导致远程命令执行/数据外泄 |
+| 风险等级 | 严重 |
+| 整改状态 | 已通过“默认仅本机监听”降低暴露面；鉴权方案见 `0.3`（建议尽快落地） |
+
+**触发条件（v1 未覆盖的关键点）**：
+
+- `vite.config.js` 中配置了 `server.host: '0.0.0.0'`，使 `npm run dev` 在公网机器上会监听所有网卡。
+- `backend/run.sh` 使用 `uvicorn ... --host 0.0.0.0`，使后端在开发模式下也可能对公网暴露。
+- 即使后端只监听 `127.0.0.1`，只要 Vite dev server 对公网暴露，攻击者仍可通过 Vite 的 `server.proxy`（如 `/sandbox`、`/mcp`）**转发到本机 `127.0.0.1:8000`**，从而间接访问后端高危 API。
+
+**典型攻击链（公网 → Vite proxy → 后端高危能力 → RCE）**：
+
+```
+公网攻击者
+  └─ 访问 http://<server>:5173  (Vite dev server 监听 0.0.0.0)
+      └─ 请求 /sandbox/* 或 /mcp/* (被 Vite server.proxy 转发)
+          └─ 转发到 http://127.0.0.1:8000 (后端本机端口)
+              └─ 命令执行 / 文件读写 / MCP 工具调用
+                  └─ RCE / 数据外泄 / 反弹 shell
+```
+
+## 0.2 为什么 v1 没有成功修复（原因说明）
+
+v1 的整改目标与本次被利用的路径 **不在同一个风险面**：
+
+1. **v1 主要修“出站隔离”**：核心是在宿主机 iptables + 隔离 Docker 网络上，阻断“沙箱容器 → 内网私网段”的访问（以及修复宿主侧 HTTP 请求绕过隔离的问题）。
+2. **本次 RCE 是“入站暴露 + 无鉴权”**：攻击者并不需要从沙箱容器去打内网，而是直接（或通过 Vite proxy 间接）打到后端高危 API，获得命令执行能力。
+3. **v1 文档中的假设在开发模式下不成立**：v1 提到“后端端口不对外暴露（docker-compose 使用 expose）”，但开发模式通常是直接跑 `npm run dev` + `./run.sh`，且两者曾绑定 `0.0.0.0`，在公网机器上很容易被外部扫描到端口并利用。
+4. **v1 明确保留了公网出站能力**：这对演示“真实 LLM API 调用”是必要的，但也意味着一旦攻击者拿到命令执行，数据外泄/反弹 shell 到公网在网络层并不会被阻止（v1 的表格也写明公网出站保留）。
+
+换句话说：v1 解决了“沙箱越界访问内网”的一类问题，但没有解决“高危管理能力被外部直接调用”的问题；两者需要分别治理（暴露面收敛 + 鉴权/授权）。
+
+## 0.3 如何给 `/sandbox`、`/mcp` 等高危能力加鉴权（落地建议）
+
+这些路由提供了 **命令执行、文件读写、外部系统访问（MCP）** 等能力，应该被视为 **管理员接口**。推荐做分层防护（从外到内）：
+
+### 0.3.1 第一层（必须）：网络层不暴露
+
+- 不要把开发端口（默认 Vite `5173`、后端 `8000`）直接映射到公网。
+- 远程开发用端口转发而不是公网开放端口，例如：
+
+```bash
+ssh -L 5173:127.0.0.1:5173 -L 8000:127.0.0.1:8000 user@server
+```
+
+### 0.3.2 第二层（强烈建议）：反向代理层做访问控制
+
+如果必须对外提供演示环境（例如 `./deploy.sh` + nginx），建议至少做到其一：
+
+- **IP 白名单**：只允许公司/VPN 出口 IP 访问 `/sandbox`、`/mcp`。
+- **Basic Auth / SSO**：将整个站点或至少高危路径置于登录态后。
+
+注意：**CORS 不是鉴权**。CORS 只能限制浏览器跨域读取，不会阻止非浏览器客户端直接请求 API。
+
+### 0.3.3 第三层（推荐）：后端应用层鉴权（FastAPI）
+
+在后端对高危路由统一增加鉴权依赖，常见做法是 **API Key Header**（实现简单、可用于机器间调用）：
+
+1. 在后端增加一个“管理员 API Key”环境变量，例如 `POC_DEMO_ADMIN_API_KEY`。
+2. 要求请求携带 header，例如 `X-POC-ADMIN-KEY: <key>`。
+3. 对以下路由前缀统一加依赖：
+   - `/sandbox/*`
+   - `/mcp/*`
+   - 以及任何提供沙箱 exec / 文件读写 / 外部系统调用的路由（例如 `clawdbot` 下的 `*/sandbox/*`）。
+
+**代码落地方向（示例）**：
+
+- 新增 `backend/app/security/admin_auth.py`：
+
+```python
+import os
+from hmac import compare_digest
+from fastapi import Header, HTTPException, status
+
+
+def require_admin_key(x_poc_admin_key: str | None = Header(default=None, alias="X-POC-ADMIN-KEY")):
+    expected = os.environ.get("POC_DEMO_ADMIN_API_KEY")
+    if not expected:
+        # 生产环境建议：没有配置就直接拒绝启动或拒绝请求。
+        raise HTTPException(status_code=500, detail="POC_DEMO_ADMIN_API_KEY is not set")
+    if not x_poc_admin_key or not compare_digest(x_poc_admin_key, expected):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+```
+
+- 在 `backend/app/main.py` 里给路由加依赖（两种方式任选其一）：
+  - 方式 A：`include_router(..., dependencies=[Depends(require_admin_key)])`
+  - 方式 B：在对应 router 文件里 `APIRouter(..., dependencies=[Depends(require_admin_key)])`
+
+**WebSocket/流式接口注意**：
+
+- `/sandbox` 下若存在 WebSocket（例如终端日志/交互），也必须校验同样的 key（从 `websocket.headers` 或 query string 取 token），否则会成为绕过点。
+
+**“前端要不要持有 key？” 的安全说明**：
+
+- 如果你的系统是“公开演示给所有人看”，那就不应该在浏览器端开放 `/sandbox`、`/mcp`（否则任何人都能拿到 key 或绕过前端直接调用）。
+- 更合理的模型是：高危接口只给管理员/VPN/内网使用（IP 白名单 + 鉴权），或者把高危操作放到服务端队列/审批流中，由服务端持有凭据并代表用户执行。
+
 ## 1. 漏洞概述
 
 | 项目 | 内容 |

@@ -58,9 +58,11 @@ cd backend && ./run.sh
 
 ### 4. 访问应用
 
-- 前端: http://localhost:port
-- 后端 API: http://localhost:port
-- API 文档: http://localhost:port/docs
+- 前端: http://127.0.0.1:5173
+- 后端 API: http://127.0.0.1:8000
+- API 文档: http://127.0.0.1:8000/docs
+
+安全提示：开发模式（`npm run dev` / `./run.sh`）不要直接对公网暴露端口；需要远程访问时用 SSH/VS Code 端口转发。
 
 ---
 
