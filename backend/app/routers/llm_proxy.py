@@ -1,0 +1,307 @@
+"""LLM provider management and chat proxy endpoints.
+
+Providers are stored per-user with encrypted API keys. The /api/llm/chat
+endpoint proxies requests to the configured LLM API, keeping keys server-side.
+"""
+
+from datetime import datetime
+from typing import Optional, List
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..db.engine import get_db
+from ..db.tables import User, LLMProvider, ApiUsage
+from ..auth.security import require_user, get_current_user
+from ..services.encryption import encrypt_api_key, decrypt_api_key, mask_api_key
+
+router = APIRouter(prefix="/api/llm", tags=["llm"])
+limiter = Limiter(key_func=get_remote_address)
+
+
+# ===== Pydantic models =====
+
+class ProviderCreate(BaseModel):
+    provider_name: str
+    base_url: str
+    api_key: str
+    models: List[str] = []
+    is_default: bool = False
+    input_price_per_1k: Optional[float] = None
+    output_price_per_1k: Optional[float] = None
+
+
+class ProviderUpdate(BaseModel):
+    provider_name: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None  # only updated if provided
+    models: Optional[List[str]] = None
+    is_default: Optional[bool] = None
+    input_price_per_1k: Optional[float] = None
+    output_price_per_1k: Optional[float] = None
+
+
+class ProviderResponse(BaseModel):
+    id: int
+    provider_name: str
+    base_url: str
+    api_key_masked: str
+    models: List[str]
+    is_default: bool
+    input_price_per_1k: Optional[float]
+    output_price_per_1k: Optional[float]
+
+
+class ChatRequest(BaseModel):
+    messages: list
+    system_prompt: str = ""
+    provider_id: int
+    model: str
+    temperature: float = 0.7
+    max_tokens: int = 4096
+    top_p: float = 1.0
+    stream: bool = False
+    tools: Optional[list] = None
+    thinking: Optional[dict] = None
+
+
+# ===== Provider CRUD =====
+
+@router.post("/providers", response_model=ProviderResponse, status_code=201)
+async def create_provider(
+    req: ProviderCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    provider = LLMProvider(
+        user_id=user.id,
+        provider_name=req.provider_name,
+        base_url=req.base_url.rstrip("/"),
+        api_key_encrypted=encrypt_api_key(req.api_key),
+        models_json=req.models,
+        is_default=req.is_default,
+        input_price_per_1k=req.input_price_per_1k,
+        output_price_per_1k=req.output_price_per_1k,
+    )
+    # If setting as default, unset others
+    if req.is_default:
+        result = await db.execute(
+            select(LLMProvider).where(LLMProvider.user_id == user.id, LLMProvider.is_default == True)
+        )
+        for p in result.scalars():
+            p.is_default = False
+
+    db.add(provider)
+    await db.commit()
+    await db.refresh(provider)
+    return _to_response(provider)
+
+
+@router.get("/providers", response_model=List[ProviderResponse])
+async def list_providers(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    result = await db.execute(
+        select(LLMProvider).where(LLMProvider.user_id == user.id).order_by(LLMProvider.id)
+    )
+    return [_to_response(p) for p in result.scalars()]
+
+
+@router.put("/providers/{provider_id}", response_model=ProviderResponse)
+async def update_provider(
+    provider_id: int,
+    req: ProviderUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    result = await db.execute(
+        select(LLMProvider).where(LLMProvider.id == provider_id, LLMProvider.user_id == user.id)
+    )
+    provider = result.scalar_one_or_none()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    if req.provider_name is not None:
+        provider.provider_name = req.provider_name
+    if req.base_url is not None:
+        provider.base_url = req.base_url.rstrip("/")
+    if req.api_key is not None:
+        provider.api_key_encrypted = encrypt_api_key(req.api_key)
+    if req.models is not None:
+        provider.models_json = req.models
+    if req.is_default is not None:
+        if req.is_default:
+            others = await db.execute(
+                select(LLMProvider).where(LLMProvider.user_id == user.id, LLMProvider.is_default == True)
+            )
+            for p in others.scalars():
+                p.is_default = False
+        provider.is_default = req.is_default
+    if req.input_price_per_1k is not None:
+        provider.input_price_per_1k = req.input_price_per_1k
+    if req.output_price_per_1k is not None:
+        provider.output_price_per_1k = req.output_price_per_1k
+
+    await db.commit()
+    await db.refresh(provider)
+    return _to_response(provider)
+
+
+@router.delete("/providers/{provider_id}")
+async def delete_provider(
+    provider_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    result = await db.execute(
+        select(LLMProvider).where(LLMProvider.id == provider_id, LLMProvider.user_id == user.id)
+    )
+    provider = result.scalar_one_or_none()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    await db.delete(provider)
+    await db.commit()
+    return {"ok": True}
+
+
+# ===== Chat Proxy =====
+
+@router.post("/chat")
+@limiter.limit("60/minute")
+async def chat_proxy(
+    request: Request,
+    req: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Proxy LLM chat request — reads API key from DB, forwards to provider."""
+    result = await db.execute(
+        select(LLMProvider).where(LLMProvider.id == req.provider_id, LLMProvider.user_id == user.id)
+    )
+    provider = result.scalar_one_or_none()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    api_key = decrypt_api_key(provider.api_key_encrypted)
+    url = provider.base_url + "/chat/completions" if not provider.base_url.endswith("/chat/completions") else provider.base_url
+
+    # Build request body
+    body = {
+        "model": req.model,
+        "messages": (
+            [{"role": "system", "content": req.system_prompt}] if req.system_prompt else []
+        ) + req.messages,
+        "temperature": req.temperature,
+        "max_tokens": req.max_tokens,
+        "top_p": req.top_p,
+    }
+    if req.stream:
+        body["stream"] = True
+    if req.tools:
+        body["tools"] = req.tools
+        body["tool_choice"] = "auto"
+    if req.thinking:
+        body["thinking"] = req.thinking
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    if req.stream:
+        return StreamingResponse(
+            _stream_proxy(url, headers, body, db, user.id, provider.id, req.model, provider),
+            media_type="text/event-stream",
+        )
+
+    # Non-streaming
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(url, json=body, headers=headers)
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text[:1000])
+
+    data = resp.json()
+
+    # Record usage
+    usage = data.get("usage", {})
+    await _record_usage(db, user.id, provider.id, req.model, usage, provider)
+
+    return data
+
+
+async def _stream_proxy(url, headers, body, db, user_id, provider_id, model, provider):
+    """Generator that proxies SSE stream and records usage at the end."""
+    prompt_tokens = 0
+    completion_tokens = 0
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        async with client.stream("POST", url, json=body, headers=headers) as resp:
+            async for chunk in resp.aiter_bytes():
+                yield chunk
+                # Try to extract usage from final chunk
+                text = chunk.decode("utf-8", errors="replace")
+                if '"usage"' in text:
+                    try:
+                        import json
+                        for line in text.split("\n"):
+                            line = line.strip()
+                            if line.startswith("data: ") and line != "data: [DONE]":
+                                parsed = json.loads(line[6:])
+                                if "usage" in parsed:
+                                    prompt_tokens = parsed["usage"].get("prompt_tokens", 0)
+                                    completion_tokens = parsed["usage"].get("completion_tokens", 0)
+                    except Exception:
+                        pass
+
+    # Record usage after stream ends
+    await _record_usage(
+        db, user_id, provider_id, model,
+        {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens},
+        provider,
+    )
+
+
+async def _record_usage(db, user_id, provider_id, model, usage_dict, provider):
+    """Write a row to api_usage."""
+    prompt_tokens = usage_dict.get("prompt_tokens", 0)
+    completion_tokens = usage_dict.get("completion_tokens", 0)
+
+    cost = None
+    if provider.input_price_per_1k and provider.output_price_per_1k:
+        cost = (
+            (prompt_tokens / 1000) * provider.input_price_per_1k
+            + (completion_tokens / 1000) * provider.output_price_per_1k
+        )
+
+    row = ApiUsage(
+        user_id=user_id,
+        provider_id=provider_id,
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        cost=cost,
+    )
+    db.add(row)
+    await db.commit()
+
+
+def _to_response(p: LLMProvider) -> ProviderResponse:
+    return ProviderResponse(
+        id=p.id,
+        provider_name=p.provider_name,
+        base_url=p.base_url,
+        api_key_masked=mask_api_key(decrypt_api_key(p.api_key_encrypted)),
+        models=p.models_json or [],
+        is_default=p.is_default,
+        input_price_per_1k=p.input_price_per_1k,
+        output_price_per_1k=p.output_price_per_1k,
+    )
