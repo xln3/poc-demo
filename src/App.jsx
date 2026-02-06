@@ -7,7 +7,7 @@ import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
 import { listTestResults, getTestResult, saveTestResult, deleteTestResult, deleteTestCase, updateCaseReview, updateReport, listReportTemplates, getReportTemplate } from './testResultsApi.js';
 import { mcpClient } from './mcp.js';
-import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast, useDatasets, CAPABILITY_CONFIG, useTestExecution, ExecutionMode, useClawdBotSandbox, SandboxState } from './hooks/index.js';
+import { useSandbox, TerminalImage, formatBytes, formatTimeAgo, useRAG, useCases, useMCP, useConversation, useLLMConfig, usePlayback, useToast, useDatasets, CAPABILITY_CONFIG, useTestExecution, ExecutionMode, useClawdBotSandbox, SandboxState, usePanelLayout, usePayloadEditor, useJudgment, useApiInspector } from './hooks/index.js';
 import {
   buildTestInput,
   buildRecordingSession,
@@ -18,6 +18,7 @@ import {
   SCHEMA_VERSION,
 } from './schemas/testCase.js';
 import Toast from './components/Toast.jsx';
+import JsonTree from './components/JsonTree.jsx';
 import { CapabilityTabs, DatasetList, DatasetDetailModal, BatchTestModal } from './components/index.js';
 import {
   TerminalItem,
@@ -56,130 +57,6 @@ const getGroupedData = () => {
   return grouped;
 };
 
-// JSON 树形折叠组件（VSCode 风格）
-function JsonTree({ data }) {
-  const [collapsed, setCollapsed] = useState(new Set(['root'])); // 默认全部折叠
-
-  const toggle = (path) => {
-    setCollapsed(prev => {
-      const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
-      return next;
-    });
-  };
-
-  const renderValue = (value, path, isLast = true) => {
-    const comma = isLast ? '' : ',';
-
-    if (value === null) {
-      return <span className="text-blue-400">null{comma}</span>;
-    }
-    if (typeof value === 'boolean') {
-      return <span className="text-blue-400">{value.toString()}{comma}</span>;
-    }
-    if (typeof value === 'number') {
-      return <span className="text-green-300">{value}{comma}</span>;
-    }
-    if (typeof value === 'string') {
-      return <span className="text-amber-200 break-all">"{value}"{comma}</span>;
-    }
-    if (Array.isArray(value)) {
-      return renderArray(value, path, isLast);
-    }
-    if (typeof value === 'object') {
-      return renderObject(value, path, isLast);
-    }
-    return <span>{String(value)}{comma}</span>;
-  };
-
-  const renderObject = (obj, path, isLast = true) => {
-    const keys = Object.keys(obj);
-    const isCollapsed = collapsed.has(path);
-    const comma = isLast ? '' : ',';
-
-    if (keys.length === 0) {
-      return <span className="text-slate-400">{'{}'}{comma}</span>;
-    }
-
-    return (
-      <span>
-        <span
-          className="cursor-pointer hover:bg-slate-700/50 select-none"
-          onClick={() => toggle(path)}
-        >
-          <span className="text-slate-500 text-[10px] mr-1">{isCollapsed ? '▶' : '▼'}</span>
-          <span className="text-slate-400">{'{'}</span>
-          {isCollapsed && <span className="text-slate-500">...{keys.length}</span>}
-          {isCollapsed && <span className="text-slate-400">{'}'}{comma}</span>}
-        </span>
-        {!isCollapsed && (
-          <>
-            <div className="pl-4">
-              {keys.map((key, i) => (
-                <div key={key}>
-                  <span className="text-sky-300">"{key}"</span>
-                  <span className="text-slate-400">: </span>
-                  {renderValue(obj[key], `${path}.${key}`, i === keys.length - 1)}
-                </div>
-              ))}
-            </div>
-            <span className="text-slate-400">{'}'}{comma}</span>
-          </>
-        )}
-      </span>
-    );
-  };
-
-  const renderArray = (arr, path, isLast = true) => {
-    const isCollapsed = collapsed.has(path);
-    const comma = isLast ? '' : ',';
-
-    if (arr.length === 0) {
-      return <span className="text-slate-400">{'[]'}{comma}</span>;
-    }
-
-    return (
-      <span>
-        <span
-          className="cursor-pointer hover:bg-slate-700/50 select-none"
-          onClick={() => toggle(path)}
-        >
-          <span className="text-slate-500 text-[10px] mr-1">{isCollapsed ? '▶' : '▼'}</span>
-          <span className="text-slate-400">{'['}</span>
-          {isCollapsed && <span className="text-slate-500">{arr.length}</span>}
-          {isCollapsed && <span className="text-slate-400">{']'}{comma}</span>}
-        </span>
-        {!isCollapsed && (
-          <>
-            <div className="pl-4">
-              {arr.map((item, i) => (
-                <div key={i}>
-                  {renderValue(item, `${path}[${i}]`, i === arr.length - 1)}
-                </div>
-              ))}
-            </div>
-            <span className="text-slate-400">{']'}{comma}</span>
-          </>
-        )}
-      </span>
-    );
-  };
-
-  if (data === null || data === undefined) {
-    return <span className="text-slate-500">null</span>;
-  }
-
-  return (
-    <div className="font-mono text-xs leading-relaxed">
-      {renderValue(data, 'root')}
-    </div>
-  );
-}
-
 export default function App() {
   // 状态
   const [mode, setMode] = useState('real'); // 'mock' | 'real'
@@ -199,13 +76,15 @@ export default function App() {
   const [realResponse, setRealResponse] = useState('');
   const [selectedModel, setSelectedModel] = useState(CONFIG.models[0].id);
   const [documentReadme, setDocumentReadme] = useState('');
-  const [showDocument, setShowDocument] = useState(true);
-  const [docTab, setDocTab] = useState('principle'); // 'principle' | 'hiding' | 'tools' | 'readme' | 'parsing'
-  const [customSystemPrompt, setCustomSystemPrompt] = useState('');
+  // showDocument, docTab → usePanelLayout (above)
+  const {
+    customTestPayload, setCustomTestPayload,
+    isEditingPayload, setIsEditingPayload,
+    payloadFiles, setPayloadFiles,
+    customSystemPrompt, setCustomSystemPrompt,
+    resetPayloadEditor,
+  } = usePayloadEditor();
   const [isEditingLlmConfig, setIsEditingLlmConfig] = useState(false);
-  const [customTestPayload, setCustomTestPayload] = useState('');
-  const [isEditingPayload, setIsEditingPayload] = useState(false);
-  const [payloadFiles, setPayloadFiles] = useState([]);
   const [lastTestResult, setLastTestResult] = useState(null); // 存储最后一次测试结果
 
   // ============ 测试记录面板状态 ============
@@ -213,44 +92,43 @@ export default function App() {
   const [testRecords, setTestRecords] = useState([]);
   const [expandedRecords, setExpandedRecords] = useState(new Set());
 
-  // 评判配置
-  const [judgeConfig, setJudgeConfig] = useState({
-    model: CONFIG.judgeModel,
-    systemPrompt: CONFIG.defaultJudgePrompt
-  });
-  const [judgeConfigOpen, setJudgeConfigOpen] = useState(false);
+  // 评判配置 + 人类评判 + 批注
+  const {
+    judgeConfig, setJudgeConfig,
+    judgeConfigOpen, setJudgeConfigOpen,
+    humanJudgment, setHumanJudgment,
+    annotationModal, setAnnotationModal,
+    newAnnotation, setNewAnnotation,
+  } = useJudgment();
 
-  // 人类评判
-  const [humanJudgment, setHumanJudgment] = useState({
-    auditorCode: '',
-    score: null,
-    summary: ''
-  });
-
-  // 批注弹窗
-  const [annotationModal, setAnnotationModal] = useState({ open: false, recordId: null });
-  const [newAnnotation, setNewAnnotation] = useState({
-    source: 'human',
-    author: '',
-    content: ''
-  });
-
-  // Thinking 面板状态 - 改为数组支持多条记录
-  const [thinkingEntries, setThinkingEntries] = useState([]);
+  // thinkingEntries, apiInteractions, expandedThinking, expandedApiInteraction → useApiInspector (above)
   // 结构: [{ content: string, chars: number, timestamp: number, isStreaming?: boolean }, ...]
   // isStreaming: true 表示正在流式输出中
 
-  const [apiInteractions, setApiInteractions] = useState([]);
-  // 结构: [{ request: { messages, model, ... }, response: object, timestamp: number }, ...]
+  // apiInteractions → useApiInspector (above)
 
-  // 左右面板 Tab 状态
-  const [leftPanelTab, setLeftPanelTab] = useState('conversation'); // 'conversation' | 'thinking' | 'raw'
-  const [rightPanelTab, setRightPanelTab] = useState('records'); // 'records' | 'review' | 'examples' | 'report'
-  const [rightSubTab, setRightSubTab] = useState('llm'); // 'llm' | 'human' - 后三个 Tab 的子 Tab
+  // 面板布局
+  const {
+    leftPanelTab, setLeftPanelTab,
+    rightPanelTab, setRightPanelTab,
+    rightSubTab, setRightSubTab,
+    showDocument, setShowDocument,
+    docTab, setDocTab,
+  } = usePanelLayout();
 
-  // 展开/折叠状态
-  const [expandedThinking, setExpandedThinking] = useState(new Set());
-  const [expandedApiInteraction, setExpandedApiInteraction] = useState(new Set());
+  // API 检查器（thinking + API 交互追踪）
+  const {
+    thinkingEntries, setThinkingEntries,
+    apiInteractions, setApiInteractions,
+    expandedThinking, expandedApiInteraction,
+    apiStartTime, setApiStartTime,
+    apiElapsedTime, setApiElapsedTime,
+    addApiInteraction,
+    addThinkingEntry,
+    toggleThinkingExpanded,
+    toggleApiInteractionExpanded,
+    resetInspector,
+  } = useApiInspector();
 
   // Toast notifications
   const { toasts, addToast, removeToast } = useToast();
@@ -619,9 +497,7 @@ export default function App() {
   const [llmReviewLoading, setLlmReviewLoading] = useState(false);  // LLM 评审加载中
   const [reportSaving, setReportSaving] = useState(false);       // 报告保存中
 
-  // API 请求计时器
-  const [apiStartTime, setApiStartTime] = useState(null);
-  const [apiElapsedTime, setApiElapsedTime] = useState(0);
+  // apiStartTime, apiElapsedTime → useApiInspector (above)
 
   const chatRef = useRef(null);
   const logRef = useRef(null);

@@ -12,3 +12,7 @@ export { useStateCollector, buildPartialStateFromAppState } from './useStateColl
 export { useDatasets, CAPABILITY_CONFIG } from './useDatasets.js';
 export { useTestExecution, ExecutionMode, BatchResultStatus } from './useTestExecution.js';
 export { useClawdBotSandbox, SandboxState } from './useClawdBotSandbox.js';
+export { usePanelLayout } from './usePanelLayout.js';
+export { usePayloadEditor } from './usePayloadEditor.js';
+export { useJudgment } from './useJudgment.js';
+export { useApiInspector } from './useApiInspector.js';
