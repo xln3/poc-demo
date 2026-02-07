@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { authFetch } from '../auth';
+import UsagePanel from './UsagePanel';
 
 const PROVIDER_PRESETS = [
   { name: 'OpenAI', base_url: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] },
@@ -10,6 +11,7 @@ const PROVIDER_PRESETS = [
 ];
 
 export default function LLMProviderSettings({ open, onClose }) {
+  const [activeTab, setActiveTab] = useState('providers');
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -104,10 +106,35 @@ export default function LLMProviderSettings({ open, onClose }) {
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
         <div className="p-5 border-b border-slate-700 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">LLM 供应商配置</h2>
+          <h2 className="text-lg font-bold text-white">LLM 设置</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">&times;</button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-slate-700">
+          <button
+            onClick={() => setActiveTab('providers')}
+            className={`px-5 py-2.5 text-sm font-medium ${
+              activeTab === 'providers'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >供应商配置</button>
+          <button
+            onClick={() => setActiveTab('usage')}
+            className={`px-5 py-2.5 text-sm font-medium ${
+              activeTab === 'usage'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >用量统计</button>
+        </div>
+
+        {activeTab === 'usage' ? (
+          <div className="p-5">
+            <UsagePanel />
+          </div>
+        ) : (
         <div className="p-5 space-y-4">
           {/* Existing providers */}
           {providers.length > 0 && (
@@ -214,6 +241,7 @@ export default function LLMProviderSettings({ open, onClose }) {
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

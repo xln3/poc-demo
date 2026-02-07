@@ -4,13 +4,15 @@
  * 提供与 ClawdBot 安全测试沙箱后端的交互接口。
  */
 
+import { authFetch, getToken } from './auth.js';
+
 const API_BASE = '/clawdbot';
 
 /**
  * 获取服务状态
  */
 export async function getServiceStatus() {
-  const response = await fetch(`${API_BASE}/status`);
+  const response = await authFetch(`${API_BASE}/status`);
   if (!response.ok) {
     throw new Error(`Failed to get service status: ${response.status}`);
   }
@@ -22,7 +24,7 @@ export async function getServiceStatus() {
  * @returns {Promise<{levels: Array<{id: string, name: string, icon: string, description: string}>}>}
  */
 export async function getConfigLevels() {
-  const response = await fetch(`${API_BASE}/config-levels`);
+  const response = await authFetch(`${API_BASE}/config-levels`);
   if (!response.ok) {
     throw new Error(`Failed to get config levels: ${response.status}`);
   }
@@ -38,7 +40,7 @@ export async function getConfigLevels() {
  * @param {Object} [options.config] - ClawdBot 配置
  */
 export async function createSandbox(options = {}) {
-  const response = await fetch(`${API_BASE}/sandbox`, {
+  const response = await authFetch(`${API_BASE}/sandbox`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(options),
@@ -54,7 +56,7 @@ export async function createSandbox(options = {}) {
  * 列出所有沙箱
  */
 export async function listSandboxes() {
-  const response = await fetch(`${API_BASE}/sandbox`);
+  const response = await authFetch(`${API_BASE}/sandbox`);
   if (!response.ok) {
     throw new Error(`Failed to list sandboxes: ${response.status}`);
   }
@@ -66,7 +68,7 @@ export async function listSandboxes() {
  * @param {string} sandboxId - 沙箱 ID
  */
 export async function getSandbox(sandboxId) {
-  const response = await fetch(`${API_BASE}/sandbox/${sandboxId}`);
+  const response = await authFetch(`${API_BASE}/sandbox/${sandboxId}`);
   if (!response.ok) {
     if (response.status === 404) {
       return null;
@@ -81,7 +83,7 @@ export async function getSandbox(sandboxId) {
  * @param {string} sandboxId - 沙箱 ID
  */
 export async function destroySandbox(sandboxId) {
-  const response = await fetch(`${API_BASE}/sandbox/${sandboxId}`, {
+  const response = await authFetch(`${API_BASE}/sandbox/${sandboxId}`, {
     method: 'DELETE',
   });
   if (!response.ok && response.status !== 404) {
@@ -97,7 +99,7 @@ export async function destroySandbox(sandboxId) {
  * @param {Object} payload - 攻击载荷
  */
 export async function injectAttack(sandboxId, attackType, payload) {
-  const response = await fetch(`${API_BASE}/sandbox/${sandboxId}/inject`, {
+  const response = await authFetch(`${API_BASE}/sandbox/${sandboxId}/inject`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ attack_type: attackType, payload }),
@@ -115,7 +117,7 @@ export async function injectAttack(sandboxId, attackType, payload) {
  * @param {string} command - 要执行的命令
  */
 export async function execCommand(sandboxId, command) {
-  const response = await fetch(`${API_BASE}/sandbox/${sandboxId}/exec`, {
+  const response = await authFetch(`${API_BASE}/sandbox/${sandboxId}/exec`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ command }),
@@ -133,7 +135,7 @@ export async function execCommand(sandboxId, command) {
  * @param {string} path - 文件路径
  */
 export async function readFile(sandboxId, path) {
-  const response = await fetch(`${API_BASE}/sandbox/${sandboxId}/read-file`, {
+  const response = await authFetch(`${API_BASE}/sandbox/${sandboxId}/read-file`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
@@ -172,7 +174,7 @@ export async function getBehaviors(sandboxId, options = {}) {
  * @param {string} sandboxId - 沙箱 ID
  */
 export async function getTimeline(sandboxId) {
-  const response = await fetch(`${API_BASE}/sandbox/${sandboxId}/timeline`);
+  const response = await authFetch(`${API_BASE}/sandbox/${sandboxId}/timeline`);
   if (!response.ok) {
     throw new Error(`Failed to get timeline: ${response.status}`);
   }
@@ -184,7 +186,7 @@ export async function getTimeline(sandboxId) {
  * @param {string} sandboxId - 沙箱 ID
  */
 export async function getHoneypotTriggers(sandboxId) {
-  const response = await fetch(`${API_BASE}/sandbox/${sandboxId}/honeypot-triggers`);
+  const response = await authFetch(`${API_BASE}/sandbox/${sandboxId}/honeypot-triggers`);
   if (!response.ok) {
     throw new Error(`Failed to get honeypot triggers: ${response.status}`);
   }
@@ -196,7 +198,7 @@ export async function getHoneypotTriggers(sandboxId) {
  * @param {string} sandboxId - 沙箱 ID
  */
 export async function getBehaviorSummary(sandboxId) {
-  const response = await fetch(`${API_BASE}/sandbox/${sandboxId}/summary`);
+  const response = await authFetch(`${API_BASE}/sandbox/${sandboxId}/summary`);
   if (!response.ok) {
     throw new Error(`Failed to get behavior summary: ${response.status}`);
   }
@@ -207,7 +209,7 @@ export async function getBehaviorSummary(sandboxId) {
  * 获取蜜罐文件列表
  */
 export async function getHoneypotFiles() {
-  const response = await fetch(`${API_BASE}/honeypot-files`);
+  const response = await authFetch(`${API_BASE}/honeypot-files`);
   if (!response.ok) {
     throw new Error(`Failed to get honeypot files: ${response.status}`);
   }
@@ -222,7 +224,8 @@ export async function getHoneypotFiles() {
  */
 export function createBehaviorStream(sandboxId, onBehavior) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws = new WebSocket(`${protocol}//${window.location.host}${API_BASE}/sandbox/${sandboxId}/behaviors/stream`);
+  const _wsToken = getToken();
+  const ws = new WebSocket(`${protocol}//${window.location.host}${API_BASE}/sandbox/${sandboxId}/behaviors/stream?token=${encodeURIComponent(_wsToken || '')}`);
 
   ws.onmessage = (event) => {
     try {

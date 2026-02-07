@@ -1,6 +1,8 @@
 // Sandbox API 客户端
 // 用于与后端沙箱服务通信
 
+import { authFetch, authHeaders, getToken } from './auth.js';
+
 export const SANDBOX_CONFIG = {
   // 使用相对路径，通过 Vite 代理转发，避免浏览器代理干扰
   baseUrl: '',
@@ -65,7 +67,7 @@ class SandboxClient {
 
   // 创建终端（多用户支持）
   async createTerminal(tag, image = TerminalImage.PYTHON) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals`, {
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tag, image }),
@@ -91,7 +93,7 @@ class SandboxClient {
 
   // 列出所有运行中的终端
   async listTerminals() {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals`);
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals`);
     if (!response.ok) {
       throw new Error(`获取终端列表失败: ${response.status}`);
     }
@@ -100,7 +102,7 @@ class SandboxClient {
 
   // 获取指定终端状态
   async getTerminalStatus(tag) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}`);
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}`);
     if (!response.ok) {
       if (response.status === 404) {
         return null;
@@ -117,7 +119,7 @@ class SandboxClient {
 
   // 销毁指定终端
   async destroyTerminal(tag) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}`, {
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}`, {
       method: 'DELETE',
     });
 
@@ -144,7 +146,7 @@ class SandboxClient {
 
   // 在指定终端执行工具
   async executeToolInTerminal(tag, tool, params) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/tool`, {
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/tool`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool, params }),
@@ -160,7 +162,7 @@ class SandboxClient {
 
   // 列出已删除终端
   async listDeletedTerminals() {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals`);
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals`);
     if (!response.ok) {
       throw new Error(`获取已删除终端列表失败: ${response.status}`);
     }
@@ -169,7 +171,7 @@ class SandboxClient {
 
   // 清理单个已删除终端
   async cleanupDeletedTerminal(name) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals/${encodeURIComponent(name)}`, {
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals/${encodeURIComponent(name)}`, {
       method: 'DELETE',
     });
 
@@ -183,7 +185,7 @@ class SandboxClient {
 
   // 清理所有已删除终端
   async cleanupAllDeleted() {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals?confirm=true`, {
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/deleted-terminals?confirm=true`, {
       method: 'DELETE',
     });
 
@@ -253,6 +255,8 @@ class SandboxClient {
 
       xhr.open('POST', `${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/files`);
       xhr.setRequestHeader('X-Source', 'ui');
+      const token = getToken();
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.send(formData);
 
       // 返回 abort 函数
@@ -328,7 +332,7 @@ class SandboxClient {
       throw new Error('没有活跃的终端，请先创建终端');
     }
 
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/tool`, {
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/tool`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -388,7 +392,8 @@ class SandboxClient {
       this.ws.close();
     }
 
-    this.ws = new WebSocket(`${SANDBOX_CONFIG.wsUrl}/sandbox/logs/${this.sessionId}`);
+    const _wsToken = getToken();
+    this.ws = new WebSocket(`${SANDBOX_CONFIG.wsUrl}/sandbox/logs/${this.sessionId}?token=${encodeURIComponent(_wsToken || '')}`);
 
     this.ws.onmessage = (event) => {
       try {
@@ -431,7 +436,8 @@ class SandboxClient {
 
   // 连接文件监控 WebSocket
   connectFileWatch(tag, path = '/workspace', onEvent, onError = null) {
-    const wsUrl = `${SANDBOX_CONFIG.wsUrl}/sandbox/terminals/${encodeURIComponent(tag)}/watch?path=${encodeURIComponent(path)}`;
+    const _wsToken = getToken();
+    const wsUrl = `${SANDBOX_CONFIG.wsUrl}/sandbox/terminals/${encodeURIComponent(tag)}/watch?path=${encodeURIComponent(path)}&token=${encodeURIComponent(_wsToken || '')}`;
     const ws = new WebSocket(wsUrl);
 
     ws.onmessage = (event) => {
@@ -478,7 +484,7 @@ class SandboxClient {
 
   // 获取终端锁
   async acquireLock(tag) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock`, {
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: this.getUserId() }),
@@ -509,7 +515,7 @@ class SandboxClient {
 
   // 锁心跳续期
   async lockHeartbeat(tag) {
-    const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock/heartbeat`, {
+    const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock/heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: this.getUserId() }),
@@ -526,7 +532,7 @@ class SandboxClient {
   // 获取锁状态
   async getLockStatus(tag) {
     try {
-      const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock`);
+      const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/sandbox/terminals/${encodeURIComponent(tag)}/lock`);
 
       if (!response.ok) {
         // 静默处理错误，返回默认状态
@@ -560,7 +566,7 @@ class SandboxClient {
   // 检查后端服务是否可用
   async healthCheck() {
     try {
-      const response = await fetch(`${SANDBOX_CONFIG.baseUrl}/health`);
+      const response = await authFetch(`${SANDBOX_CONFIG.baseUrl}/health`);
       return response.ok;
     } catch {
       return false;

@@ -4,6 +4,8 @@
  * 数据集管理 API，支持 v2.0.0 Dataset Schema 格式
  */
 
+import { authFetch } from './auth.js';
+
 // 使用相对路径，走 Vite 代理（避免外网部署时 8000 端口不开放的问题）
 const BACKEND_URL = '';
 
@@ -12,7 +14,7 @@ const BACKEND_URL = '';
  * @returns {Promise<Array>} 数据集摘要列表
  */
 export async function listDatasets() {
-  const response = await fetch(`${BACKEND_URL}/datasets`);
+  const response = await authFetch(`${BACKEND_URL}/datasets`);
   if (!response.ok) {
     throw new Error(`Failed to list datasets: ${response.statusText}`);
   }
@@ -25,7 +27,7 @@ export async function listDatasets() {
  * @returns {Promise<Object>} 保存后的数据集
  */
 export async function saveDataset(dataset) {
-  const response = await fetch(`${BACKEND_URL}/datasets`, {
+  const response = await authFetch(`${BACKEND_URL}/datasets`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(dataset),
@@ -42,7 +44,7 @@ export async function saveDataset(dataset) {
  * @returns {Promise<Object>} 数据集完整数据
  */
 export async function getDataset(datasetId) {
-  const response = await fetch(`${BACKEND_URL}/datasets/${datasetId}`);
+  const response = await authFetch(`${BACKEND_URL}/datasets/${datasetId}`);
   if (!response.ok) {
     throw new Error(`Failed to get dataset: ${response.statusText}`);
   }
@@ -56,7 +58,7 @@ export async function getDataset(datasetId) {
  * @returns {Promise<Object>} 更新后的数据集
  */
 export async function updateDataset(datasetId, updates) {
-  const response = await fetch(`${BACKEND_URL}/datasets/${datasetId}`, {
+  const response = await authFetch(`${BACKEND_URL}/datasets/${datasetId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
@@ -73,7 +75,7 @@ export async function updateDataset(datasetId, updates) {
  * @returns {Promise<Object>} 删除结果
  */
 export async function deleteDataset(datasetId) {
-  const response = await fetch(`${BACKEND_URL}/datasets/${datasetId}`, {
+  const response = await authFetch(`${BACKEND_URL}/datasets/${datasetId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -88,7 +90,7 @@ export async function deleteDataset(datasetId) {
  * @returns {Promise<Array>} 用例列表
  */
 export async function listCasesInDataset(datasetId) {
-  const response = await fetch(`${BACKEND_URL}/datasets/${datasetId}/cases`);
+  const response = await authFetch(`${BACKEND_URL}/datasets/${datasetId}/cases`);
   if (!response.ok) {
     throw new Error(`Failed to list cases: ${response.statusText}`);
   }
@@ -102,7 +104,7 @@ export async function listCasesInDataset(datasetId) {
  * @returns {Promise<Object>} 添加结果
  */
 export async function addCaseToDataset(datasetId, caseData) {
-  const response = await fetch(`${BACKEND_URL}/datasets/${datasetId}/cases`, {
+  const response = await authFetch(`${BACKEND_URL}/datasets/${datasetId}/cases`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(caseData),
@@ -120,7 +122,7 @@ export async function addCaseToDataset(datasetId, caseData) {
  * @returns {Promise<Object>} 用例数据
  */
 export async function getCaseFromDataset(datasetId, caseId) {
-  const response = await fetch(`${BACKEND_URL}/datasets/${datasetId}/cases/${caseId}`);
+  const response = await authFetch(`${BACKEND_URL}/datasets/${datasetId}/cases/${caseId}`);
   if (!response.ok) {
     throw new Error(`Failed to get case: ${response.statusText}`);
   }
@@ -134,7 +136,7 @@ export async function getCaseFromDataset(datasetId, caseId) {
  * @returns {Promise<Object>} 移除结果
  */
 export async function removeCaseFromDataset(datasetId, caseId) {
-  const response = await fetch(`${BACKEND_URL}/datasets/${datasetId}/cases/${caseId}`, {
+  const response = await authFetch(`${BACKEND_URL}/datasets/${datasetId}/cases/${caseId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {

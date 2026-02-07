@@ -5,9 +5,11 @@ import json
 import tarfile
 from typing import List, Optional
 from urllib.parse import quote
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query, File, UploadFile, Form, Header, Body, Request
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query, File, UploadFile, Form, Header, Body, Request, Depends
 from fastapi.responses import StreamingResponse
 from datetime import datetime
+from jose import jwt
+from ..auth.security import require_auth, SECRET_KEY, ALGORITHM
 from ..models.schemas import (
     ToolCallRequest,
     ToolResult,
@@ -40,7 +42,7 @@ router = APIRouter(prefix="/sandbox", tags=["sandbox"])
 # ============ Multi-Terminal Sandbox Endpoints ============
 
 
-@router.post("/terminals", response_model=TerminalInfo)
+@router.post("/terminals", response_model=TerminalInfo, dependencies=[Depends(require_auth)])
 async def create_terminal(request: CreateTerminalRequest):
     """创建终端容器
 
@@ -79,7 +81,7 @@ async def create_terminal(request: CreateTerminalRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/terminals", response_model=TerminalListResponse)
+@router.get("/terminals", response_model=TerminalListResponse, dependencies=[Depends(require_auth)])
 async def list_terminals():
     """列出所有运行中的终端
 
@@ -90,7 +92,7 @@ async def list_terminals():
     return TerminalListResponse(terminals=terminals, count=len(terminals))
 
 
-@router.get("/terminals/{tag}", response_model=TerminalInfo)
+@router.get("/terminals/{tag}", response_model=TerminalInfo, dependencies=[Depends(require_auth)])
 async def get_terminal_status(tag: str):
     """获取指定终端状态
 
@@ -109,7 +111,7 @@ async def get_terminal_status(tag: str):
     return info
 
 
-@router.delete("/terminals/{tag}")
+@router.delete("/terminals/{tag}", dependencies=[Depends(require_auth)])
 async def destroy_terminal(tag: str):
     """销毁指定终端
 
@@ -138,7 +140,7 @@ async def destroy_terminal(tag: str):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/terminals/{tag}/tool", response_model=ToolResult)
+@router.post("/terminals/{tag}/tool", response_model=ToolResult, dependencies=[Depends(require_auth)])
 async def execute_tool_in_terminal(tag: str, request: TerminalToolRequest):
     """在指定终端执行工具
 
@@ -192,11 +194,11 @@ async def execute_tool_in_terminal(tag: str, request: TerminalToolRequest):
 # ============ File Management Endpoints ============
 
 
-@router.get("/terminals/{tag}/files", response_model=FileListResponse)
+@router.get("/terminals/{tag}/files", response_model=FileListResponse, dependencies=[Depends(require_auth)])
 async def list_files(
     tag: str,
     path: str = Query("/workspace", description="目录路径"),
-    recursive: bool = Query(False, description="是否递归列出")
+    recursive: bool = Query(False, description="是否递归列出"),
 ):
     """获取终端文件列表（结构化）
 
@@ -221,7 +223,7 @@ async def list_files(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/terminals/{tag}/files")
+@router.post("/terminals/{tag}/files", dependencies=[Depends(require_auth)])
 async def upload_file(
     tag: str,
     file: UploadFile = File(...),
@@ -281,7 +283,7 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/terminals/{tag}/files/download")
+@router.get("/terminals/{tag}/files/download", dependencies=[Depends(require_auth)])
 async def download_file(
     tag: str,
     path: str = Query(..., description="文件路径"),
@@ -365,7 +367,7 @@ async def download_file(
 # ============ Terminal Lock Endpoints ============
 
 
-@router.post("/terminals/{tag}/lock")
+@router.post("/terminals/{tag}/lock", dependencies=[Depends(require_auth)])
 async def acquire_lock(
     tag: str,
     request: Request,
@@ -399,7 +401,7 @@ async def acquire_lock(
     return result
 
 
-@router.delete("/terminals/{tag}/lock")
+@router.delete("/terminals/{tag}/lock", dependencies=[Depends(require_auth)])
 async def release_lock(
     tag: str,
     user_id: str = Query(..., description="用户标识"),
@@ -414,7 +416,7 @@ async def release_lock(
     return result
 
 
-@router.post("/terminals/{tag}/lock/heartbeat")
+@router.post("/terminals/{tag}/lock/heartbeat", dependencies=[Depends(require_auth)])
 async def lock_heartbeat(
     tag: str,
     user_id: str = Body(..., embed=True),
@@ -427,7 +429,7 @@ async def lock_heartbeat(
     return result
 
 
-@router.get("/terminals/{tag}/lock")
+@router.get("/terminals/{tag}/lock", dependencies=[Depends(require_auth)])
 async def get_lock_status(tag: str, request: Request):
     """获取锁状态
 
@@ -450,7 +452,7 @@ async def get_lock_status(tag: str, request: Request):
 # ============ Deleted Terminals Management ============
 
 
-@router.get("/deleted-terminals", response_model=DeletedTerminalsResponse)
+@router.get("/deleted-terminals", response_model=DeletedTerminalsResponse, dependencies=[Depends(require_auth)])
 async def list_deleted_terminals():
     """列出所有已删除终端
 
@@ -466,7 +468,7 @@ async def list_deleted_terminals():
     )
 
 
-@router.delete("/deleted-terminals/{name}", response_model=CleanupResult)
+@router.delete("/deleted-terminals/{name}", response_model=CleanupResult, dependencies=[Depends(require_auth)])
 async def cleanup_deleted_terminal(name: str):
     """清理单个已删除终端
 
@@ -482,9 +484,9 @@ async def cleanup_deleted_terminal(name: str):
     return result
 
 
-@router.delete("/deleted-terminals", response_model=CleanupResult)
+@router.delete("/deleted-terminals", response_model=CleanupResult, dependencies=[Depends(require_auth)])
 async def cleanup_all_deleted_terminals(
-    confirm: bool = Query(False, description="确认清理所有已删除终端")
+    confirm: bool = Query(False, description="确认清理所有已删除终端"),
 ):
     """清理所有已删除终端
 
@@ -510,7 +512,7 @@ async def cleanup_all_deleted_terminals(
 # ============ Legacy Tool Endpoint (for existing frontend) ============
 
 
-@router.post("/tool", response_model=ToolResult)
+@router.post("/tool", response_model=ToolResult, dependencies=[Depends(require_auth)])
 async def execute_tool(request: ToolCallRequest):
     """执行工具（兼容旧接口，通过 session_id 查找容器）
 
@@ -556,8 +558,16 @@ async def execute_tool(request: ToolCallRequest):
 
 
 @router.websocket("/logs/{session_id}")
-async def websocket_logs(websocket: WebSocket, session_id: str):
+async def websocket_logs(websocket: WebSocket, session_id: str, token: str = Query(None)):
     """WebSocket endpoint for real-time logs."""
+    if not token:
+        await websocket.close(code=4001, reason="Auth required")
+        return
+    try:
+        jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
     await websocket.accept()
 
     # Create queue for this connection
@@ -591,7 +601,7 @@ async def websocket_logs(websocket: WebSocket, session_id: str):
 
 
 @router.websocket("/terminals/{tag}/watch")
-async def websocket_file_watch(websocket: WebSocket, tag: str, path: str = "/workspace"):
+async def websocket_file_watch(websocket: WebSocket, tag: str, path: str = "/workspace", token: str = Query(None)):
     """WebSocket endpoint for file change monitoring.
 
     前端连接后会启动 inotifywait 监控指定目录，
@@ -601,6 +611,14 @@ async def websocket_file_watch(websocket: WebSocket, tag: str, path: str = "/wor
         tag: 终端标识
         path: 监控路径 (默认 /workspace)
     """
+    if not token:
+        await websocket.close(code=4001, reason="Auth required")
+        return
+    try:
+        jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
     # 验证终端存在
     info = await asyncio.to_thread(terminal_sandbox_service.get_terminal, tag)
     if info is None:

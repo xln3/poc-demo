@@ -46,6 +46,9 @@ services:
       dockerfile: Dockerfile.frontend
     ports:
       - "${FRONTEND_PORT:-5175}:80"
+      # - "${FRONTEND_TLS_PORT:-443}:443"  # Uncomment for TLS
+    # volumes:
+    #   - ./certs:/etc/nginx/certs:ro  # Uncomment for TLS
     depends_on:
       - backend
     restart: unless-stopped

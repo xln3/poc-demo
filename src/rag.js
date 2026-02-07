@@ -1,6 +1,8 @@
 // RAG API 客户端
 // 用于与后端 RAG 服务通信
 
+import { authFetch } from './auth.js';
+
 export const RAG_CONFIG = {
   // 使用相对路径，通过 Vite 代理转发
   baseUrl: '',
@@ -26,7 +28,7 @@ class RAGClient {
    */
   async healthCheck() {
     try {
-      const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/health`);
+      const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/health`);
       if (!response.ok) {
         this._available = false;
         return null;
@@ -63,7 +65,7 @@ class RAGClient {
       formData.append('source_name', sourceName);
     }
 
-    const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/upload`, {
+    const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -83,7 +85,7 @@ class RAGClient {
    * @param {object} metadata - 可选的元数据
    */
   async ingest(content, sourceName = '直接输入', metadata = null) {
-    const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/ingest`, {
+    const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/ingest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -117,7 +119,7 @@ class RAGClient {
       body.score_threshold = scoreThreshold;
     }
 
-    const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/query`, {
+    const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -135,7 +137,7 @@ class RAGClient {
    * 列出所有已添加的文档
    */
   async listDocuments() {
-    const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/documents`);
+    const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/documents`);
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
@@ -150,7 +152,7 @@ class RAGClient {
    * @param {string} documentId - 文档 ID
    */
   async deleteDocument(documentId) {
-    const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/documents/${documentId}`, {
+    const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/documents/${documentId}`, {
       method: 'DELETE',
     });
 
@@ -166,7 +168,7 @@ class RAGClient {
    * 清空所有文档
    */
   async clear() {
-    const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/clear`, {
+    const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/clear`, {
       method: 'DELETE',
     });
 
@@ -182,7 +184,7 @@ class RAGClient {
    * 初始化 RAG 知识库（导入预置数据）
    */
   async init() {
-    const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/init`, {
+    const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/init`, {
       method: 'POST',
     });
 
@@ -198,7 +200,7 @@ class RAGClient {
    * 重置 RAG 知识库为预置数据
    */
   async reset() {
-    const response = await fetch(`${RAG_CONFIG.baseUrl}/rag/reset`, {
+    const response = await authFetch(`${RAG_CONFIG.baseUrl}/rag/reset`, {
       method: 'POST',
     });
 

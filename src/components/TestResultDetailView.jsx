@@ -1,0 +1,199 @@
+import { FIVE_LEVEL_RISK, calculateRiskStats } from '../config.js';
+
+/**
+ * Test result detail view: test records list + report editor in a 2-column layout.
+ */
+export default function TestResultDetailView({
+  selectedTestResult,
+  openDetailModal, openReviewModal, handleDeleteTestCase,
+  reportContent, setReportContent,
+  reportEditMode, setReportEditMode,
+  reportSaving, handleSaveReport,
+  reportTemplates, selectedTemplate, setSelectedTemplate,
+  applyReportTemplate, handleLLMGenerateReport,
+}) {
+  return (
+    <div className="h-full flex flex-col">
+      {/* 测试报告标题区 */}
+      <div className="mb-4 pb-3 border-b border-slate-700">
+        <div className="flex items-center gap-3 mb-1">
+          <h2 className="text-lg font-bold">{selectedTestResult.name || '未命名测试'}</h2>
+          <span className="text-xs px-2 py-0.5 rounded bg-purple-600">
+            {selectedTestResult.results?.length || 0} 用例
+          </span>
+        </div>
+        <div className="text-xs text-slate-400 mt-1">
+          模型: {selectedTestResult.meta?.testModel || '未知'} · 评审模型: {selectedTestResult.meta?.judgeModel || '未知'}
+        </div>
+        <div className="text-xs text-slate-500 mt-1">
+          保存时间: {selectedTestResult.savedAt ? new Date(selectedTestResult.savedAt).toLocaleString('zh-CN') : '未知'}
+        </div>
+        {/* 五态风险统计 */}
+        <div className="flex items-center gap-3 mt-2 text-xs flex-wrap">
+          {(() => {
+            const stats = calculateRiskStats(selectedTestResult.results);
+            return Object.entries(FIVE_LEVEL_RISK).map(([key, config]) => (
+              <span key={key} className={`px-2 py-0.5 rounded border ${config.badgeColor}`}>
+                {config.icon} {config.label}: {stats[key]}
+              </span>
+            ));
+          })()}
+        </div>
+      </div>
+
+      {/* 双栏布局：左测试记录 + 右报告编辑器 */}
+      <div className="flex-1 flex gap-4 min-h-0">
+        {/* 左栏：测试记录 */}
+        <div className="w-1/2 flex flex-col min-h-0">
+          <div className="text-sm font-medium text-slate-300 mb-2">测试记录</div>
+          <div className="flex-1 overflow-y-auto custom-scroll">
+            <div className="space-y-2">
+              {(selectedTestResult.results || []).map((result, idx) => {
+                const riskLevel = result.riskLevel || 'pending';
+                const riskConfig = FIVE_LEVEL_RISK[riskLevel] || FIVE_LEVEL_RISK.pending;
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-lg border bg-slate-800/50 border-slate-700 hover:border-slate-600`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">#{result.index ?? idx + 1}</span>
+                        <span className="text-sm font-medium truncate max-w-[150px]">{result.caseName || '未命名'}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded border ${riskConfig.badgeColor}`}>
+                          {riskConfig.icon} {riskConfig.label}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500">{result.apiTime ? `${(result.apiTime / 1000).toFixed(1)}s` : ''}</span>
+                    </div>
+                    {result.attackType && (
+                      <div className="text-xs text-slate-400 mb-2 truncate">
+                        {result.attackType} {result.attackDescription ? `· ${result.attackDescription}` : ''}
+                      </div>
+                    )}
+                    {(result.judgment?.reason || result.review?.llm?.reason || result.review?.human?.reason) && (
+                      <div className="text-xs text-slate-300 p-2 bg-slate-900/50 rounded mb-2 line-clamp-2">
+                        <span className="text-slate-500">判定: </span>
+                        {result.review?.human?.reason || result.review?.llm?.reason || result.judgment?.reason}
+                      </div>
+                    )}
+                    {/* 操作按钮 */}
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700">
+                      <button
+                        onClick={() => openDetailModal(result)}
+                        className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded"
+                      >
+                        详情
+                      </button>
+                      <button
+                        onClick={() => openReviewModal(result)}
+                        className="text-xs px-2 py-1 bg-violet-700 hover:bg-violet-600 rounded"
+                      >
+                        评审
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTestCase(result.index ?? idx)}
+                        className="text-xs px-2 py-1 bg-red-700 hover:bg-red-600 rounded"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* 右栏：报告编辑器 */}
+        <div className="w-1/2 flex flex-col min-h-0 border-l border-slate-700 pl-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-medium text-slate-300">文字版报告</div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setReportEditMode('edit')}
+                className={`text-xs px-2 py-1 rounded ${reportEditMode === 'edit' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+              >
+                编辑
+              </button>
+              <button
+                onClick={() => setReportEditMode('preview')}
+                className={`text-xs px-2 py-1 rounded ${reportEditMode === 'preview' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+              >
+                预览
+              </button>
+              <button
+                onClick={handleSaveReport}
+                disabled={reportSaving}
+                className="text-xs px-2 py-1 bg-green-700 hover:bg-green-600 rounded disabled:opacity-50"
+              >
+                {reportSaving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+
+          {/* 模板选择 */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-slate-400">模板:</span>
+            <select
+              value={selectedTemplate}
+              onChange={(e) => setSelectedTemplate(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1"
+            >
+              {reportTemplates.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => applyReportTemplate(selectedTemplate)}
+              className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded"
+            >
+              应用模板
+            </button>
+          </div>
+
+          {/* 编辑区/预览区 */}
+          <div className="flex-1 min-h-0">
+            {reportEditMode === 'edit' ? (
+              <textarea
+                value={reportContent}
+                onChange={(e) => setReportContent(e.target.value)}
+                className="w-full h-full bg-slate-900 border border-slate-700 rounded p-3 text-sm resize-none custom-scroll font-mono"
+                placeholder="在此编辑报告内容（支持 Markdown 格式）..."
+              />
+            ) : (
+              <div className="w-full h-full bg-slate-900 border border-slate-700 rounded p-3 text-sm overflow-y-auto custom-scroll prose prose-invert prose-sm max-w-none">
+                <pre className="whitespace-pre-wrap font-sans">{reportContent || '暂无报告内容'}</pre>
+              </div>
+            )}
+          </div>
+
+          {/* LLM 生成区 */}
+          <div className="mt-3 pt-3 border-t border-slate-700">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="输入指令让 LLM 生成/优化报告..."
+                className="flex-1 text-xs bg-slate-800 border border-slate-700 rounded px-2 py-1.5"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleLLMGenerateReport(e.target.value);
+                    e.target.value = '';
+                  }
+                }}
+              />
+              <button
+                onClick={() => handleLLMGenerateReport('')}
+                disabled={reportSaving}
+                className="text-xs px-3 py-1.5 bg-violet-700 hover:bg-violet-600 rounded disabled:opacity-50"
+              >
+                {reportSaving ? '生成中...' : 'LLM 生成'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

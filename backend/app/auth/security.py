@@ -65,8 +65,21 @@ async def get_current_user(
     return user
 
 
+async def require_auth(token: Optional[str] = Depends(oauth2_scheme)) -> dict:
+    """Lightweight auth gate — validates JWT, returns claims. No DB lookup."""
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("sub") is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
 async def require_user(user: Optional[User] = Depends(get_current_user)) -> User:
-    """Dependency that requires authentication."""
+    """Dependency that requires authentication and returns the User object (hits DB)."""
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     return user

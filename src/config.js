@@ -495,17 +495,17 @@ export const CONFIG = {
   // 详见 src/api/llmClient.js
 
   // 向后兼容的薄封装 — 新代码应直接 import { callLLM } from './api/llmClient.js'
-  async callModel(messages, systemPrompt = '', modelId = null, llmParams = {}, thinkingConfig = null) {
-    return callLLM({ messages, systemPrompt, modelId, llmParams, thinkingConfig });
+  async callModel(messages, systemPrompt = '', modelId = null, llmParams = {}, thinkingConfig = null, providerId = null) {
+    return callLLM({ messages, systemPrompt, modelId, providerId, llmParams, thinkingConfig });
   },
-  async callModelStream(messages, systemPrompt = '', modelId = null, llmParams = {}, thinkingConfig = null, onDelta = null) {
-    return callLLM({ messages, systemPrompt, modelId, llmParams, thinkingConfig, stream: true, onDelta });
+  async callModelStream(messages, systemPrompt = '', modelId = null, llmParams = {}, thinkingConfig = null, onDelta = null, providerId = null) {
+    return callLLM({ messages, systemPrompt, modelId, providerId, llmParams, thinkingConfig, stream: true, onDelta });
   },
-  async callModelWithTools(messages, systemPrompt = '', modelId = null, llmParams = {}, toolDefinitions = [], thinkingConfig = null) {
-    return callLLM({ messages, systemPrompt, modelId, llmParams, thinkingConfig, tools: toolDefinitions });
+  async callModelWithTools(messages, systemPrompt = '', modelId = null, llmParams = {}, toolDefinitions = [], thinkingConfig = null, providerId = null) {
+    return callLLM({ messages, systemPrompt, modelId, providerId, llmParams, thinkingConfig, tools: toolDefinitions });
   },
-  async callModelWithToolsStream(messages, systemPrompt = '', modelId = null, llmParams = {}, toolDefinitions = [], thinkingConfig = null, onDelta = null) {
-    return callLLM({ messages, systemPrompt, modelId, llmParams, thinkingConfig, stream: true, tools: toolDefinitions, onDelta });
+  async callModelWithToolsStream(messages, systemPrompt = '', modelId = null, llmParams = {}, toolDefinitions = [], thinkingConfig = null, onDelta = null, providerId = null) {
+    return callLLM({ messages, systemPrompt, modelId, providerId, llmParams, thinkingConfig, stream: true, tools: toolDefinitions, onDelta });
   },
 
   // 构建工具定义（从启用的工具列表）

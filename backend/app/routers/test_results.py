@@ -1,13 +1,15 @@
 """API endpoints for batch test results."""
 from __future__ import annotations
 from typing import List, Optional, Any, Dict, Literal
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from ..auth.security import require_auth
 
 from ..services.test_results_storage import test_results_storage
 
 
-router = APIRouter(prefix="/test-results", tags=["test-results"])
+router = APIRouter(prefix="/test-results", tags=["test-results"], dependencies=[Depends(require_auth)])
 
 
 class TestResultMeta(BaseModel):

@@ -1,7 +1,9 @@
 """API endpoints for saved test cases."""
 from __future__ import annotations
 from typing import List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from ..auth.security import require_auth
 
 from ..models.schemas import (
     SaveCaseRequest,
@@ -11,7 +13,7 @@ from ..models.schemas import (
 )
 from ..services.case_storage import case_storage
 
-router = APIRouter(prefix="/cases", tags=["cases"])
+router = APIRouter(prefix="/cases", tags=["cases"], dependencies=[Depends(require_auth)])
 
 
 @router.get("", response_model=List[SavedCaseSummary])

@@ -1,10 +1,12 @@
 /**
  * Unified LLM API client.
  *
- * Replaces the four separate methods (callModel, callModelStream,
- * callModelWithTools, callModelWithToolsStream) with a single callLLM().
+ * Routes requests through the backend proxy (/api/llm/chat) so that
+ * API keys stay server-side. Falls back to direct API call when no
+ * providerId is given (legacy / mock mode).
  */
 
+import { authFetch } from '../auth.js';
 import { CONFIG } from '../config.js';
 
 /**
@@ -93,48 +95,16 @@ async function consumeSSEStream(response, onDelta) {
 }
 
 /**
- * Build the common request body for LLM calls.
- */
-function buildRequestBody({ messages, systemPrompt, modelId, llmParams, thinkingConfig, stream, tools }) {
-  const params = { ...CONFIG.llmParams, ...llmParams };
-  const body = {
-    model: modelId || CONFIG.api.model,
-    messages: [
-      ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-      ...messages,
-    ],
-    temperature: params.temperature,
-    max_tokens: params.max_tokens,
-    top_p: params.top_p,
-    thinking: thinkingConfig || { type: 'disabled' },
-  };
-
-  if (stream) {
-    body.stream = true;
-  }
-
-  if (tools && tools.length > 0) {
-    body.tools = tools.map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      },
-    }));
-    body.tool_choice = 'auto';
-  }
-
-  return body;
-}
-
-/**
  * Unified LLM API call.
+ *
+ * When providerId is given, routes through backend proxy (/api/llm/chat).
+ * Otherwise falls back to direct API call (legacy / mock mode).
  *
  * @param {Object} opts
  * @param {Array} opts.messages - Chat messages array
  * @param {string} [opts.systemPrompt] - System prompt
- * @param {string} [opts.modelId] - Override model ID
+ * @param {string} [opts.modelId] - Model ID
+ * @param {number} [opts.providerId] - Backend provider ID (enables proxy mode)
  * @param {Object} [opts.llmParams] - Override LLM parameters (temperature, etc.)
  * @param {Object} [opts.thinkingConfig] - Thinking/reasoning config
  * @param {boolean} [opts.stream] - Enable SSE streaming
@@ -147,6 +117,7 @@ export async function callLLM({
   messages,
   systemPrompt = '',
   modelId = null,
+  providerId = null,
   llmParams = {},
   thinkingConfig = null,
   stream = false,
@@ -154,9 +125,91 @@ export async function callLLM({
   onDelta = null,
 } = {}) {
   const startTime = Date.now();
-  const requestBody = buildRequestBody({
-    messages, systemPrompt, modelId, llmParams, thinkingConfig, stream, tools,
-  });
+  const params = { ...CONFIG.llmParams, ...llmParams };
+
+  // --- Backend proxy mode (providerId given) ---
+  if (providerId) {
+    const body = {
+      messages,
+      system_prompt: systemPrompt || '',
+      provider_id: providerId,
+      model: modelId || CONFIG.api.model,
+      temperature: params.temperature,
+      max_tokens: params.max_tokens,
+      top_p: params.top_p,
+      stream,
+    };
+
+    if (tools && tools.length > 0) {
+      body.tools = tools.map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      }));
+    }
+
+    if (thinkingConfig && thinkingConfig.type !== 'disabled') {
+      body.thinking = thinkingConfig;
+    }
+
+    const response = await authFetch('/api/llm/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API Error: ${response.status} - ${errorText}`);
+    }
+
+    const totalTime = () => Date.now() - startTime;
+
+    if (stream) {
+      const result = await consumeSSEStream(response, onDelta);
+      return { ...result, timing: { totalTime: totalTime() } };
+    }
+
+    const data = await response.json();
+    const message = data.choices?.[0]?.message;
+    const finishReason = data.choices?.[0]?.finish_reason;
+
+    return {
+      content: message?.content || '(无响应)',
+      thinking: message?.thinking || message?.reasoning_content || null,
+      tool_calls: message?.tool_calls || [],
+      finish_reason: finishReason,
+      timing: { totalTime: totalTime() },
+      raw: data,
+    };
+  }
+
+  // --- Direct API mode (legacy / no provider configured) ---
+  const body = {
+    model: modelId || CONFIG.api.model,
+    messages: [
+      ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+      ...messages,
+    ],
+    temperature: params.temperature,
+    max_tokens: params.max_tokens,
+    top_p: params.top_p,
+  };
+
+  if (thinkingConfig && thinkingConfig.type !== 'disabled') {
+    body.thinking = thinkingConfig;
+  }
+  if (stream) body.stream = true;
+  if (tools && tools.length > 0) {
+    body.tools = tools.map(tool => ({
+      type: 'function',
+      function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+    }));
+    body.tool_choice = 'auto';
+  }
 
   const response = await fetch(CONFIG.api.baseUrl, {
     method: 'POST',
@@ -164,7 +217,7 @@ export async function callLLM({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${CONFIG.api.apiKey}`,
     },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -179,7 +232,6 @@ export async function callLLM({
     return { ...result, timing: { totalTime: totalTime() } };
   }
 
-  // Non-streaming path
   const data = await response.json();
   const message = data.choices?.[0]?.message;
   const finishReason = data.choices?.[0]?.finish_reason;

@@ -6,9 +6,11 @@
 import base64
 import json
 import logging
-from fastapi import APIRouter, File, UploadFile, Form, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
+
+from ..auth.security import require_auth
 
 from ..services.file_parsers import get_file_type, PARSERS
 from ..services.container_parser import get_container_parser
@@ -42,7 +44,7 @@ async def health_check():
     }
 
 
-@router.get("/parsers")
+@router.get("/parsers", dependencies=[Depends(require_auth)])
 async def get_available_parsers():
     """获取所有可用的解析器"""
     result = {}
@@ -51,10 +53,10 @@ async def get_available_parsers():
     return result
 
 
-@router.post("/parse")
+@router.post("/parse", dependencies=[Depends(require_auth)])
 async def parse_document(
     file: UploadFile = File(...),
-    parsers: str = Form(...)
+    parsers: str = Form(...),
 ):
     """
     解析上传的文件
@@ -91,10 +93,10 @@ async def parse_document(
     }
 
 
-@router.post("/parse/text")
+@router.post("/parse/text", dependencies=[Depends(require_auth)])
 async def parse_document_to_text(
     file: UploadFile = File(...),
-    parsers: str = Form(...)
+    parsers: str = Form(...),
 ):
     """
     解析文件并返回合并的纯文本结果
@@ -177,7 +179,7 @@ async def parse_document_to_text(
     }
 
 
-@router.post("/parse/base64")
+@router.post("/parse/base64", dependencies=[Depends(require_auth)])
 async def parse_document_base64(request: ParseBase64Request):
     """
     解析 Base64 编码的文件内容

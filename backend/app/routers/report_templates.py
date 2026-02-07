@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import List, Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-router = APIRouter(prefix="/report-templates", tags=["report-templates"])
+from ..auth.security import require_auth
+
+router = APIRouter(prefix="/report-templates", tags=["report-templates"], dependencies=[Depends(require_auth)])
 
 # Template directory
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "data" / "report-templates"

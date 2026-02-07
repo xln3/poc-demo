@@ -3,11 +3,14 @@
 提供 ClawdBot 安全测试沙箱的 REST API。
 """
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import asyncio
 import json
+
+from ..auth.security import require_auth, SECRET_KEY, ALGORITHM
+from jose import jwt as jose_jwt
 
 from ..services.clawdbot_sandbox import (
     clawdbot_sandbox_manager,
@@ -93,7 +96,7 @@ class HoneypotFilesResponse(BaseModel):
 
 # ============ Sandbox Management Endpoints ============
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(require_auth)])
 async def get_service_status():
     """获取 ClawdBot 沙箱服务状态"""
     manager = clawdbot_sandbox_manager
@@ -106,7 +109,7 @@ async def get_service_status():
     }
 
 
-@router.get("/config-levels")
+@router.get("/config-levels", dependencies=[Depends(require_auth)])
 async def get_config_levels():
     """获取可用的配置级别及其说明"""
     return {
@@ -120,7 +123,7 @@ async def get_config_levels():
     }
 
 
-@router.post("/sandbox", response_model=ClawdBotSandboxInfo)
+@router.post("/sandbox", response_model=ClawdBotSandboxInfo, dependencies=[Depends(require_auth)])
 async def create_sandbox(request: CreateSandboxRequest):
     """创建 ClawdBot 沙箱实例
 
@@ -152,7 +155,7 @@ async def create_sandbox(request: CreateSandboxRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/sandbox", response_model=SandboxListResponse)
+@router.get("/sandbox", response_model=SandboxListResponse, dependencies=[Depends(require_auth)])
 async def list_sandboxes():
     """列出所有 ClawdBot 沙箱"""
     manager = clawdbot_sandbox_manager
@@ -164,7 +167,7 @@ async def list_sandboxes():
     )
 
 
-@router.get("/sandbox/{sandbox_id}", response_model=ClawdBotSandboxInfo)
+@router.get("/sandbox/{sandbox_id}", response_model=ClawdBotSandboxInfo, dependencies=[Depends(require_auth)])
 async def get_sandbox(sandbox_id: str):
     """获取沙箱信息"""
     manager = clawdbot_sandbox_manager
@@ -176,7 +179,7 @@ async def get_sandbox(sandbox_id: str):
     return info
 
 
-@router.delete("/sandbox/{sandbox_id}")
+@router.delete("/sandbox/{sandbox_id}", dependencies=[Depends(require_auth)])
 async def destroy_sandbox(sandbox_id: str):
     """销毁沙箱"""
     manager = clawdbot_sandbox_manager
@@ -190,7 +193,7 @@ async def destroy_sandbox(sandbox_id: str):
 
 # ============ Attack Injection Endpoints ============
 
-@router.post("/sandbox/{sandbox_id}/inject", response_model=AttackInjectionResult)
+@router.post("/sandbox/{sandbox_id}/inject", response_model=AttackInjectionResult, dependencies=[Depends(require_auth)])
 async def inject_attack(sandbox_id: str, request: InjectAttackRequest):
     """向沙箱注入攻击
 
@@ -225,7 +228,7 @@ async def inject_attack(sandbox_id: str, request: InjectAttackRequest):
 
 # ============ Command Execution Endpoints ============
 
-@router.post("/sandbox/{sandbox_id}/exec", response_model=ExecCommandResponse)
+@router.post("/sandbox/{sandbox_id}/exec", response_model=ExecCommandResponse, dependencies=[Depends(require_auth)])
 async def exec_command(sandbox_id: str, request: ExecCommandRequest):
     """在沙箱中执行命令"""
     manager = clawdbot_sandbox_manager
@@ -253,7 +256,7 @@ async def exec_command(sandbox_id: str, request: ExecCommandRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/sandbox/{sandbox_id}/read-file", response_model=ReadFileResponse)
+@router.post("/sandbox/{sandbox_id}/read-file", response_model=ReadFileResponse, dependencies=[Depends(require_auth)])
 async def read_file(sandbox_id: str, request: ReadFileRequest):
     """读取沙箱中的文件（检测蜜罐触发）"""
     manager = clawdbot_sandbox_manager
@@ -272,12 +275,12 @@ async def read_file(sandbox_id: str, request: ReadFileRequest):
 
 # ============ Behavior Monitoring Endpoints ============
 
-@router.get("/sandbox/{sandbox_id}/behaviors")
+@router.get("/sandbox/{sandbox_id}/behaviors", dependencies=[Depends(require_auth)])
 async def get_behaviors(
     sandbox_id: str,
     limit: int = 100,
     behavior_type: Optional[str] = None,
-    min_severity: Optional[str] = None
+    min_severity: Optional[str] = None,
 ):
     """获取沙箱行为记录"""
     bt = None
@@ -308,7 +311,7 @@ async def get_behaviors(
     }
 
 
-@router.get("/sandbox/{sandbox_id}/timeline")
+@router.get("/sandbox/{sandbox_id}/timeline", dependencies=[Depends(require_auth)])
 async def get_timeline(sandbox_id: str):
     """获取完整行为时间线"""
     timeline = behavior_monitor.get_timeline(sandbox_id)
@@ -320,7 +323,7 @@ async def get_timeline(sandbox_id: str):
     }
 
 
-@router.get("/sandbox/{sandbox_id}/honeypot-triggers")
+@router.get("/sandbox/{sandbox_id}/honeypot-triggers", dependencies=[Depends(require_auth)])
 async def get_honeypot_triggers(sandbox_id: str):
     """获取触发蜜罐的行为"""
     triggers = behavior_monitor.get_honeypot_triggers(sandbox_id)
@@ -332,7 +335,7 @@ async def get_honeypot_triggers(sandbox_id: str):
     }
 
 
-@router.get("/sandbox/{sandbox_id}/summary", response_model=BehaviorSummary)
+@router.get("/sandbox/{sandbox_id}/summary", response_model=BehaviorSummary, dependencies=[Depends(require_auth)])
 async def get_behavior_summary(sandbox_id: str):
     """获取行为摘要统计"""
     summary = behavior_monitor.get_summary(sandbox_id)
@@ -342,8 +345,16 @@ async def get_behavior_summary(sandbox_id: str):
 # ============ WebSocket for Real-time Behavior Streaming ============
 
 @router.websocket("/sandbox/{sandbox_id}/behaviors/stream")
-async def stream_behaviors(websocket: WebSocket, sandbox_id: str):
+async def stream_behaviors(websocket: WebSocket, sandbox_id: str, token: str = Query(None)):
     """实时行为流 WebSocket"""
+    if not token:
+        await websocket.close(code=4001, reason="Auth required")
+        return
+    try:
+        jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
     await websocket.accept()
 
     queue = behavior_monitor.subscribe(sandbox_id)
@@ -361,7 +372,7 @@ async def stream_behaviors(websocket: WebSocket, sandbox_id: str):
 
 # ============ Honeypot Files Endpoints ============
 
-@router.get("/honeypot-files", response_model=HoneypotFilesResponse)
+@router.get("/honeypot-files", response_model=HoneypotFilesResponse, dependencies=[Depends(require_auth)])
 async def get_honeypot_files_endpoint():
     """获取所有蜜罐文件（用于前端展示）"""
     files = get_honeypot_files()
@@ -375,7 +386,7 @@ async def get_honeypot_files_endpoint():
 
 # ============ Exfiltration Test Endpoint ============
 
-@router.post("/exfil-test/collect")
+@router.post("/exfil-test/collect", dependencies=[Depends(require_auth)])
 async def collect_exfiltrated_data(data: Dict[str, Any]):
     """模拟攻击者服务器接收外泄数据
 

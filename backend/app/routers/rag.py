@@ -9,9 +9,11 @@ RAG API Router - RAG 服务的 HTTP 端点
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from typing import Optional
 from pydantic import BaseModel
+
+from ..auth.security import require_auth
 
 from ..models.rag_schemas import (
     IngestRequest, QueryRequest, DeleteDocumentRequest,
@@ -62,7 +64,7 @@ def health_check():
         )
 
 
-@router.post("/init", response_model=ResetResponse)
+@router.post("/init", response_model=ResetResponse, dependencies=[Depends(require_auth)])
 def init_rag():
     """
     初始化 RAG 知识库
@@ -89,7 +91,7 @@ def init_rag():
         raise HTTPException(status_code=500, detail=f"初始化失败: {str(e)}")
 
 
-@router.post("/reset", response_model=ResetResponse)
+@router.post("/reset", response_model=ResetResponse, dependencies=[Depends(require_auth)])
 def reset_rag():
     """
     重置 RAG 知识库为预置数据
@@ -116,10 +118,10 @@ def reset_rag():
         raise HTTPException(status_code=500, detail=f"重置失败: {str(e)}")
 
 
-@router.post("/upload", response_model=UploadResponse)
+@router.post("/upload", response_model=UploadResponse, dependencies=[Depends(require_auth)])
 def upload_document(
     file: UploadFile = File(...),
-    source_name: Optional[str] = Form(None)
+    source_name: Optional[str] = Form(None),
 ):
     """
     上传文件到 RAG 知识库
@@ -163,7 +165,7 @@ def upload_document(
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
 
-@router.post("/ingest", response_model=IngestResponse)
+@router.post("/ingest", response_model=IngestResponse, dependencies=[Depends(require_auth)])
 def ingest_text(request: IngestRequest):
     """
     直接摄入文本到 RAG 知识库
@@ -194,7 +196,7 @@ def ingest_text(request: IngestRequest):
         raise HTTPException(status_code=500, detail=f"摄入失败: {str(e)}")
 
 
-@router.post("/query", response_model=QueryResponse)
+@router.post("/query", response_model=QueryResponse, dependencies=[Depends(require_auth)])
 def query_documents(request: QueryRequest):
     """
     查询 RAG 知识库
@@ -222,7 +224,7 @@ def query_documents(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
 
 
-@router.get("/documents", response_model=DocumentListResponse)
+@router.get("/documents", response_model=DocumentListResponse, dependencies=[Depends(require_auth)])
 def list_documents():
     """列出所有已添加的文档"""
     try:
@@ -240,7 +242,7 @@ def list_documents():
         raise HTTPException(status_code=500, detail=f"获取文档列表失败: {str(e)}")
 
 
-@router.delete("/documents/{document_id}", response_model=DeleteResponse)
+@router.delete("/documents/{document_id}", response_model=DeleteResponse, dependencies=[Depends(require_auth)])
 def delete_document(document_id: str):
     """删除指定文档"""
     try:
@@ -263,7 +265,7 @@ def delete_document(document_id: str):
         raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
 
-@router.delete("/clear", response_model=ClearResponse)
+@router.delete("/clear", response_model=ClearResponse, dependencies=[Depends(require_auth)])
 def clear_documents():
     """清空所有文档"""
     try:

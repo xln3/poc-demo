@@ -1,8 +1,10 @@
 """API endpoints for dataset management."""
 from __future__ import annotations
 from typing import List, Optional, Any, Dict
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from ..auth.security import require_auth
 
 from ..services.dataset_storage import dataset_storage
 
@@ -137,7 +139,7 @@ class AddCaseRequest(BaseModel):
 
 # ============ Router ============
 
-router = APIRouter(prefix="/datasets", tags=["datasets"])
+router = APIRouter(prefix="/datasets", tags=["datasets"], dependencies=[Depends(require_auth)])
 
 
 @router.get("", response_model=List[DatasetSummary])

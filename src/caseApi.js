@@ -5,6 +5,7 @@
  */
 
 import { validateTestCase } from './schemas/testCase.js';
+import { authFetch } from './auth.js';
 
 const BASE_URL = '';  // 使用 Vite 代理
 
@@ -20,7 +21,7 @@ export async function saveCaseToServer(testCase) {
     console.warn('测试用例验证警告:', validation.errors);
   }
 
-  const response = await fetch(`${BASE_URL}/cases`, {
+  const response = await authFetch(`${BASE_URL}/cases`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(testCase),
@@ -36,7 +37,7 @@ export async function saveCaseToServer(testCase) {
  * @returns {Promise<Array>} 用例摘要列表
  */
 export async function listSavedCases() {
-  const response = await fetch(`${BASE_URL}/cases`);
+  const response = await authFetch(`${BASE_URL}/cases`);
   if (!response.ok) {
     throw new Error(`获取列表失败: ${response.status}`);
   }
@@ -49,7 +50,7 @@ export async function listSavedCases() {
  * @returns {Promise<Object>} 用例详情（v1 格式）
  */
 export async function getCaseDetail(id) {
-  const response = await fetch(`${BASE_URL}/cases/${id}`);
+  const response = await authFetch(`${BASE_URL}/cases/${id}`);
   if (!response.ok) {
     throw new Error(`获取详情失败: ${response.status}`);
   }
@@ -63,7 +64,7 @@ export async function getCaseDetail(id) {
  * @returns {Promise<Object>} 更新后的用例
  */
 export async function updateCase(id, updates) {
-  const response = await fetch(`${BASE_URL}/cases/${id}`, {
+  const response = await authFetch(`${BASE_URL}/cases/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
@@ -80,7 +81,7 @@ export async function updateCase(id, updates) {
  * @returns {Promise<Object>} 删除结果
  */
 export async function deleteCase(id) {
-  const response = await fetch(`${BASE_URL}/cases/${id}`, {
+  const response = await authFetch(`${BASE_URL}/cases/${id}`, {
     method: 'DELETE',
   });
   if (!response.ok) {

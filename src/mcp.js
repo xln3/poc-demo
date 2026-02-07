@@ -1,5 +1,6 @@
 // MCP (Model Context Protocol) 客户端封装
 import { CONFIG } from './config';
+import { authFetch } from './auth.js';
 
 // 使用相对路径，走 Vite 代理
 const MCP_API_URL = CONFIG.mcpServers?.apiUrl || '/mcp';
@@ -13,7 +14,7 @@ export const mcpClient = {
    */
   async testConnection(serverId, config) {
     try {
-      const response = await fetch(`${MCP_API_URL}/test`, {
+      const response = await authFetch(`${MCP_API_URL}/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,7 +59,7 @@ export const mcpClient = {
         body.sandbox_session_id = sandboxSessionId;
       }
 
-      const response = await fetch(`${MCP_API_URL}/tool`, {
+      const response = await authFetch(`${MCP_API_URL}/tool`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +85,7 @@ export const mcpClient = {
    */
   async getServerStatus(serverId) {
     try {
-      const response = await fetch(`${MCP_API_URL}/status/${serverId}`);
+      const response = await authFetch(`${MCP_API_URL}/status/${serverId}`);
 
       if (!response.ok) {
         return { status: 'error', message: `HTTP ${response.status}` };
@@ -102,7 +103,7 @@ export const mcpClient = {
    */
   async healthCheck() {
     try {
-      const response = await fetch(`${MCP_API_URL}/health`);
+      const response = await authFetch(`${MCP_API_URL}/health`);
       return response.ok;
     } catch {
       return false;
@@ -115,7 +116,7 @@ export const mcpClient = {
    */
   async listServers() {
     try {
-      const response = await fetch(`${MCP_API_URL}/servers`);
+      const response = await authFetch(`${MCP_API_URL}/servers`);
       if (!response.ok) {
         return [];
       }

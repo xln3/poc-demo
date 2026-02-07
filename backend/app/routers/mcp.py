@@ -7,7 +7,8 @@ MCP Server 工具调用 API 路由
 """
 import time
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from ..auth.security import require_auth
 from ..models.schemas import (
     McpServerType,
     McpTestConnectionRequest,
@@ -45,7 +46,7 @@ async def health_check():
 
 # ============ MCP Server Endpoints ============
 
-@router.get("/servers")
+@router.get("/servers", dependencies=[Depends(require_auth)])
 async def list_mcp_servers():
     """List available MCP servers and their tools."""
     return {
@@ -126,7 +127,7 @@ async def list_mcp_servers():
     }
 
 
-@router.post("/test", response_model=McpTestConnectionResponse)
+@router.post("/test", response_model=McpTestConnectionResponse, dependencies=[Depends(require_auth)])
 async def test_mcp_connection(request: McpTestConnectionRequest):
     """Test MCP server connection with provided configuration."""
     server_id = request.server_id
@@ -172,7 +173,7 @@ async def test_mcp_connection(request: McpTestConnectionRequest):
         return McpTestConnectionResponse(success=False, error=str(e))
 
 
-@router.post("/tool", response_model=McpToolResult)
+@router.post("/tool", response_model=McpToolResult, dependencies=[Depends(require_auth)])
 async def execute_mcp_tool(request: McpToolRequest):
     """Execute an MCP tool with provided parameters."""
     server_id = request.server_id
@@ -235,7 +236,7 @@ async def execute_mcp_tool(request: McpToolRequest):
         )
 
 
-@router.get("/status/{server_id}", response_model=McpServerStatus)
+@router.get("/status/{server_id}", response_model=McpServerStatus, dependencies=[Depends(require_auth)])
 async def get_mcp_server_status(server_id: McpServerType):
     """Get status of a specific MCP server."""
     tools_map = {
