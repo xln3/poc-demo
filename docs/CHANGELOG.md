@@ -39,6 +39,48 @@
 
 ## 变更记录
 
+### [2.0.0] - 2026-02-07
+
+#### Security
+
+**全端 JWT 认证加固**
+
+- 新增 `backend/app/auth/security.py` 轻量认证依赖 `require_auth`（JWT-only，无 DB 查询，适合高并发）
+- 9 个后端路由全部接入 JWT 认证（health 端点除外）
+  - 路由级 `dependencies=[Depends(require_auth)]`：cases, datasets, test_results, report_templates
+  - 逐端点 `dependencies=[Depends(require_auth)]`：rag, mcp, file_parser（health 端点免认证）
+  - 逐端点认证 + WebSocket 手动 token 验证：sandbox, clawdbot
+- 7 个前端 API 客户端全部改用 `authFetch()`（sandbox, rag, mcp, caseApi, datasetApi, testResultsApi, clawdbotApi）
+- WebSocket 连接通过 `?token=xxx` query parameter 认证
+- XHR 上传通过 `xhr.setRequestHeader('Authorization', ...)` 认证
+- Nginx 安全头：X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, CSP
+- TLS 配置模板（注释状态，激活时取消注释）
+- 新增 `deploy/backup.sh`：PostgreSQL 备份脚本（gzip 压缩，7 天保留）
+
+#### Added
+
+- 新增 `src/components/UsagePanel.jsx`：用量统计组件，集成到 LLMProviderSettings
+
+#### Changed
+
+**前端组件拆分重构**
+
+App.jsx 从约 4000+ 行拆分为模块化组件架构：
+
+- 新增 10 个页面组件：LeftSidebar, ConversationPanel, RightPanel, AttackHeader, AttackDetailPanel, PlaybackControlBar, RealTestControlPanel, AppModals, SavedCaseDetailView, TestResultDetailView
+- 提取 3 个自定义 Hooks：useAttackSelection, useProviders, useTestRecords
+- App.jsx 降至约 1000 行，仅保留状态编排和核心逻辑
+
+#### Docs
+
+- 更新 [FRONTEND.md](./FRONTEND.md) 组件列表、hooks 列表、状态架构说明
+- 更新 [BACKEND.md](./BACKEND.md) 新增认证层说明
+- 更新 [API-REFERENCE.md](./API-REFERENCE.md) 新增认证要求标注
+- 更新 [ARCHITECTURE.md](./ARCHITECTURE.md) 新增认证流程
+- 更新 [DEPLOY.md](./DEPLOY.md) 新增备份、安全头、TLS 说明
+
+---
+
 ### [1.9.0] - 2026-01-30
 
 #### Added

@@ -36,11 +36,77 @@
 | 404 | 资源不存在 |
 | 409 | 资源冲突（如 tag 已被使用） |
 | 413 | 请求体过大（如文件超出大小限制） |
+| 401 | 未认证（缺少或无效的 JWT token） |
+| 403 | 权限不足（需要更高角色） |
 | 500 | 服务器内部错误 |
 
 ---
 
-## Sandbox API
+## 认证
+
+除 health 端点和 `/auth/*` 外，所有 API 端点均需要 JWT Bearer Token 认证。
+
+### 请求头
+
+```
+Authorization: Bearer <token>
+```
+
+### 获取 Token
+
+**POST** `/auth/login`
+
+**请求体**:
+```json
+{
+  "username": "user",
+  "password": "password"
+}
+```
+
+**响应**:
+```json
+{
+  "access_token": "eyJhbGciOiJI...",
+  "token_type": "bearer"
+}
+```
+
+### 认证失败
+
+未提供 token 或 token 无效时返回：
+
+```json
+HTTP 401
+{
+  "detail": "Authentication required"
+}
+```
+
+### 免认证端点
+
+| 端点 | 说明 |
+|------|------|
+| `GET /` | 根路径 |
+| `GET /health` | 全局健康检查 |
+| `GET /sandbox/health` | 沙箱健康检查 |
+| `GET /rag/health` | RAG 健康检查 |
+| `GET /mcp/health` | MCP 健康检查 |
+| `GET /file-parser/health` | 文件解析健康检查 |
+| `POST /auth/login` | 登录 |
+| `POST /auth/register` | 注册 |
+
+### WebSocket 认证
+
+WebSocket 端点通过 URL query parameter 传递 token：
+
+```
+ws://host/sandbox/logs/{session_id}?token=<jwt_token>
+```
+
+---
+
+## Sandbox API — 需认证
 
 多终端沙箱管理 API。每个终端对应一个独立的 Docker 容器，通过 `tag` 标识。
 
@@ -505,7 +571,7 @@
 
 ---
 
-## Datasets API
+## Datasets API — 需认证
 
 测试数据集管理 API。支持 Schema v2.2.0（Benchmark 数据）。
 
@@ -763,7 +829,7 @@
 
 ---
 
-## Report Templates API
+## Report Templates API — 需认证
 
 报告模板管理 API。模板存储在 `backend/data/report-templates/` 目录。
 
@@ -808,7 +874,7 @@
 
 ---
 
-## RAG API
+## RAG API — 需认证（health 除外）
 
 ### 健康检查
 
@@ -1016,7 +1082,7 @@
 
 ---
 
-## File Parser API
+## File Parser API — 需认证（health 除外）
 
 文件解析服务，用于对比不同解析器提取文件内容的能力差异。详见 [FILE-PARSER.md](./FILE-PARSER.md)。
 
@@ -1155,7 +1221,7 @@ curl -X POST http://localhost:8000/file-parser/parse \
 
 ---
 
-## MCP API
+## MCP API — 需认证（health 除外）
 
 MCP Server 工具调用服务。支持 14 种 MCP Server。
 
@@ -1336,7 +1402,7 @@ MCP Server 工具调用服务。支持 14 种 MCP Server。
 
 ---
 
-## Cases API
+## Cases API — 需认证
 
 ### 列出所有用例
 
@@ -1458,7 +1524,7 @@ MCP Server 工具调用服务。支持 14 种 MCP Server。
 
 ---
 
-## Test Results API
+## Test Results API — 需认证
 
 批量测试结果存储 API。详见 [BATCH-TESTING.md](./BATCH-TESTING.md)。
 

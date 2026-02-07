@@ -7,7 +7,8 @@
 ```
 src/
 ├── main.jsx               # 应用入口
-├── App.jsx                # 主应用组件（约 4000+ 行）
+├── App.jsx                # 主应用组件（状态编排，约 1000 行）
+├── auth.js                # 认证工具（authFetch, getToken, setToken）
 ├── config.js              # 全局配置和 LLM API
 ├── sandbox.js             # 沙箱 API 客户端
 ├── rag.js                 # RAG API 客户端
@@ -15,9 +16,10 @@ src/
 ├── caseApi.js             # 用例存储 API
 ├── datasetApi.js          # 数据集 API 客户端
 ├── testResultsApi.js      # 测试结果 API 客户端
+├── clawdbotApi.js         # ClawdBot API 客户端
 ├── datasetConverter.js    # LLM 格式转换工具
 ├── index.css              # Tailwind 入口
-├── hooks/                 # 自定义 Hooks
+├── hooks/                 # 自定义 Hooks（19 个）
 │   ├── index.js           # Hooks 导出入口
 │   ├── useSandbox.js      # 沙箱管理
 │   ├── useRAG.js          # RAG 管理
@@ -29,14 +31,22 @@ src/
 │   ├── useStateCollector.js # 状态收集器（构建 PlaybackSequence）
 │   ├── useTestExecution.js  # 测试执行流程管理
 │   ├── useDatasets.js     # 数据集管理（CRUD、导入、格式转换）
-│   └── useToast.js        # Toast 通知管理
+│   ├── useToast.js        # Toast 通知管理
+│   ├── useClawdBotSandbox.js # ClawdBot 沙箱管理
+│   ├── usePanelLayout.js  # 面板布局状态
+│   ├── usePayloadEditor.js # Payload 编辑状态
+│   ├── useJudgment.js     # 攻击评判配置
+│   ├── useApiInspector.js # API 请求/响应检视
+│   ├── useProviders.js    # LLM 供应商管理
+│   ├── useAttackSelection.js # 攻击场景选择
+│   └── useTestRecords.js  # 测试记录管理
 ├── schemas/               # 数据结构定义
 │   ├── testCase.js        # 测试用例 Schema（v1/v2）
 │   └── stateMachine.js    # 状态机定义
 ├── utils/                 # 工具函数
 │   ├── index.js           # 工具导出入口
 │   └── export.js          # 导出功能
-├── components/            # UI 组件
+├── components/            # UI 组件（20 个）
 │   ├── index.js           # 组件导出入口
 │   ├── Toast.jsx          # Toast 通知组件
 │   ├── BatchTestModal.jsx # 批量测试用例选择弹窗
@@ -44,6 +54,20 @@ src/
 │   ├── DatasetDetailModal.jsx # 数据集详情弹窗
 │   ├── CaseBrowser.jsx    # 用例浏览器
 │   ├── CapabilityTabs.jsx # 能力级别标签页
+│   ├── JsonTree.jsx       # JSON 树形展示
+│   ├── LoginPage.jsx      # 登录页面
+│   ├── LLMProviderSettings.jsx # LLM 供应商配置 + 用量统计
+│   ├── UsagePanel.jsx     # 用量统计面板
+│   ├── LeftSidebar.jsx    # 左侧栏（场景库/已保存用例）
+│   ├── ConversationPanel.jsx # 对话面板
+│   ├── RightPanel.jsx     # 右侧面板（日志/文档/API检视）
+│   ├── AttackHeader.jsx   # 攻击信息头栏
+│   ├── AttackDetailPanel.jsx # 攻击详情面板
+│   ├── PlaybackControlBar.jsx # 回放控制栏
+│   ├── RealTestControlPanel.jsx # 真实测试控制面板
+│   ├── AppModals.jsx      # 弹窗集合（导出/批量测试/数据集等）
+│   ├── SavedCaseDetailView.jsx # 已保存用例详情
+│   ├── TestResultDetailView.jsx # 测试结果详情
 │   └── sandbox/           # 沙箱相关组件
 └── scenarios/             # 攻击场景定义
 ```
@@ -401,6 +425,62 @@ addLog({ type: 'toast_world', content: '327 个文件变化', status: 'normal' }
 // → 🌏 327 个文件变化 [蓝色背景]
 ```
 
+### useClawdBotSandbox
+
+管理 ClawdBot 安全测试沙箱的状态和操作。
+
+### usePanelLayout
+
+管理面板布局状态（标签页切换、文档面板显示等）。
+
+```javascript
+const { leftPanelTab, setLeftPanelTab, rightPanelTab, setRightPanelTab, rightSubTab, setRightSubTab, showDocument, setShowDocument, docTab, setDocTab } = usePanelLayout();
+```
+
+### usePayloadEditor
+
+管理自定义 Payload 和系统提示词的编辑状态。
+
+```javascript
+const { customTestPayload, setCustomTestPayload, isEditingPayload, setIsEditingPayload, payloadFiles, setPayloadFiles, customSystemPrompt, setCustomSystemPrompt, resetPayloadEditor } = usePayloadEditor();
+```
+
+### useJudgment
+
+管理攻击评判配置（评判模型、人类评判、批注）。
+
+```javascript
+const { judgeConfig, setJudgeConfig, judgeConfigOpen, setJudgeConfigOpen, humanJudgment, setHumanJudgment, annotationModal, setAnnotationModal, newAnnotation, setNewAnnotation } = useJudgment();
+```
+
+### useApiInspector
+
+管理 API 请求/响应的检视面板状态。
+
+### useProviders
+
+管理 LLM 供应商列表和选择。
+
+```javascript
+const { providers, selectedProviderId, setSelectedProviderId, providerModels, reloadProviders } = useProviders();
+```
+
+### useAttackSelection
+
+管理攻击场景选择、侧边栏展开/折叠状态。
+
+```javascript
+const { mode, setMode, selectedAttack, setSelectedAttack, expanded, setExpanded, scenarioListExpanded, setScenarioListExpanded, currentScenario, currentAttack, attackType, riskLevel, toggleType, toggleScenario } = useAttackSelection();
+```
+
+### useTestRecords
+
+管理测试记录列表和展开状态。
+
+```javascript
+const { testRecords, setTestRecords, expandedRecords, setExpandedRecords, toggleRecord, clearRecords } = useTestRecords();
+```
+
 ---
 
 ## Toast 组件
@@ -426,15 +506,35 @@ import Toast from './components/Toast.jsx';
 
 ## UI 组件
 
-除 `Toast.jsx` 外，`src/components/` 目录下还包含以下组件：
+### 页面级组件（从 App.jsx 拆分）
 
 | 组件 | 文件 | 说明 |
 |------|------|------|
+| `LeftSidebar` | `LeftSidebar.jsx` | 左侧栏：场景库、已保存用例、数据集浏览 |
+| `ConversationPanel` | `ConversationPanel.jsx` | 对话面板：消息列表、打字动画、用户输入 |
+| `RightPanel` | `RightPanel.jsx` | 右侧面板：日志、文档、API 检视 |
+| `AttackHeader` | `AttackHeader.jsx` | 攻击信息头栏：名称、类型、风险等级 |
+| `AttackDetailPanel` | `AttackDetailPanel.jsx` | 攻击详情：描述、payload、文件附件 |
+| `PlaybackControlBar` | `PlaybackControlBar.jsx` | 回放控制栏：播放、跳过、退出 |
+| `RealTestControlPanel` | `RealTestControlPanel.jsx` | 真实测试控制面板：沙箱/RAG/MCP/工具配置 |
+| `AppModals` | `AppModals.jsx` | 弹窗集合：导出、LLM配置、批量测试等 |
+| `SavedCaseDetailView` | `SavedCaseDetailView.jsx` | 已保存用例详情查看 |
+| `TestResultDetailView` | `TestResultDetailView.jsx` | 测试结果详情查看 |
+
+### 功能组件
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| `Toast` | `Toast.jsx` | Toast 通知组件 |
 | `BatchTestModal` | `BatchTestModal.jsx` | 批量测试用例选择弹窗，支持数据集浏览、F1/F2 筛选、多选 |
 | `DatasetList` | `DatasetList.jsx` | 数据集列表浏览组件，支持能力级别筛选 |
 | `DatasetDetailModal` | `DatasetDetailModal.jsx` | 数据集详情弹窗，查看和管理数据集中的用例 |
 | `CaseBrowser` | `CaseBrowser.jsx` | 用例浏览器，用于浏览和选择测试用例 |
 | `CapabilityTabs` | `CapabilityTabs.jsx` | 能力级别标签页切换组件 |
+| `JsonTree` | `JsonTree.jsx` | JSON 树形展示组件 |
+| `LoginPage` | `LoginPage.jsx` | 登录页面 |
+| `LLMProviderSettings` | `LLMProviderSettings.jsx` | LLM 供应商配置 + 用量统计标签页 |
+| `UsagePanel` | `UsagePanel.jsx` | 用量统计面板（调用次数、token 消耗、费用） |
 
 ---
 
@@ -461,137 +561,46 @@ exportHTML({ attack, scenario, attackType, riskLevel });
 
 ## App.jsx 状态管理
 
-App.jsx 使用约 77 个 `useState` 管理应用状态。以下按功能分组说明：
+App.jsx 的状态已从约 77 个 `useState` 重构为 Hook 架构。大部分状态由自定义 Hooks 封装管理，App.jsx 通过调用 hooks 获取状态并传递给子组件。
 
-### 1. 核心状态 (Core)
+### Hook 状态分布
 
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `mode` | `'mock' \| 'real'` | `'mock'` | 测试模式 |
-| `selectedAttack` | `{scenario, index}` | `{scenario:'loan', index:0}` | 当前选中攻击 |
-| `expanded` | `{type, scenario}` | `{type:'F1-...', scenario:'loan'}` | 侧边栏展开状态 |
-| `messages` | `Array` | `[]` | 聊天消息列表 |
-| `logs` | `Array` | `[]` | 系统日志列表 |
-| `expandedLogs` | `Set` | `new Set()` | 展开的日志索引 |
-| `isPlaying` | `boolean` | `false` | Mock 动画播放中 |
-| `typingMsg` | `object \| null` | `null` | 打字动画当前消息 |
+| Hook | 管理的状态 | 说明 |
+|------|-----------|------|
+| `useAttackSelection` | mode, selectedAttack, expanded, scenarioListExpanded | 攻击选择 |
+| `useProviders` | providers, selectedProviderId, providerModels | LLM 供应商 |
+| `useTestRecords` | testRecords, expandedRecords | 测试记录 |
+| `usePayloadEditor` | customTestPayload, isEditingPayload, payloadFiles, customSystemPrompt | Payload 编辑 |
+| `useJudgment` | judgeConfig, humanJudgment, annotationModal, newAnnotation | 评判配置 |
+| `usePanelLayout` | leftPanelTab, rightPanelTab, rightSubTab, showDocument, docTab | 面板布局 |
+| `useApiInspector` | API 请求/响应检视状态 | API 调试 |
+| `useSandbox` | sandboxEnabled, sandboxStatus, containerInfo, sandboxFiles 等 | 沙箱 |
+| `useRAG` | ragEnabled, ragMode, ragDocuments, ragQueryResults 等 | RAG |
+| `useMCP` | mcpEnabled, mcpParsers, mcpServerEnabled, mcpServerConfigs 等 | MCP |
+| `useCases` | viewMode, savedCases, selectedCase, isSaving | 用例 |
+| `useConversation` | dialogMode, conversationMode, userInput, conversationHistory | 对话 |
+| `useLLMConfig` | selectedModel, llmTemperature, llmMaxTokens, thinkingEnabled 等 | LLM 参数 |
+| `useDatasets` | datasets, filteredDatasets, selectedDataset, isLoading 等 | 数据集 |
+| `usePlayback` | isPlaybackMode, playbackCase, isPlaying, playbackProgress | 回放 |
+| `useTestExecution` | executionMode, currentCase, currentDataset, batchQueue | 测试执行 |
+| `useClawdBotSandbox` | ClawdBot 沙箱状态和操作 | ClawdBot |
 
-### 2. API 状态
+### App.jsx 直接管理的状态
 
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `apiStatus` | `'idle' \| 'loading' \| 'success' \| 'error'` | `'idle'` | API 调用状态 |
-| `apiError` | `string` | `''` | API 错误信息 |
-| `realResponse` | `string` | `''` | 真实模式响应 |
-| `selectedModel` | `string` | 首个模型 ID | 选中的测试模型 |
-| `apiStartTime` | `number \| null` | `null` | 请求开始时间 |
-| `apiElapsedTime` | `number` | `0` | 已用时间(ms) |
+少量状态仍直接在 App.jsx 中定义，主要是跨组件共享的 UI 状态：
 
-### 3. 沙箱状态 (Sandbox)
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `sandboxEnabled` | `boolean` | `false` | 沙箱功能开关 |
-| `sandboxStatus` | `string` | `'disconnected'` | 连接状态 |
-| `sandboxImage` | `ImageType` | `PYTHON` | 容器镜像 |
-| `containerInfo` | `object \| null` | `null` | 容器信息 |
-| `sandboxAvailable` | `boolean` | `false` | 后端可用性 |
-| `toolCommand` | `string` | `''` | 工具命令输入 |
-| `toolResult` | `object \| null` | `null` | 工具执行结果 |
-| `showSandboxPanel` | `boolean` | `true` | 面板显示 |
-| `sandboxFiles` | `Array` | `[]` | 沙箱文件列表 |
-| `uploadingSandboxFile` | `boolean` | `false` | 上传中状态 |
-
-### 4. RAG 状态
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `ragEnabled` | `boolean` | `false` | RAG 功能开关 |
-| `ragConfigCollapsed` | `boolean` | `false` | 配置面板折叠 |
-| `ragKnowledge` | `string` | `''` | Mock 知识库内容 |
-| `ragKnowledgeEdit` | `string` | `''` | 编辑区内容 |
-| `ragMode` | `'mock' \| 'real'` | `'mock'` | RAG 模式 |
-| `ragServiceAvailable` | `boolean` | `false` | 服务可用性 |
-| `ragDocuments` | `Array` | `[]` | 文档列表 |
-| `ragQueryResults` | `object \| null` | `null` | 查询结果 |
-| `ragUploading` | `boolean` | `false` | 上传中状态 |
-| `parserContainerAvailable` | `boolean` | `false` | 解析容器可用 |
-
-### 5. MCP 状态
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `mcpEnabled` | `boolean` | 配置值 | MCP 解析开关 |
-| `mcpConfigCollapsed` | `boolean` | `true` | 配置面板折叠 |
-| `mcpParsers` | `object` | 每类型首个 | 选中的解析器 |
-| `mcpServerEnabled` | `boolean` | `false` | MCP Server 开关 |
-| `mcpServerConfigCollapsed` | `boolean` | `false` | Server 面板折叠 |
-| `selectedMcpServer` | `string \| null` | `null` | 选中的 Server |
-| `mcpServerConfigs` | `object` | localStorage | Server 配置 |
-| `mcpServerStatus` | `object` | `{}` | Server 状态 |
-
-### 6. 工具调用状态
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `toolsEnabled` | `boolean` | 配置值 | 工具调用开关 |
-| `toolsConfigCollapsed` | `boolean` | `true` | 配置面板折叠 |
-| `enabledTools` | `object` | safe 类工具 | 启用的工具 |
-| `maxToolCalls` | `number` | 配置值 | 最大调用次数 |
-| `toolCallHistory` | `Array` | `[]` | 调用历史 |
-
-### 7. 对话模式状态
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `dialogMode` | `'single' \| 'multi'` | `'single'` | 对话模式 |
-| `conversationMode` | `'idle' \| 'active' \| 'judging'` | `'idle'` | 对话状态 |
-| `userInput` | `string` | `''` | 用户输入 |
-| `conversationHistory` | `Array` | `[]` | API 消息历史 |
-| `initialPayload` | `string` | `''` | 初始 payload |
-
-### 8. LLM 参数状态
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `llmTemperature` | `number` | `0.7` | 温度参数 |
-| `llmMaxTokens` | `number` | `2048` | 最大 token |
-| `llmTopP` | `number` | `0.9` | Top-P 参数 |
-| `thinkingEnabled` | `boolean` | `false` | 思考模式 |
-| `thinkingBudget` | `number` | `10000` | 思考 token 预算 |
-
-### 9. UI 状态
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `showExport` | `boolean` | `false` | 导出面板显示 |
-| `showDocument` | `boolean` | `true` | 文档面板显示 |
-| `docTab` | `string` | `'principle'` | 文档标签页 |
-| `customSystemPrompt` | `string` | `''` | 自定义 prompt |
-| `isEditingLlmConfig` | `boolean` | `false` | 编辑模式 |
-| `customTestPayload` | `string` | `''` | 自定义 payload |
-| `isEditingPayload` | `boolean` | `false` | 编辑 payload |
-| `payloadFiles` | `Array` | `[]` | 附件文件 |
-| `promptConfigCollapsed` | `boolean` | `false` | 配置面板折叠 |
-
-### 10. 用例管理状态
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `viewMode` | `'scenarios' \| 'saved'` | `'scenarios'` | 视图模式 |
-| `savedCases` | `Array` | `[]` | 已保存用例 |
-| `selectedCase` | `object \| null` | `null` | 选中用例详情 |
-| `isSaving` | `boolean` | `false` | 保存中状态 |
-| `loadingSavedCases` | `boolean` | `false` | 加载中状态 |
-| `lastTestResult` | `object \| null` | `null` | 最后测试结果 |
-
-### 11. 文件解析状态
-
-| 状态 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `isParsingFile` | `boolean` | `false` | 解析中 |
-| `parsingProgress` | `object \| null` | `null` | 解析进度 |
-| `parsingAbortController` | `AbortController \| null` | `null` | 取消控制器 |
+| 状态 | 类型 | 说明 |
+|------|------|------|
+| `messages` | `Array` | 聊天消息列表 |
+| `logs` | `Array` | 系统日志列表 |
+| `expandedLogs` | `Set` | 展开的日志索引 |
+| `isPlaying` | `boolean` | Mock 动画播放中 |
+| `typingMsg` | `object \| null` | 打字动画当前消息 |
+| `apiStatus` | `string` | API 调用状态 |
+| `apiError` | `string` | API 错误信息 |
+| `realResponse` | `string` | 真实模式响应 |
+| `selectedModel` | `string` | 选中的测试模型 |
+| `lastTestResult` | `object \| null` | 最后测试结果 |
 
 ---
 

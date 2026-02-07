@@ -8,7 +8,12 @@
 backend/
 ├── app/
 │   ├── main.py              # FastAPI 应用入口
-│   ├── routers/             # API 路由层
+│   ├── auth/                # 认证模块
+│   │   └── security.py      # JWT 认证（require_auth, require_user, require_admin）
+│   ├── db/                  # 数据库
+│   │   ├── engine.py        # SQLAlchemy 引擎
+│   │   └── tables.py        # ORM 模型（User 等）
+│   ├── routers/             # API 路由层（全部需 JWT 认证，health 端点除外）
 │   │   ├── sandbox.py       # 沙箱管理 (/sandbox)
 │   │   ├── rag.py           # RAG 服务 (/rag)
 │   │   ├── mcp.py           # MCP Server 工具 (/mcp)
@@ -97,9 +102,56 @@ app.include_router(report_templates.router)
 
 ---
 
+## 认证层 (auth/security.py)
+
+JWT 认证系统，提供三个层级的认证依赖：
+
+| 依赖 | DB 查询 | 返回值 | 用途 |
+|------|---------|--------|------|
+| `require_auth` | 否 | JWT payload (dict) | 轻量认证网关，绝大部分端点使用 |
+| `require_user` | 是 | User 对象 | 需要用户信息的端点（如 llm_proxy） |
+| `require_admin` | 是 | User 对象 | 管理操作 |
+
+`require_auth` 是高并发场景的首选：仅解码 JWT、验证签名和 `sub` 字段，不查询数据库。
+
+### 配置
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `JWT_SECRET_KEY` | `dev-secret-change-in-production` | JWT 签名密钥 |
+| `JWT_EXPIRE_MINUTES` | `480` (8小时) | Token 有效期 |
+
+### 路由认证模式
+
+| 模式 | 适用路由 | 代码示例 |
+|------|----------|----------|
+| 路由级 | cases, datasets, test_results, report_templates | `router = APIRouter(..., dependencies=[Depends(require_auth)])` |
+| 逐端点（跳过 health） | rag, mcp, file_parser | `@router.post("/path", dependencies=[Depends(require_auth)])` |
+| 逐端点 + WebSocket | sandbox, clawdbot | HTTP 用 `dependencies`，WS 手动 `jwt.decode(token)` |
+
+### WebSocket 认证
+
+WebSocket 无法使用 HTTP Authorization header，通过 URL query parameter 传递 token：
+
+```python
+@router.websocket("/path")
+async def ws_endpoint(websocket: WebSocket, token: str = Query(None)):
+    if not token:
+        await websocket.close(code=4001, reason="Auth required")
+        return
+    try:
+        jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+    await websocket.accept()
+```
+
+---
+
 ## 路由层详解
 
-### Sandbox 路由 (`/sandbox`)
+### Sandbox 路由 (`/sandbox`) — 需认证（health 除外）
 
 沙箱容器和工具管理。
 
@@ -142,7 +194,7 @@ async def execute_tool(request: ToolCallRequest):
     return result
 ```
 
-### RAG 路由 (`/rag`)
+### RAG 路由 (`/rag`) — 需认证（health 除外）
 
 向量知识库管理。
 
@@ -190,7 +242,7 @@ async def query_documents(request: QueryRequest):
     return QueryResponse(success=True, results=results)
 ```
 
-### File Parser 路由 (`/file-parser`)
+### File Parser 路由 (`/file-parser`) — 需认证（health 除外）
 
 独立的文件解析服务。详见本文档"子系统 4: 文件解析"一节。
 
@@ -201,7 +253,7 @@ async def query_documents(request: QueryRequest):
 | POST | `/file-parser/parse` | 解析文件 |
 | POST | `/file-parser/parse/text` | 解析为纯文本 |
 
-### MCP 路由 (`/mcp`)
+### MCP 路由 (`/mcp`) — 需认证（health 除外）
 
 MCP Server 工具调用服务。
 
@@ -228,7 +280,7 @@ async def execute_mcp_tool(request: McpToolRequest):
     return McpToolResult(success=result.get("success"), result=result.get("result"))
 ```
 
-### Cases 路由 (`/cases`)
+### Cases 路由 (`/cases`) — 需认证
 
 测试用例存储。
 
@@ -240,7 +292,7 @@ async def execute_mcp_tool(request: McpToolRequest):
 | PUT | `/cases/{id}` | 更新用例 |
 | DELETE | `/cases/{id}` | 删除用例 |
 
-### Report Templates 路由 (`/report-templates`)
+### Report Templates 路由 (`/report-templates`) — 需认证
 
 报告模板管理。从 `backend/data/report-templates/templates.json` 加载模板配置，提供模板列表和内容读取。
 

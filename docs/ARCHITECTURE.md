@@ -36,12 +36,18 @@
 
 ```
 src/
-├── App.jsx              # 主应用组件，包含所有 UI 和业务逻辑
+├── App.jsx              # 主应用组件（状态编排，约 1000 行）
 ├── config.js            # 全局配置和 LLM API 调用函数
+├── auth.js              # 认证工具（authFetch, getToken, setToken）
 ├── sandbox.js           # 沙箱 API 客户端
 ├── rag.js               # RAG API 客户端
 ├── mcp.js               # MCP API 客户端
 ├── caseApi.js           # 用例存储 API 客户端
+├── datasetApi.js        # 数据集 API 客户端
+├── testResultsApi.js    # 测试结果 API 客户端
+├── clawdbotApi.js       # ClawdBot API 客户端
+├── hooks/               # 19 个自定义 Hooks
+├── components/          # 20 个 UI 组件
 └── scenarios/           # 攻击场景系统
     ├── index.js         # 聚合导出
     ├── types.js         # 类型定义
@@ -56,39 +62,49 @@ src/
 
 ### App.jsx 结构
 
-`App.jsx` 是一个大型单文件组件（约 4400 行），包含：
+`App.jsx` 已从约 4400 行拆分为模块化组件架构，当前约 1000 行，仅保留状态编排和核心逻辑：
 
-| 区域 | 行数 | 功能 |
-|------|------|------|
-| 状态声明 | 1-170 | 77 个 useState 定义 |
-| Effects | 170-400 | 副作用和服务检测 |
-| 工具函数 | 400-1200 | 沙箱、RAG、MCP 操作 |
-| 测试逻辑 | 1200-2000 | Mock/Real 测试执行 |
-| 渲染函数 | 2000-4400 | UI 组件渲染 |
+| 职责 | 实现位置 |
+|------|----------|
+| 攻击选择状态 | `useAttackSelection` hook |
+| LLM 供应商管理 | `useProviders` hook |
+| 测试记录管理 | `useTestRecords` hook |
+| Payload 编辑 | `usePayloadEditor` hook |
+| 攻击评判 | `useJudgment` hook |
+| 面板布局 | `usePanelLayout` hook |
+| API 调试 | `useApiInspector` hook |
+| 左侧栏 | `LeftSidebar` 组件 |
+| 对话面板 | `ConversationPanel` 组件 |
+| 右侧面板 | `RightPanel` 组件 |
+| 攻击详情 | `AttackDetailPanel` 组件 |
+| 真实测试控制 | `RealTestControlPanel` 组件 |
+| 弹窗集合 | `AppModals` 组件 |
 
-### 状态管理分组
+### 状态管理
+
+状态通过 19 个自定义 Hooks 管理，App.jsx 负责编排和组件间数据传递：
 
 ```javascript
-// 1. 核心状态
-mode, selectedAttack, messages, logs, isPlaying
-
-// 2. 沙箱状态
-sandboxEnabled, sandboxStatus, containerInfo, toolResult
-
-// 3. RAG 状态
-ragEnabled, ragMode, ragDocuments, ragQueryResults
-
-// 4. MCP 状态
-mcpEnabled, mcpParsers, mcpServerEnabled, mcpServerConfigs
-
-// 5. 测试配置
-selectedModel, llmTemperature, llmMaxTokens, thinkingEnabled
-
-// 6. 对话模式
-dialogMode, conversationMode, conversationHistory
-
-// 7. UI 状态
-showDocument, docTab, expandedLogs, apiStatus
+// 由 Hooks 管理的状态组（App.jsx 调用 hook 获取）
+useAttackSelection()   // 场景选择、展开/折叠
+useProviders()         // LLM 供应商列表、选中供应商
+useTestRecords()       // 测试记录列表
+usePayloadEditor()     // 自定义 payload、系统提示词
+useJudgment()          // 评判配置、人类评判
+usePanelLayout()       // 面板标签页、布局状态
+useApiInspector()      // API 请求/响应检视
+useSandbox()           // 沙箱容器
+useRAG()               // RAG 知识库
+useMCP()               // MCP 解析器和 Server
+useCases()             // 用例持久化
+useConversation()      // 对话模式
+useLLMConfig()         // LLM 参数
+usePlayback()          // 用例回放
+useDatasets()          // 数据集管理
+useTestExecution()     // 批量测试执行
+useClawdBotSandbox()   // ClawdBot 沙箱
+useToast()             // Toast 通知
+useStateCollector()    // 状态收集器
 ```
 
 ## 后端架构
@@ -98,7 +114,9 @@ showDocument, docTab, expandedLogs, apiStatus
 ```
 backend/app/
 ├── main.py              # FastAPI 应用入口
-├── routers/             # API 路由层
+├── auth/                # 认证模块
+│   └── security.py      # JWT 认证（require_auth, require_user, require_admin）
+├── routers/             # API 路由层（全部需 JWT 认证，health 端点除外）
 │   ├── sandbox.py       # 沙箱管理 (/sandbox)
 │   ├── rag.py           # RAG 服务 (/rag)
 │   ├── mcp.py           # MCP Server 工具 (/mcp)
@@ -329,7 +347,48 @@ container = client.containers.run(
          清理会话状态
 ```
 
-## 安全考虑
+## 安全架构
+
+### JWT 认证流程
+
+```
+登录请求 POST /auth/login
+    ↓
+验证用户名密码 (bcrypt)
+    ↓
+签发 JWT (HS256, 8小时有效)
+    ↓
+前端存储 token → authFetch() 自动附加 Authorization header
+    ↓
+后端验证流程：
+┌─────────────────────────────────────────────┐
+│ require_auth（轻量级）                        │
+│  ↓ JWT 解码验证                              │
+│  ↓ 返回 payload（无 DB 查询）                │
+│  用于：绝大部分 API 端点（认证网关）           │
+├─────────────────────────────────────────────┤
+│ require_user（完整）                          │
+│  ↓ JWT 解码验证                              │
+│  ↓ DB 查询用户对象                           │
+│  用于：需要 User 对象的端点（如 llm_proxy）    │
+├─────────────────────────────────────────────┤
+│ require_admin                                │
+│  ↓ require_user + 检查 role == "admin"       │
+│  用于：管理操作                              │
+└─────────────────────────────────────────────┘
+```
+
+WebSocket 端点无法使用 HTTP header，通过 URL query parameter `?token=xxx` 传递 token，后端手动调用 `jwt.decode()` 验证。
+
+### 认证覆盖
+
+| 路由 | 认证方式 | 免认证端点 |
+|------|----------|-----------|
+| cases, datasets, test_results, report_templates | 路由级 `dependencies` | 无 |
+| rag, mcp, file_parser | 逐端点 `dependencies` | `/health` |
+| sandbox, clawdbot | 逐端点 + WebSocket 手动验证 | `/health` |
+| llm_proxy, usage | `require_user`（需 User 对象） | 无 |
+| auth | 无需认证 | `/auth/login`, `/auth/register` |
 
 ### 沙箱隔离
 
@@ -337,16 +396,18 @@ container = client.containers.run(
 - 容器资源限制防止资源耗尽
 - 路径遍历检查（禁止 `..`）
 - 工作目录限制为 `/workspace`
+- 网络隔离：独立子网 `poc-sandbox-isolated`，iptables 阻止访问内网
 
-### API 安全
+### Nginx 安全
 
 - CORS 白名单限制
-- 无持久化认证（演示用途）
-- 模拟工具不执行真实操作
+- 安全响应头：X-Frame-Options, X-Content-Type-Options, CSP 等
+- TLS 配置模板（注释状态，激活时取消注释）
 
 ### 敏感信息处理
 
 - API Key 通过环境变量配置
+- JWT 密钥通过 `JWT_SECRET_KEY` 环境变量配置
 - 模拟数据明确标注为 MOCK
 - 日志中过滤敏感信息
 

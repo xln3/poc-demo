@@ -153,6 +153,71 @@ sudo bash backend/setup-sandbox-network.sh --remove
 - 创建 systemd 服务在启动时运行脚本
 - 加入 `/etc/rc.local`
 
+## 数据库备份
+
+`deploy/backup.sh` 脚本通过 `docker exec` 调用 `pg_dump` 导出数据库，gzip 压缩存储，自动清理超过 7 天的旧备份。
+
+```bash
+# 使用默认备份目录 ./backups/
+bash deploy/backup.sh
+
+# 指定备份目录
+bash deploy/backup.sh /data/backups
+
+# 定时任务（每天凌晨 3 点）
+# crontab -e
+0 3 * * * cd /path/to/poc-demo && bash deploy/backup.sh
+```
+
+配置参数（通过环境变量或脚本内修改）：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `BACKUP_DIR` | `./backups` | 备份存储目录（第一个命令行参数） |
+| `CONTAINER_NAME` | `poc-demo-postgres-1` | PostgreSQL 容器名 |
+| `POSTGRES_USER` | `poc` | 数据库用户 |
+| `POSTGRES_DB` | `poc_demo` | 数据库名 |
+| `RETAIN_DAYS` | `7` | 备份保留天数 |
+
+---
+
+## Nginx 安全头
+
+`deploy/nginx.conf` 配置了以下安全响应头：
+
+| Header | 值 | 作用 |
+|--------|------|------|
+| `X-Frame-Options` | `SAMEORIGIN` | 防止页面被嵌入 iframe（防点击劫持） |
+| `X-Content-Type-Options` | `nosniff` | 禁止浏览器猜测 MIME 类型 |
+| `X-XSS-Protection` | `1; mode=block` | 启用浏览器 XSS 过滤器 |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | 控制 Referer 头泄露 |
+| `Content-Security-Policy` | `default-src 'self'; ...` | 限制资源加载来源，防 XSS |
+
+CSP 策略细节：`script-src 'self' 'unsafe-inline'`（允许内联脚本以兼容 Vite 注入），`connect-src 'self' ws: wss:`（允许 WebSocket 连接）。
+
+---
+
+## TLS / HTTPS 配置
+
+`deploy/nginx.conf` 包含注释状态的 TLS 配置模板。启用步骤：
+
+1. **获取 SSL 证书**（Let's Encrypt 或其他 CA）
+2. **放置证书文件**：
+   ```
+   deploy/certs/fullchain.pem   # 证书链
+   deploy/certs/privkey.pem     # 私钥
+   ```
+3. **取消 nginx.conf 注释**：启用 443 SSL server 块和 80→443 重定向
+4. **取消 docker-compose.yml 注释**：启用 443 端口映射和证书卷挂载
+5. **重新部署**：`./deploy.sh`
+
+TLS 配置说明：
+- 支持 TLSv1.2 和 TLSv1.3
+- 启用 HSTS（`max-age=31536000; includeSubDomains`）
+- HTTP 自动重定向到 HTTPS
+
+---
+
 ## 注意事项
 
 1. **两环境可同时运行**：端口不冲突，互不影响
