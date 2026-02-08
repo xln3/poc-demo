@@ -1,7 +1,8 @@
 """JWT token creation/verification and password hashing."""
 
+import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import JWTError, jwt
@@ -14,8 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db.engine import get_db
 from ..db.tables import User
 
-# Config from environment
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-secret-change-in-production")
+logger = logging.getLogger(__name__)
+
+# Config from environment — reject insecure defaults at startup
+_DEFAULT_SECRET = "dev-secret-change-in-production"
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY", _DEFAULT_SECRET)
+if SECRET_KEY == _DEFAULT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET_KEY is not set or uses the insecure default. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "480"))  # 8 hours
 
@@ -33,7 +42,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode["exp"] = expire
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 

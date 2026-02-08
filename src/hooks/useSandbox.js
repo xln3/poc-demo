@@ -918,8 +918,6 @@ export const useSandbox = ({ addLog }) => {
       (event) => {
         // 处理文件变化事件
         if (event.type === 'file_change') {
-          console.log('[FileWatch] File changed:', event);
-
           // 显示 Toast 通知（world - 客观环境变化，无法追踪来源）
           const eventName = { 'CREATE': '新建', 'DELETE': '删除', 'MODIFY': '修改', 'MOVE': '移动' }[event.event] || event.event;
           const fileName = event.path.split('/').pop();
@@ -941,7 +939,6 @@ export const useSandbox = ({ addLog }) => {
           }, 100);  // 从 300 减小到 100
         } else if (event.type === 'file_changes') {
           // 批量事件摘要（world - 客观环境变化）
-          console.log('[FileWatch] Batch file changes:', event.count);
           addLog({
             type: 'toast_world',
             content: `${event.count} 个文件变化`,
@@ -958,7 +955,7 @@ export const useSandbox = ({ addLog }) => {
             }
           }, 100);
         } else if (event.type === 'watching') {
-          console.log('[FileWatch] Started watching:', event.path);
+          // watching started
         }
       },
       (error) => {

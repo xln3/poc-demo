@@ -1,11 +1,14 @@
 """API endpoints for report templates."""
 from __future__ import annotations
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth.security import require_auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/report-templates", tags=["report-templates"], dependencies=[Depends(require_auth)])
 
@@ -22,7 +25,7 @@ def get_templates_config() -> Dict[str, Any]:
         with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"Error loading templates config: {e}")
+        logger.error("Error loading templates config: %s", e)
         return {"templates": []}
 
 
@@ -55,8 +58,10 @@ async def get_template(template_id: str) -> Dict[str, Any]:
     if not template_info:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    # Read template file
-    template_file = TEMPLATES_DIR / template_info.get("file", f"{template_id}.md")
+    # Read template file — validate path stays within templates directory
+    template_file = (TEMPLATES_DIR / template_info.get("file", f"{template_id}.md")).resolve()
+    if not template_file.is_relative_to(TEMPLATES_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid template path")
     if not template_file.exists():
         raise HTTPException(status_code=404, detail="Template file not found")
 

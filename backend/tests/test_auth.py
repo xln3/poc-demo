@@ -1,7 +1,7 @@
 """Tests for authentication — password hashing, JWT tokens."""
 
 import pytest
-from app.auth.security import hash_password, verify_password, create_access_token
+from app.auth.security import hash_password, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from jose import jwt
 
 
@@ -25,7 +25,7 @@ class TestPasswordHashing:
 class TestJWT:
     def test_create_and_decode(self):
         token = create_access_token({"sub": "testuser", "role": "tester"})
-        payload = jwt.decode(token, "dev-secret-change-in-production", algorithms=["HS256"])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         assert payload["sub"] == "testuser"
         assert payload["role"] == "tester"
         assert "exp" in payload
@@ -33,5 +33,5 @@ class TestJWT:
     def test_token_contains_expiry(self):
         from datetime import timedelta
         token = create_access_token({"sub": "user"}, expires_delta=timedelta(hours=1))
-        payload = jwt.decode(token, "dev-secret-change-in-production", algorithms=["HS256"])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         assert "exp" in payload

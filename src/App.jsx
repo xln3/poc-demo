@@ -3318,7 +3318,6 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
 
   // 通过后端服务解析文件
   const parseViaMcpBackend = async (file, parsers, abortController) => {
-    console.log('🌐 调用文件解析后端, 解析器:', parsers);
     const formData = new FormData();
     formData.append('file', file);
     formData.append('parsers', JSON.stringify(parsers));
@@ -3328,20 +3327,12 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
       body: formData,
       signal: abortController?.signal
     });
-    console.log('📡 文件解析响应状态:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`MCP API错误 (${response.status}): ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('📥 MCP返回结果:', {
-      filename: result.filename,
-      textLength: result.text?.length || 0,
-      parsersUsed: result.parsers_used,
-      textPreview: result.text?.substring(0, 200)
-    });
     return result.text;
   };
 

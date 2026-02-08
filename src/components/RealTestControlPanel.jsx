@@ -886,11 +886,9 @@ export default function RealTestControlPanel({
                           <div className="flex gap-2">
                             <button
                               onClick={async () => {
-                                console.log('[MCP] Testing connection for:', selectedMcpServer, config);
                                 setMcpServerStatus(prev => ({ ...prev, [selectedMcpServer]: 'testing' }));
                                 try {
                                   const result = await mcpClient.testConnection(selectedMcpServer, config);
-                                  console.log('[MCP] Test result:', result);
                                   setMcpServerStatus(prev => ({
                                     ...prev,
                                     [selectedMcpServer]: result.success ? 'connected' : 'error'
@@ -911,14 +909,12 @@ export default function RealTestControlPanel({
                             </button>
                             <button
                               onClick={() => {
-                                console.log('[MCP] Toggle enabled for:', selectedMcpServer, 'current:', config.enabled);
                                 const updated = {
                                   ...mcpServerConfigs,
                                   [selectedMcpServer]: { ...config, enabled: !config.enabled }
                                 };
                                 setMcpServerConfigs(updated);
                                 localStorage.setItem('mcpServerConfigs', JSON.stringify(updated));
-                                console.log('[MCP] Updated configs:', updated);
                               }}
                               className={`px-2 py-0.5 rounded text-white text-[10px] ${
                                 config.enabled

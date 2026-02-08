@@ -27,9 +27,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-backend/__pycache__/
-backend/app/__pycache__/
-backend/app/**/__pycache__/
+**/__pycache__/
 backend/venv/
 
 # 运行时数据（应存储在 ../poc-data/）

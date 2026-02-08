@@ -127,6 +127,21 @@ class DatabaseService:
             timeout=10,
         )
 
+    # Dangerous SQL patterns that can bypass SELECT-only check
+    _DANGEROUS_PATTERNS = [
+        "INTO",          # SELECT ... INTO
+        "FOR UPDATE",    # Row locking
+        "FOR SHARE",
+        "PG_CATALOG",    # System catalog access
+        "PG_SHADOW",     # Password hashes
+        "PG_AUTHID",     # Auth info
+        "INFORMATION_SCHEMA.USER_PRIVILEGES",
+        "DBLINK",        # Cross-database queries
+        "COPY",          # File I/O
+        "LO_IMPORT",     # Large object import
+        "LO_EXPORT",
+    ]
+
     async def _query(
         self, db_type: str, params: Dict[str, Any], config: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -137,10 +152,19 @@ class DatabaseService:
         if not query:
             return {"success": False, "error": "Missing 'query' parameter"}
 
-        # Security check: only allow SELECT queries
+        # Security check: only allow simple SELECT queries
         query_upper = query.strip().upper()
         if not query_upper.startswith("SELECT"):
             return {"success": False, "error": "Only SELECT queries are allowed in db_query"}
+
+        # Block dangerous patterns (CTE abuse, system catalog access, etc.)
+        for pattern in self._DANGEROUS_PATTERNS:
+            if pattern in query_upper:
+                return {"success": False, "error": f"Query contains disallowed pattern: {pattern}"}
+
+        # Block semicolons to prevent multi-statement injection
+        if ";" in query.rstrip().rstrip(";"):
+            return {"success": False, "error": "Multiple statements are not allowed"}
 
         # Add LIMIT if not present
         if "LIMIT" not in query_upper:
@@ -247,11 +271,22 @@ class DatabaseService:
                 "result": {"affected_rows": cursor.rowcount},
             }
 
+    @staticmethod
+    def _validate_identifier(name: str) -> str:
+        """Validate a SQL identifier (table/schema name) to prevent injection."""
+        import re
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+            raise ValueError(f"Invalid SQL identifier: {name!r}")
+        return name
+
     async def _list_tables(
         self, db_type: str, params: Dict[str, Any], config: Dict[str, Any]
     ) -> Dict[str, Any]:
         """List all tables in the database."""
-        schema = params.get("schema", "public")
+        try:
+            schema = self._validate_identifier(params.get("schema", "public"))
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
 
         try:
             if db_type == "postgres":
@@ -285,6 +320,12 @@ class DatabaseService:
 
         if not table_name:
             return {"success": False, "error": "Missing 'table' parameter"}
+
+        try:
+            table_name = self._validate_identifier(table_name)
+            schema = self._validate_identifier(schema)
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
 
         try:
             if db_type == "postgres":

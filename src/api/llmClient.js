@@ -187,61 +187,8 @@ export async function callLLM({
     };
   }
 
-  // --- Direct API mode (legacy / no provider configured) ---
-  const body = {
-    model: modelId || CONFIG.api.model,
-    messages: [
-      ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-      ...messages,
-    ],
-    temperature: params.temperature,
-    max_tokens: params.max_tokens,
-    top_p: params.top_p,
-  };
-
-  if (thinkingConfig && thinkingConfig.type !== 'disabled') {
-    body.thinking = thinkingConfig;
-  }
-  if (stream) body.stream = true;
-  if (tools && tools.length > 0) {
-    body.tools = tools.map(tool => ({
-      type: 'function',
-      function: { name: tool.name, description: tool.description, parameters: tool.parameters },
-    }));
-    body.tool_choice = 'auto';
-  }
-
-  const response = await fetch(CONFIG.api.baseUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${CONFIG.api.apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`API Error: ${response.status} - ${errorText}`);
-  }
-
-  const totalTime = () => Date.now() - startTime;
-
-  if (stream) {
-    const result = await consumeSSEStream(response, onDelta);
-    return { ...result, timing: { totalTime: totalTime() } };
-  }
-
-  const data = await response.json();
-  const message = data.choices?.[0]?.message;
-  const finishReason = data.choices?.[0]?.finish_reason;
-
-  return {
-    content: message?.content || '(无响应)',
-    thinking: message?.thinking || message?.reasoning_content || null,
-    tool_calls: message?.tool_calls || [],
-    finish_reason: finishReason,
-    timing: { totalTime: totalTime() },
-    raw: data,
-  };
+  // --- No provider configured ---
+  throw new Error(
+    '未配置 LLM provider。请在设置中添加 API 提供商后重试。'
+  );
 }

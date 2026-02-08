@@ -58,7 +58,6 @@ export const FileTreeBrowser = ({
                          errMsg.includes('internal server error');
 
       if (isNotFound && path !== '/workspace') {
-        console.log(`[FileTreeBrowser] Directory not found, falling back to /workspace: ${path}`);
         setCurrentPath('/workspace');
         setLoading(false);
         return; // 会触发 useEffect 重新加载

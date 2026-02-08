@@ -248,7 +248,7 @@ def parse_image_pillow_meta(file_bytes: bytes) -> dict:
                 tag = TAGS.get(tag_id, tag_id)
                 try:
                     exif_data[tag] = str(value) if not isinstance(value, (str, int, float)) else value
-                except:
+                except Exception:
                     pass
 
         # 图片注释/描述
@@ -257,7 +257,7 @@ def parse_image_pillow_meta(file_bytes: bytes) -> dict:
             for key, value in image.info.items():
                 try:
                     comments[key] = str(value) if not isinstance(value, (str, int, float, bytes)) else value
-                except:
+                except Exception:
                     pass
 
         return {

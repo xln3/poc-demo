@@ -242,16 +242,22 @@ async def upload_file(
     if info.status != ContainerStatus.RUNNING:
         raise HTTPException(status_code=400, detail=f"终端 '{tag}' 未运行")
 
-    # 路径安全检查
-    if ".." in path:
-        raise HTTPException(status_code=400, detail="路径不允许包含 '..'")
+    # 路径安全检查 — sanitize both upload dir and filename
+    import posixpath
+    sanitized_dir = posixpath.normpath(path)
+    sanitized_name = posixpath.basename(file.filename or "upload")
+    if not sanitized_name or sanitized_name in (".", ".."):
+        raise HTTPException(status_code=400, detail="无效的文件名")
 
-    # 检查路径前缀
-    allowed = any(path.startswith(p) for p in TRANSFER_CONFIG['allowed_paths'])
+    full_path = f"{sanitized_dir.rstrip('/')}/{sanitized_name}"
+
+    # Validate resolved path stays within allowed directories
+    resolved = posixpath.normpath(full_path)
+    allowed = any(resolved == base or resolved.startswith(base + "/") for base in TRANSFER_CONFIG['allowed_paths'])
     if not allowed:
         raise HTTPException(
             status_code=400,
-            detail=f"路径必须以 {TRANSFER_CONFIG['allowed_paths']} 之一开头"
+            detail=f"路径必须位于 {TRANSFER_CONFIG['allowed_paths']} 之内"
         )
 
     # 检查文件大小
@@ -261,9 +267,6 @@ async def upload_file(
             status_code=413,
             detail=f"文件过大，最大允许 {TRANSFER_CONFIG['max_file_size'] // (1024*1024)}MB"
         )
-
-    # 构建完整路径 - 保留原始文件名
-    full_path = f"{path.rstrip('/')}/{file.filename}"
 
     try:
         await asyncio.to_thread(
@@ -299,8 +302,11 @@ async def download_file(
         raise HTTPException(status_code=400, detail=f"终端 '{tag}' 未运行")
 
     # 路径安全检查
-    if ".." in path:
-        raise HTTPException(status_code=400, detail="路径不允许包含 '..'")
+    import posixpath
+    resolved = posixpath.normpath(path)
+    allowed = any(resolved == base or resolved.startswith(base + "/") for base in TRANSFER_CONFIG['allowed_paths'])
+    if not allowed:
+        raise HTTPException(status_code=400, detail="路径不在允许范围内")
 
     try:
         tar_data, stat = await asyncio.to_thread(
@@ -674,7 +680,7 @@ async def websocket_file_watch(websocket: WebSocket, tag: str, path: str = "/wor
                 "type": "error",
                 "message": str(e),
             }))
-        except:
+        except Exception:
             pass
     finally:
         await file_watcher.stop_watching(tag)

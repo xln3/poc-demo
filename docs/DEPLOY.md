@@ -193,11 +193,13 @@ bash deploy/backup.sh /data/backups
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | 控制 Referer 头泄露 |
 | `Content-Security-Policy` | `default-src 'self'; ...` | 限制资源加载来源，防 XSS |
 
-CSP 策略细节：`script-src 'self' 'unsafe-inline'`（允许内联脚本以兼容 Vite 注入），`connect-src 'self' ws: wss:`（允许 WebSocket 连接）。
+CSP 策略细节：`script-src 'self'`（Vite 生产构建不产生内联脚本），`style-src 'self' 'unsafe-inline'`（Tailwind 动态样式需要），`connect-src 'self' ws: wss:`（允许 WebSocket 连接）。
 
 ---
 
-## TLS / HTTPS 配置
+## TLS / HTTPS 配置（生产环境必需）
+
+> **WARNING**: 生产环境 **必须** 启用 TLS。未启用 TLS 时，JWT token 和 API 密钥以明文传输，攻击者可通过网络嗅探获取完整的认证凭据。HTTP 部署仅适用于本地开发或 SSH 隧道访问场景。
 
 `deploy/nginx.conf` 包含注释状态的 TLS 配置模板。启用步骤：
 

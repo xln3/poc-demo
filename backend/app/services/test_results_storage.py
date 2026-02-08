@@ -1,6 +1,7 @@
 """Test results storage service."""
 from __future__ import annotations
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -9,6 +10,8 @@ import uuid
 
 # Storage directory path (configured in config.py)
 from ..config import DATA_PATHS
+
+logger = logging.getLogger(__name__)
 DATA_DIR = DATA_PATHS['test_results']
 
 
@@ -37,7 +40,7 @@ class TestResultsStorage:
                         "meta": data.get("meta", {}),
                     })
             except Exception as e:
-                print(f"Error reading {path}: {e}")
+                logger.error("Error reading %s: %s", path, e)
         # Sort by savedAt descending
         results.sort(key=lambda x: x.get("savedAt", ""), reverse=True)
         return results
