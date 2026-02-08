@@ -79,6 +79,7 @@ cd backend && ./run.sh
 | [CONFIG.md](./CONFIG.md) | 配置参考 |
 | [DEPLOY.md](./DEPLOY.md) | 部署指南 |
 | [CHANGELOG.md](./CHANGELOG.md) | 变更历史 |
+| [ATTACK-TAXONOMY.md](./ATTACK-TAXONOMY.md) | 安全风险分类框架（T1-T4 载荷通道分类 + 27 项测试集映射） |
 | [CLAWDBOT-TEST-GUIDE.md](./CLAWDBOT-TEST-GUIDE.md) | F6 ClawdBot 场景复现指南 |
 
 ---
@@ -108,9 +109,10 @@ cd backend && ./run.sh
 
 ### 安全研究者
 
-1. [SCENARIOS.md](./SCENARIOS.md) → 攻击场景详解
-2. [ARCHITECTURE.md](./ARCHITECTURE.md) → 能力层级映射
-3. 运行真实测试体验攻击效果
+1. [ATTACK-TAXONOMY.md](./ATTACK-TAXONOMY.md) → 安全风险分类框架
+2. [SCENARIOS.md](./SCENARIOS.md) → 攻击场景详解
+3. [ARCHITECTURE.md](./ARCHITECTURE.md) → 能力层级映射
+4. 运行真实测试体验攻击效果
 
 ---
 
