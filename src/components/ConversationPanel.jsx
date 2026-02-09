@@ -5,7 +5,7 @@ import JsonTree from './JsonTree.jsx';
 const ConversationPanel = forwardRef(function ConversationPanel({
   leftPanelTab, setLeftPanelTab,
   // Conversation
-  mode, selectedModel, messages, typingMsg, dialogMode, conversationMode,
+  selectedModel, messages, typingMsg, dialogMode, conversationMode,
   apiStatus, userInput, setUserInput, sendUserMessage, handleMultiRoundFileUpload,
   isPlaybackMode,
   // Thinking
@@ -68,9 +68,7 @@ const ConversationPanel = forwardRef(function ConversationPanel({
           <div className="flex items-center gap-2 mb-2 text-xs flex-shrink-0">
             <span className="text-slate-400">🤖 被测模型：</span>
             <span className="font-mono text-blue-400">
-              {mode === 'real'
-                ? (CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel)
-                : CONFIG.api.model}
+              {CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel}
             </span>
           </div>
           <div ref={chatRef} className="flex-1 overflow-y-auto custom-scroll space-y-2 pr-1">
@@ -104,14 +102,13 @@ const ConversationPanel = forwardRef(function ConversationPanel({
             )}
             {messages.length === 0 && !typingMsg && (
               <div className="text-slate-500 text-center py-8">
-                {mode === 'mock' ? '等待演示开始...' :
-                  dialogMode === 'multi' ? '点击「开始测试」发送 Payload' : '点击「执行测试」发送 Payload'}
+                {dialogMode === 'multi' ? '点击「开始测试」发送 Payload' : '点击「执行测试」发送 Payload'}
               </div>
             )}
           </div>
 
           {/* 多轮对话输入框 */}
-          {mode === 'real' && dialogMode === 'multi' && conversationMode === 'active' && (
+          {dialogMode === 'multi' && conversationMode === 'active' && (
             <div className="border-t border-slate-700 pt-2 mt-2 flex-shrink-0">
               <div className="flex gap-2">
                 <input

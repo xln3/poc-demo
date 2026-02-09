@@ -19,7 +19,6 @@ import {
  */
 export const usePlayback = ({
   // 状态设置器
-  setMode,
   setSelectedModel,
   setLlmTemperature,
   setLlmMaxTokens,
@@ -72,9 +71,6 @@ export const usePlayback = ({
    * 从 TestInput 或 v1 environment 恢复环境配置
    */
   const restoreEnvironment = useCallback((data) => {
-    // 设置模式为 mock（回放不需要真实 API 调用）
-    setMode('mock');
-
     // 检测版本
     const { version, type } = detectSchemaVersion(data);
 
@@ -300,7 +296,7 @@ export const usePlayback = ({
 
     return true;
   }, [
-    setMode, setSelectedModel, setLlmTemperature, setLlmMaxTokens, setLlmTopP,
+    setSelectedModel, setLlmTemperature, setLlmMaxTokens, setLlmTopP,
     setThinkingEnabled, setThinkingBudget, setCustomSystemPrompt,
     setToolsEnabled, setEnabledTools, setMaxToolCalls,
     setSandboxEnabled, setSandboxImage,

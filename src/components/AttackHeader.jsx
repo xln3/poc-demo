@@ -1,7 +1,7 @@
 import { ATTACK_TYPES } from '../config.js';
 
 export default function AttackHeader({
-  currentAttack, currentScenario, mode, isPlaying, apiStatus, apiElapsedTime,
+  currentAttack, currentScenario, isPlaying, apiStatus, apiElapsedTime,
   attackType, riskLevel, isPlaybackMode,
   isBatchTesting, batchTestIndex, batchTestQueue,
 }) {
@@ -35,7 +35,7 @@ export default function AttackHeader({
     <div className="mb-4">
       <div className="flex items-center gap-3 mb-1">
         <h2 className="text-lg font-bold">{currentAttack ? `${currentAttack.name}—${currentScenario.name}` : '安全测试'}</h2>
-        {mode === 'real' && !isPlaybackMode && (
+        {!isPlaybackMode && (
           <span className="px-2 py-0.5 bg-green-600 rounded text-xs">🔬 真实测试模式</span>
         )}
       </div>
@@ -53,10 +53,7 @@ export default function AttackHeader({
             危害等级：{riskLevel.label}
           </span>
         )}
-        {mode === 'mock' && isPlaying && !isPlaybackMode && (
-          <span className="text-xs text-green-400 animate-pulse">● 演示中</span>
-        )}
-        {mode === 'real' && apiStatus === 'loading' && !isPlaybackMode && (
+        {apiStatus === 'loading' && !isPlaybackMode && (
           <span className="text-xs text-yellow-400 animate-pulse">● 请求中... {(apiElapsedTime / 1000).toFixed(1)}s</span>
         )}
       </div>
