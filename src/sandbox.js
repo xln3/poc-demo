@@ -6,7 +6,7 @@ import { authFetch, authHeaders, getToken } from './auth.js';
 export const SANDBOX_CONFIG = {
   // 使用相对路径，通过 Vite 代理转发，避免浏览器代理干扰
   baseUrl: '',
-  wsUrl: `ws://${window.location.host}`,
+  wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`,
 };
 
 // 终端沙箱镜像类型

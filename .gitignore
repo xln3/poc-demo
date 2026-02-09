@@ -17,6 +17,9 @@ dist-ssr
 .env.local
 .env.*.local
 
+# TLS 证书
+certs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
