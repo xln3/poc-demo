@@ -230,9 +230,32 @@ class DatabaseService:
         if query_upper.startswith("SELECT"):
             return {"success": False, "error": "Use db_query for SELECT statements"}
 
-        # Disallow dangerous operations
-        dangerous_patterns = ["DROP DATABASE", "DROP SCHEMA", "TRUNCATE"]
-        for pattern in dangerous_patterns:
+        # Block multi-statement injection via semicolons
+        if ";" in query.rstrip().rstrip(";"):
+            return {"success": False, "error": "Multiple statements are not allowed in db_execute"}
+
+        # Disallow dangerous operations — comprehensive blocklist
+        _EXECUTE_BLOCKED = [
+            # DDL that destroys data
+            "DROP DATABASE", "DROP SCHEMA", "DROP TABLE", "DROP INDEX",
+            "DROP VIEW", "DROP FUNCTION", "DROP PROCEDURE", "DROP TRIGGER",
+            "DROP ROLE", "DROP USER", "DROP SEQUENCE", "DROP TYPE",
+            "TRUNCATE",
+            # DDL that modifies structure beyond DML intent
+            "CREATE FUNCTION", "CREATE PROCEDURE", "CREATE TRIGGER",
+            "CREATE ROLE", "CREATE USER", "CREATE EXTENSION",
+            # Privilege escalation
+            "GRANT", "REVOKE",
+            "ALTER ROLE", "ALTER USER",
+            # Filesystem access (PostgreSQL)
+            "COPY ", "PG_READ_FILE", "PG_WRITE_FILE", "PG_LS_DIR",
+            "PG_STAT_FILE", "LO_IMPORT", "LO_EXPORT",
+            # Dynamic SQL execution
+            "EXECUTE ", "EXEC ",
+            # System catalog modification
+            "PG_CATALOG", "PG_SHADOW", "PG_AUTHID",
+        ]
+        for pattern in _EXECUTE_BLOCKED:
             if pattern in query_upper:
                 return {"success": False, "error": f"Operation not allowed: {pattern}"}
 
