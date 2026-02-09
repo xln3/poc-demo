@@ -4,8 +4,12 @@ Providers are stored per-user with encrypted API keys. The /api/llm/chat
 endpoint proxies requests to the configured LLM API, keeping keys server-side.
 """
 
+import ipaddress
+import logging
+import socket
 from datetime import datetime
 from typing import Optional, List
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,6 +20,8 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
+
 from ..db.engine import get_db
 from ..db.tables import User, LLMProvider, ApiUsage
 from ..auth.security import require_user, get_current_user
@@ -23,6 +29,42 @@ from ..services.encryption import encrypt_api_key, decrypt_api_key, mask_api_key
 
 router = APIRouter(prefix="/api/llm", tags=["llm"])
 limiter = Limiter(key_func=get_remote_address)
+
+
+def _validate_llm_url(url: str) -> None:
+    """Block SSRF: only allow HTTPS/HTTP to public internet hosts.
+
+    Raises HTTPException(400) if the URL targets private/reserved networks,
+    uses a non-HTTP scheme, or resolves to a private IP.
+    """
+    parsed = urlparse(url)
+
+    # Scheme whitelist
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail=f"URL scheme '{parsed.scheme}' not allowed; use http or https")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise HTTPException(status_code=400, detail="URL has no hostname")
+
+    # Block well-known cloud metadata endpoints
+    _BLOCKED_HOSTS = {"metadata.google.internal", "169.254.169.254"}
+    if hostname in _BLOCKED_HOSTS:
+        raise HTTPException(status_code=400, detail="URL targets a blocked metadata service")
+
+    # Resolve hostname and check all IPs
+    try:
+        addr_infos = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail=f"Cannot resolve hostname: {hostname}")
+
+    for family, _, _, _, sockaddr in addr_infos:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise HTTPException(
+                status_code=400,
+                detail=f"URL resolves to a private/reserved IP ({ip}); only public addresses are allowed",
+            )
 
 
 # ===== Pydantic models =====
@@ -79,6 +121,7 @@ async def create_provider(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    _validate_llm_url(req.base_url)
     provider = LLMProvider(
         user_id=user.id,
         provider_name=req.provider_name,
@@ -131,6 +174,7 @@ async def update_provider(
     if req.provider_name is not None:
         provider.provider_name = req.provider_name
     if req.base_url is not None:
+        _validate_llm_url(req.base_url)
         provider.base_url = req.base_url.rstrip("/")
     if req.api_key is not None:
         provider.api_key_encrypted = encrypt_api_key(req.api_key)
