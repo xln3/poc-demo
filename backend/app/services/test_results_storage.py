@@ -10,6 +10,7 @@ import uuid
 
 # Storage directory path (configured in config.py)
 from ..config import DATA_PATHS
+from .id_validator import sanitize_id
 
 logger = logging.getLogger(__name__)
 DATA_DIR = DATA_PATHS['test_results']
@@ -23,6 +24,7 @@ class TestResultsStorage:
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_result_path(self, result_id: str) -> Path:
+        sanitize_id(result_id, "result_id")
         return self.data_dir / f"{result_id}.json"
 
     def list_results(self) -> List[Dict[str, Any]]:

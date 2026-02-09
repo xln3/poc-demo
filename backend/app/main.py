@@ -3,8 +3,9 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request as FastAPIRequest
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from .routers import sandbox, mcp, rag, cases, datasets, test_results, report_templates, file_parser, clawdbot, eval_import, simulator
@@ -93,6 +94,12 @@ _rate_limit_default = os.environ.get("RATE_LIMIT_DEFAULT", "120/minute")
 limiter = Limiter(key_func=get_remote_address, default_limits=[_rate_limit_default])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: FastAPIRequest, exc: ValueError):
+    """Convert ValueError (e.g. from ID sanitization) to 400 Bad Request."""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 @app.get("/")

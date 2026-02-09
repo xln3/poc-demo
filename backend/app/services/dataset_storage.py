@@ -12,6 +12,8 @@ from typing import Optional, List, Dict, Any
 
 # Storage directory path (configured in config.py)
 from ..config import DATA_PATHS
+from .id_validator import sanitize_id
+
 DATA_DIR = DATA_PATHS['datasets']
 
 
@@ -54,6 +56,7 @@ class DatasetStorage:
 
     def _get_dataset_path(self, dataset_id: str) -> Path:
         """Get the file path for a dataset."""
+        sanitize_id(dataset_id, "dataset_id")
         return DATA_DIR / f"{dataset_id}.json"
 
     def generate_id(self) -> str:

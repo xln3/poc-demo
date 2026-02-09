@@ -12,6 +12,8 @@ from typing import Optional, List, Dict
 
 # Storage directory path (configured in config.py)
 from ..config import DATA_PATHS
+from .id_validator import sanitize_id
+
 DATA_DIR = DATA_PATHS['saved_cases']
 
 
@@ -50,6 +52,7 @@ class CaseStorage:
 
     def _get_case_path(self, case_id: str) -> Path:
         """Get the file path for a case."""
+        sanitize_id(case_id, "case_id")
         return DATA_DIR / f"{case_id}.json"
 
     def generate_id(self) -> str:
