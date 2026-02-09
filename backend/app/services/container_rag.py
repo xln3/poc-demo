@@ -118,19 +118,31 @@ class ContainerRAGService:
             self._starting = False
 
     def _sync_call_http(self, method: str, endpoint: str, data: dict = None) -> Dict[str, Any]:
-        """同步版本：通过容器内 curl 调用 RAG 服务（在线程池中执行）"""
+        """同步版本：通过容器内 curl 调用 RAG 服务（在线程池中执行）
+
+        Uses list-form exec to avoid shell injection via endpoint/data.
+        """
+        import re
         self._sync_ensure_server_running()
 
+        # Validate endpoint to prevent injection (alphanumeric, /, -, _ only)
+        if not re.match(r'^/[a-zA-Z0-9/_-]*$', endpoint):
+            return {"success": False, "error": f"Invalid endpoint: {endpoint}"}
+
+        url = f"http://127.0.0.1:{RAG_SERVER_PORT}{endpoint}"
+
         if method == 'GET':
-            cmd = f"curl -s --connect-timeout 5 --max-time 60 http://127.0.0.1:{RAG_SERVER_PORT}{endpoint}"
+            cmd = ["curl", "-s", "--connect-timeout", "5", "--max-time", "60", url]
         else:
             json_data = json.dumps(data or {}, ensure_ascii=False)
-            escaped_json = json_data.replace("'", "'\"'\"'")
-            cmd = f"curl -s --connect-timeout 5 --max-time 60 -X {method} -H 'Content-Type: application/json' -d '{escaped_json}' http://127.0.0.1:{RAG_SERVER_PORT}{endpoint}"
+            cmd = [
+                "curl", "-s", "--connect-timeout", "5", "--max-time", "60",
+                "-X", method, "-H", "Content-Type: application/json",
+                "-d", json_data, url
+            ]
 
         exit_code, stdout, stderr = container_manager.exec_in_container(
-            RAG_SESSION_ID,
-            f"/bin/bash -c {json.dumps(cmd, ensure_ascii=False)}"
+            RAG_SESSION_ID, cmd
         )
 
         if exit_code != 0:

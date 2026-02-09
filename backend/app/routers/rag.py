@@ -26,6 +26,9 @@ from ..services.rag_service import parse_file_for_rag
 
 logger = logging.getLogger(__name__)
 
+# Maximum RAG upload file size: 50 MB
+MAX_RAG_UPLOAD_SIZE = 50 * 1024 * 1024
+
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
 
@@ -131,6 +134,8 @@ def upload_document(
     try:
         # 同步读取文件内容
         file_bytes = file.file.read()
+        if len(file_bytes) > MAX_RAG_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f"文件大小超过 {MAX_RAG_UPLOAD_SIZE // (1024*1024)} MB 限制")
         filename = file.filename or "uploaded_file"
         display_name = source_name or filename
 
