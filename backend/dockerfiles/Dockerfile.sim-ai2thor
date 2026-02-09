@@ -1,0 +1,61 @@
+# AI2-THOR Simulator Container - 具身智能体 3D 环境仿真
+#
+# 职责:
+#   - 运行 AI2-THOR Unity 3D 环境（CloudRendering 离屏渲染）
+#   - 提供 HTTP 接口控制仿真：初始化、步进、渲染、停止
+#   - 返回当前视角 JPEG 帧
+#
+# 架构设计:
+#   - Unity 二进制通过 volume 挂载（宿主机预下载，避免构建时 5+ 小时等待）
+#   - 参考 safeagentbench 成熟方案
+#
+# 要求:
+#   - 宿主机预下载: /tmp/thor-download/releases/thor-CloudRendering-xxx/
+#   - NVIDIA GPU（Unity 3D 渲染需要 Vulkan）
+#   - nvidia-container-toolkit（Docker GPU 透传）
+#
+# 资源限制: 内存 4GB, CPU 50%
+# HTTP 服务: 容器内监听 127.0.0.1:9090
+#
+# 构建命令: docker build -f dockerfiles/Dockerfile.sim-ai2thor -t sim-ai2thor:latest .
+# 运行示例: docker run -v /tmp/thor-download/releases/xxx:/root/.ai2thor/releases/xxx:ro sim-ai2thor:latest
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 换国内 apt 源
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
+        sed -i 's|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list && \
+        sed -i 's|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
+    fi
+
+# 系统依赖: Vulkan（GPU 渲染）、GL（Mesa）、Xvfb（虚拟 X11）、curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libvulkan1 libgl1 libglib2.0-0 \
+    xvfb curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 配置 pip 使用清华镜像源并安装 Python 依赖
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    pip install --no-cache-dir \
+        "ai2thor>=5.0.0" \
+        "flask>=3.0.0" \
+        "Pillow>=10.0.0" \
+        "numpy>=1.24.0" \
+    && rm -rf /root/.cache/pip
+
+# 预创建 ai2thor 目录（Unity 二进制通过 volume 挂载到此）
+RUN mkdir -p /root/.ai2thor/releases /root/.ai2thor/tmp
+
+# 复制容器内 HTTP 服务脚本
+COPY app/services/ai2thor_server.py /app/ai2thor_server.py
+
+EXPOSE 9090
+
+# 启动 Xvfb + Flask 服务（CloudRendering 通过 Vulkan over Xvfb）
+# Note: container_manager 会覆盖此 CMD 为 "tail -f /dev/null"，实际启动在 ai2thor.py 中
+CMD ["bash", "-c", "Xvfb :99 -screen 0 1024x768x24 -nolisten tcp & sleep 1 && DISPLAY=:99 exec python3 /app/ai2thor_server.py 9090"]
