@@ -27,6 +27,20 @@ export function onAuthChange(callback) {
 }
 
 /**
+ * Decode JWT payload and extract user role.
+ * Returns 'admin' or 'tester' (default: 'tester').
+ */
+export function getUserRole() {
+  if (!_token) return 'tester';
+  try {
+    const payload = JSON.parse(atob(_token.split('.')[1]));
+    return payload.role || 'tester';
+  } catch {
+    return 'tester';
+  }
+}
+
+/**
  * Returns headers with Authorization if token is available.
  */
 export function authHeaders(extra = {}) {

@@ -1,23 +1,15 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import LoginPage from './components/LoginPage'
-import { setToken, getToken, onAuthChange } from './auth'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import './index.css'
 
 function Root() {
-  const [authenticated, setAuthenticated] = useState(!!getToken());
+  const { token, login } = useAuth();
 
-  useEffect(() => {
-    onAuthChange((token) => setAuthenticated(!!token));
-  }, []);
-
-  const handleLogin = (token) => {
-    setToken(token);
-  };
-
-  if (!authenticated) {
-    return <LoginPage onLogin={handleLogin} />;
+  if (!token) {
+    return <LoginPage onLogin={login} />;
   }
 
   return <App />;
@@ -25,6 +17,8 @@ function Root() {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Root />
+    <AuthProvider>
+      <Root />
+    </AuthProvider>
   </React.StrictMode>,
 )
