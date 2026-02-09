@@ -51,7 +51,7 @@ export function useApiInspector() {
   return {
     thinkingEntries, setThinkingEntries,
     apiInteractions, setApiInteractions,
-    expandedThinking, expandedApiInteraction,
+    expandedThinking, setExpandedThinking, expandedApiInteraction, setExpandedApiInteraction,
     apiStartTime, setApiStartTime,
     apiElapsedTime, setApiElapsedTime,
     addApiInteraction,

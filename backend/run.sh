@@ -12,6 +12,14 @@ fi
 # Activate virtual environment
 source venv/bin/activate
 
+# Load environment variables from .env (if exists)
+ENV_FILE="$(dirname "$0")/../.env"
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
+fi
+
 # Install dependencies
 uv pip install -r requirements.txt -q
 

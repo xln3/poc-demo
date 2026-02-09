@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { CONFIG, ATTACK_TYPES, RISK_LEVELS, LOG_TYPES, FIVE_LEVEL_RISK, calculateRiskStats } from './config';
-import { SCENARIOS, SCENARIOS_BY_LEVEL, CapabilityLevelNames } from './scenarios/index.js';
+import { SCENARIOS } from './scenarios/index.js';
 import { sandboxClient, ToolType, TOOL_DESCRIPTIONS } from './sandbox.js';
 import { ragClient, formatRAGContext, formatRAGLogs } from './rag.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from './caseApi.js';
@@ -29,6 +29,7 @@ import AttackHeader from './components/AttackHeader.jsx';
 import PlaybackControlBar from './components/PlaybackControlBar.jsx';
 import ConversationPanel from './components/ConversationPanel.jsx';
 import RightPanel from './components/RightPanel.jsx';
+import ConfigPanel from './components/ConfigPanel.jsx';
 import { CapabilityTabs, DatasetList, DatasetDetailModal, BatchTestModal } from './components/index.js';
 import {
   TerminalItem,
@@ -38,44 +39,22 @@ import {
   FileTransferProgress,
 } from './components/sandbox';
 
-// 能力层级图标
-const LEVEL_ICONS = {
-  'F1-conversation': '💬',
-  'F2-file-injection': '📎',
-  'F3-tool-use': '🔧',
-  'F4-rag': '🔍',
-  'F5-mcp': '🔌'
-};
-
-// 按能力层级重组数据
-const getGroupedData = () => {
-  const grouped = {};
-  Object.entries(SCENARIOS_BY_LEVEL).forEach(([levelKey, scenarios]) => {
-    const scenarioEntries = Object.entries(scenarios);
-    if (scenarioEntries.length === 0) return; // 跳过空层级（如F5-mcp）
-
-    grouped[levelKey] = {
-      label: CapabilityLevelNames[levelKey],
-      icon: LEVEL_ICONS[levelKey],
-      scenarios: {}
-    };
-
-    scenarioEntries.forEach(([scenarioKey, scenario]) => {
-      grouped[levelKey].scenarios[scenarioKey] = scenario;
-    });
-  });
-  return grouped;
-};
 
 export default function App() {
   // 状态
   const attackSelection = useAttackSelection();
   const {
-    mode, setMode, selectedAttack, setSelectedAttack,
+    selectedAttack, setSelectedAttack,
     expanded, setExpanded, scenarioListExpanded, setScenarioListExpanded,
-    currentScenario, currentAttack, attackType, riskLevel,
+    selectedRiskItem, setSelectedRiskItem,
+    currentScenario, currentAttack, attackType, riskLevel, currentRiskItemData,
+    toggleCategory, toggleSubcategory, toggleRiskItem,
     toggleType, toggleScenario,
   } = attackSelection;
+
+  // Page mode: 'config' | 'demo' | 'report' (auditor: 3 pages, tester: 2 pages)
+  const [pageMode, setPageMode] = useState('demo');
+
   const [messages, setMessages] = useState([]);
   const [logs, setLogs] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState(new Set()); // 跟踪展开的日志索引
@@ -123,7 +102,7 @@ export default function App() {
   const {
     thinkingEntries, setThinkingEntries,
     apiInteractions, setApiInteractions,
-    expandedThinking, expandedApiInteraction,
+    expandedThinking, setExpandedThinking, expandedApiInteraction, setExpandedApiInteraction,
     apiStartTime, setApiStartTime,
     apiElapsedTime, setApiElapsedTime,
     addApiInteraction,
@@ -504,13 +483,12 @@ export default function App() {
   const logRef = useRef(null);
   const abortRef = useRef(false);
 
-  const groupedData = getGroupedData();
   // currentScenario, currentAttack, attackType, riskLevel come from useAttackSelection
 
   // Cases hook - 需要在所有状态定义之后调用
   const cases = useCases({
     // 基础状态
-    mode,
+    mode: 'real',
     dialogMode,
     messages,
     logs,
@@ -584,7 +562,6 @@ export default function App() {
 
   // Playback hook - 回放已保存的测试用例
   const playback = usePlayback({
-    setMode,
     setSelectedModel,
     setLlmTemperature,
     setLlmMaxTokens,
@@ -1133,53 +1110,7 @@ export default function App() {
       setEnabledTools(newEnabledTools);
     }
 
-    if (mode === 'mock') {
-      const timer = setTimeout(() => {
-        abortRef.current = false;
-        playMockAttack();
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedAttack, mode]);
-
-  // Mock 模式播放
-  const playMockAttack = async () => {
-    if (isPlaying) return;
-    setIsPlaying(true);
-    const attack = SCENARIOS[selectedAttack.scenario].attacks[selectedAttack.index];
-    let logIdx = 0;
-    const logsPerMsg = Math.ceil(attack.logs.length / attack.conversations.length);
-
-    for (const conv of attack.conversations) {
-      if (abortRef.current) break;
-      
-      for (let i = 0; i <= conv.content.length; i++) {
-        if (abortRef.current) break;
-        setTypingMsg({ ...conv, content: conv.content.slice(0, i) });
-        await new Promise(r => setTimeout(r, CONFIG.typingSpeed));
-      }
-      if (abortRef.current) break;
-      
-      setTypingMsg(null);
-      setMessages(prev => [...prev, conv]);
-      
-      const logsToAdd = attack.logs.slice(logIdx, logIdx + logsPerMsg);
-      for (const log of logsToAdd) {
-        if (abortRef.current) break;
-        await new Promise(r => setTimeout(r, CONFIG.logDelay));
-        setLogs(prev => [...prev, log]);
-      }
-      logIdx += logsPerMsg;
-      await new Promise(r => setTimeout(r, CONFIG.stepDelay));
-    }
-    
-    while (logIdx < attack.logs.length && !abortRef.current) {
-      await new Promise(r => setTimeout(r, CONFIG.logDelay));
-      setLogs(prev => [...prev, attack.logs[logIdx]]);
-      logIdx++;
-    }
-    setIsPlaying(false);
-  };
+  }, [selectedAttack]);
 
   // 真实 API 测试
   const runRealTest = async () => {
@@ -3278,11 +3209,6 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
   const selectAttack = async (scenarioKey, idx) => {
     const scenario = SCENARIOS[scenarioKey];
     const attack = scenario.attacks[idx];
-    // 找到该场景所属的能力层级
-    const level = Object.entries(SCENARIOS_BY_LEVEL).find(([_, scenarios]) =>
-      Object.keys(scenarios).includes(scenarioKey)
-    )?.[0] || 'F1-conversation';
-    setExpanded({ type: level, scenario: scenarioKey });
     setSelectedAttack({ scenario: scenarioKey, index: scenario.attacks.findIndex(a => a.id === attack.id) });
 
     // 如果场景有预置文件且沙箱运行中，自动预置文件
@@ -3721,9 +3647,11 @@ print('\\n'.join(all_text))
         datasets={datasets}
         viewMode={viewMode}
         setViewMode={setViewMode}
+        pageMode={pageMode}
+        setPageMode={setPageMode}
+        isAuditor={true}
         setSelectedCase={setSelectedCase}
         selectAttack={selectAttack}
-        groupedData={groupedData}
         savedTestResults={savedTestResults}
         selectedTestResult={selectedTestResult}
         viewTestResultDetail={viewTestResultDetail}
@@ -3740,8 +3668,61 @@ print('\\n'.join(all_text))
 
       {/* 右侧主区域 */}
       <div className="flex-1 p-4 overflow-hidden flex flex-col">
-        {/* 已保存用例详情视图 */}
-        {viewMode === 'saved' && selectedCase ? (
+        {/* Config page */}
+        {pageMode === 'config' ? (
+          <ConfigPanel
+            providers={providers} selectedProviderId={selectedProviderId} setSelectedProviderId={setSelectedProviderId}
+            providerModels={providerModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel}
+            setProviderSettingsOpen={setProviderSettingsOpen}
+            llmTemperature={llmTemperature} setLlmTemperature={setLlmTemperature}
+            llmMaxTokens={llmMaxTokens} setLlmMaxTokens={setLlmMaxTokens}
+            llmTopP={llmTopP} setLlmTopP={setLlmTopP}
+            thinkingEnabled={thinkingEnabled} setThinkingEnabled={setThinkingEnabled}
+            thinkingBudget={thinkingBudget} setThinkingBudget={setThinkingBudget}
+            customSystemPrompt={customSystemPrompt} setCustomSystemPrompt={setCustomSystemPrompt}
+            toolsEnabled={toolsEnabled} setToolsEnabled={setToolsEnabled}
+            enabledTools={enabledTools} setEnabledTools={setEnabledTools}
+            maxToolCalls={maxToolCalls} setMaxToolCalls={setMaxToolCalls}
+            sandboxEnabled={sandboxEnabled} setSandboxEnabled={setSandboxEnabled}
+            ragEnabled={ragEnabled} setRagEnabled={setRagEnabled}
+            ragMode={ragMode} setRagMode={setRagMode}
+            ragKnowledge={ragKnowledge} setRagKnowledge={setRagKnowledge}
+            mcpEnabled={mcpEnabled} setMcpEnabled={setMcpEnabled}
+            mcpServerEnabled={mcpServerEnabled} setMcpServerEnabled={setMcpServerEnabled}
+            selectedMcpServer={selectedMcpServer} setSelectedMcpServer={setSelectedMcpServer}
+            customTestPayload={customTestPayload} setCustomTestPayload={setCustomTestPayload}
+            payloadFiles={payloadFiles} setPayloadFiles={setPayloadFiles}
+            runRealTest={runRealTest} apiStatus={apiStatus}
+            currentRiskItemData={currentRiskItemData} currentAttack={currentAttack}
+          />
+        ) : pageMode === 'report' ? (
+          selectedTestResult ? (
+          <TestResultDetailView
+            selectedTestResult={selectedTestResult}
+            openDetailModal={openDetailModal}
+            openReviewModal={openReviewModal}
+            handleDeleteTestCase={handleDeleteTestCase}
+            reportContent={reportContent}
+            setReportContent={setReportContent}
+            reportEditMode={reportEditMode}
+            setReportEditMode={setReportEditMode}
+            reportSaving={reportSaving}
+            handleSaveReport={handleSaveReport}
+            reportTemplates={reportTemplates}
+            selectedTemplate={selectedTemplate}
+            setSelectedTemplate={setSelectedTemplate}
+            applyReportTemplate={applyReportTemplate}
+            handleLLMGenerateReport={handleLLMGenerateReport}
+          />
+          ) : (
+          <div className="flex-1 flex items-center justify-center text-slate-500">
+            <div className="text-center">
+              <div className="text-4xl mb-4">📊</div>
+              <div>选择左侧的测试报告查看详情</div>
+            </div>
+          </div>
+          )
+        ) : /* Demo page */ viewMode === 'saved' && selectedCase ? (
           <SavedCaseDetailView selectedCase={selectedCase} startPlayback={startPlayback} setViewMode={setViewMode} />
         ) : viewMode === 'saved' ? (
           <div className="flex-1 flex items-center justify-center text-slate-500">
@@ -3786,7 +3767,7 @@ print('\\n'.join(all_text))
 
         <AttackHeader
           currentAttack={currentAttack} currentScenario={currentScenario}
-          mode={mode} isPlaying={isPlaying} apiStatus={apiStatus} apiElapsedTime={apiElapsedTime}
+          isPlaying={isPlaying} apiStatus={apiStatus} apiElapsedTime={apiElapsedTime}
           attackType={attackType} riskLevel={riskLevel} isPlaybackMode={isPlaybackMode}
           isBatchTesting={isBatchTesting} batchTestIndex={batchTestIndex} batchTestQueue={batchTestQueue}
         />
@@ -3800,7 +3781,7 @@ print('\\n'.join(all_text))
 
 
         {/* 真实测试模式控制面板 */}
-        {mode === 'real' && (
+        {(
           <RealTestControlPanel
             providers={providers} selectedProviderId={selectedProviderId} setSelectedProviderId={setSelectedProviderId}
             providerModels={providerModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel}
@@ -3865,7 +3846,7 @@ print('\\n'.join(all_text))
           <ConversationPanel
             ref={chatRef}
             leftPanelTab={leftPanelTab} setLeftPanelTab={setLeftPanelTab}
-            mode={mode} selectedModel={selectedModel} messages={messages}
+            selectedModel={selectedModel} messages={messages}
             typingMsg={typingMsg} dialogMode={dialogMode} conversationMode={conversationMode}
             apiStatus={apiStatus} userInput={userInput} setUserInput={setUserInput}
             sendUserMessage={sendUserMessage} handleMultiRoundFileUpload={handleMultiRoundFileUpload}
