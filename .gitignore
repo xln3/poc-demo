@@ -30,6 +30,10 @@ dist-ssr
 **/__pycache__/
 backend/venv/
 
+# SQLite 数据库和备份
+backend/poc-data/*.db
+backend/poc-data/*.backup.*
+
 # 运行时数据（应存储在 ../poc-data/）
 backend/data/datasets/
 backend/data/saved-cases/
