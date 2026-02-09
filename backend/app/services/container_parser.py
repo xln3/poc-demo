@@ -7,6 +7,8 @@
 
 import json
 import logging
+import os
+import uuid
 from typing import List, Optional
 
 from .container import container_manager
@@ -59,8 +61,13 @@ class ContainerParserService:
         # 1. 确保容器存在
         self._ensure_container()
 
-        # 2. 复制文件到容器
-        container_path = f"/tmp/upload/{filename}"
+        # 2. 复制文件到容器 (use UUID to prevent shell injection via filename)
+        safe_ext = ""
+        _, ext = os.path.splitext(filename)
+        if ext and ext[1:].isalnum() and len(ext) <= 10:
+            safe_ext = ext
+        safe_name = f"{uuid.uuid4().hex}{safe_ext}"
+        container_path = f"/tmp/upload/{safe_name}"
         try:
             container_manager.copy_file_to_container(
                 PARSER_SESSION_ID,
