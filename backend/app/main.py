@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from .routers import sandbox, mcp, rag, cases, datasets, test_results, report_templates, file_parser, clawdbot
+from .routers import sandbox, mcp, rag, cases, datasets, test_results, report_templates, file_parser, clawdbot, eval_import, simulator
 from .auth.router import router as auth_router
 from .routers.llm_proxy import router as llm_proxy_router
 from .routers.usage import router as usage_router
@@ -80,6 +80,8 @@ app.include_router(datasets.router)
 app.include_router(test_results.router)
 app.include_router(report_templates.router)
 app.include_router(clawdbot.router)
+app.include_router(eval_import.router)
+app.include_router(simulator.router)
 app.include_router(usage_router)
 
 # ---------- Rate limiting ----------

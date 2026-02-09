@@ -51,6 +51,8 @@ class TestCase(Base):
     attack_type = Column(String(32), nullable=True)
     payload = Column(Text, nullable=True)
     system_prompt = Column(Text, nullable=True)
+    threat_class = Column(String(16), nullable=True)  # T1.1, T2.3, etc.
+    risk_item_id = Column(Integer, nullable=True)  # Maps to RISK_ITEMS[id]
     data_json = Column(JSON, default=dict)  # Full test case schema (v2.x)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -88,6 +90,9 @@ class TestResult(Base):
     name = Column(String(256), nullable=False)
     dataset_id = Column(Integer, ForeignKey("datasets.id"), nullable=True)
     status = Column(String(32), default="pending")  # pending | running | completed
+    source_type = Column(String(32), default="manual")  # manual | eval_import | batch
+    solver_type = Column(String(64), nullable=True)  # e.g. "chain_of_thought", "generate"
+    visible_to = Column(JSON, nullable=True)  # User ID list for access control
     summary_json = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)

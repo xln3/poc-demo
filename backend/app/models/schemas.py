@@ -10,6 +10,7 @@ class ContainerType(str, Enum):
     TERMINAL = "terminal"
     RAG_SERVER = "rag-server"
     MCP_SERVER = "mcp-server"
+    SIM_AI2THOR = "sim-ai2thor"
 
 
 class FileType(str, Enum):
@@ -49,6 +50,7 @@ MEMORY_LIMITS = {
     ContainerType.TERMINAL: "2g",
     ContainerType.RAG_SERVER: "2g",
     ContainerType.MCP_SERVER: "2g",
+    ContainerType.SIM_AI2THOR: "4g",
 }
 
 
