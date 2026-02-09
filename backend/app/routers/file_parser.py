@@ -7,7 +7,7 @@ import base64
 import json
 import logging
 from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Optional
 
 from ..auth.security import require_auth
@@ -15,12 +15,24 @@ from ..auth.security import require_auth
 from ..services.file_parsers import get_file_type, PARSERS
 from ..services.container_parser import get_container_parser
 
+# Maximum file upload size: 50 MB
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+# Maximum base64 payload size: ~67 MB (50 MB decoded)
+MAX_BASE64_SIZE = 67 * 1024 * 1024
+
 
 class ParseBase64Request(BaseModel):
     """Base64 解析请求体"""
     content_base64: str  # 文件内容（base64 编码）
     filename: str        # 文件名（用于选择解析器）
     parsers: List[str] = []  # 解析器 ID 列表（可选，为空则自动选择）
+
+    @field_validator('content_base64')
+    @classmethod
+    def validate_base64_size(cls, v):
+        if len(v) > MAX_BASE64_SIZE:
+            raise ValueError(f'Base64 payload exceeds {MAX_BASE64_SIZE // (1024*1024)} MB limit')
+        return v
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +88,8 @@ async def parse_document(
         raise HTTPException(status_code=400, detail="parsers 参数格式错误，需要 JSON 数组")
 
     file_bytes = await file.read()
+    if len(file_bytes) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail=f"文件大小超过 {MAX_UPLOAD_SIZE // (1024*1024)} MB 限制")
     filename = file.filename or "unknown"
 
     file_type = get_file_type(filename)
@@ -109,6 +123,8 @@ async def parse_document_to_text(
         raise HTTPException(status_code=400, detail="parsers 参数格式错误，需要 JSON 数组")
 
     file_bytes = await file.read()
+    if len(file_bytes) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail=f"文件大小超过 {MAX_UPLOAD_SIZE // (1024*1024)} MB 限制")
     filename = file.filename or "unknown"
 
     file_type = get_file_type(filename)

@@ -188,7 +188,8 @@ def parse_image_exiftool(file_bytes: bytes, filename: str = "image") -> dict:
         result = subprocess.run(
             ["exiftool", "-j", temp_path],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=30,
         )
         Path(temp_path).unlink()
 
