@@ -145,10 +145,10 @@ class AddCaseRequest(BaseModel):
 router = APIRouter(prefix="/datasets", tags=["datasets"], dependencies=[Depends(require_auth)])
 
 
-@router.get("", response_model=List[DatasetSummary])
-async def list_datasets():
-    """List all saved datasets."""
-    return dataset_storage.list_datasets()
+@router.get("")
+async def list_datasets(offset: int = 0, limit: Optional[int] = None):
+    """List all saved datasets with optional pagination."""
+    return dataset_storage.list_datasets(offset=offset, limit=limit)
 
 
 @router.post("")

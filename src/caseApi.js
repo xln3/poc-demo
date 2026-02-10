@@ -41,7 +41,8 @@ export async function listSavedCases() {
   if (!response.ok) {
     throw new Error(`获取列表失败: ${response.status}`);
   }
-  return response.json();
+  const data = await response.json();
+  return data.items;
 }
 
 /**

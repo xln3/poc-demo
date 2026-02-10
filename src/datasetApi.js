@@ -18,7 +18,8 @@ export async function listDatasets() {
   if (!response.ok) {
     throw new Error(`Failed to list datasets: ${response.statusText}`);
   }
-  return response.json();
+  const data = await response.json();
+  return data.items;
 }
 
 /**

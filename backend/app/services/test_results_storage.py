@@ -1,77 +1,48 @@
 """Test results storage service."""
 from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import List, Optional, Dict, Any
-import uuid
 
-
-# Storage directory path (configured in config.py)
 from ..config import DATA_PATHS
-from .id_validator import sanitize_id
+from .json_file_storage import JsonFileStorage
 
 logger = logging.getLogger(__name__)
-DATA_DIR = DATA_PATHS['test_results']
 
 
-class TestResultsStorage:
+class TestResultsStorage(JsonFileStorage):
     """Manage batch test results storage."""
 
     def __init__(self):
-        self.data_dir = DATA_DIR
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        super().__init__(DATA_PATHS['test_results'])
 
-    def _get_result_path(self, result_id: str) -> Path:
-        sanitize_id(result_id, "result_id")
-        return self.data_dir / f"{result_id}.json"
+    def extract_summary(self, data: dict) -> dict:
+        """Extract metadata summary for list responses."""
+        return {
+            "id": data.get("id", ""),
+            "name": data.get("name", "未命名测试"),
+            "savedAt": data.get("savedAt"),
+            "meta": data.get("meta", {}),
+        }
 
-    def list_results(self) -> List[Dict[str, Any]]:
-        """List all saved test results (metadata only)."""
-        results = []
-        for path in self.data_dir.glob("*.json"):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    # Return metadata only for listing
-                    results.append({
-                        "id": path.stem,
-                        "name": data.get("name", "未命名测试"),
-                        "savedAt": data.get("savedAt"),
-                        "meta": data.get("meta", {}),
-                    })
-            except Exception as e:
-                logger.error("Error reading %s: %s", path, e)
-        # Sort by savedAt descending
-        results.sort(key=lambda x: x.get("savedAt", ""), reverse=True)
-        return results
+    def list_results(self, *, offset: int = 0, limit: Optional[int] = None):
+        """List all saved test results with optional pagination."""
+        return self.list_items(offset=offset, limit=limit)
 
     def get_result(self, result_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific test result by ID."""
-        path = self._get_result_path(result_id)
-        if not path.exists():
-            return None
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Error reading {path}: {e}")
-            return None
+        return self.read_json(result_id)
 
     def save_result(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Save a test result."""
-        # Generate ID if not provided
-        result_id = data.get("id") or str(uuid.uuid4())
-
-        # Add metadata
+        result_id = data.get("id") or self.generate_id()
         data["id"] = result_id
         data["savedAt"] = datetime.now().isoformat()
 
-        # Save to file
-        path = self._get_result_path(result_id)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        with self.lock(result_id):
+            self.write_json(result_id, data)
 
         return {
             "id": result_id,
@@ -82,141 +53,123 @@ class TestResultsStorage:
 
     def delete_result(self, result_id: str) -> bool:
         """Delete a test result."""
-        path = self._get_result_path(result_id)
-        if path.exists():
-            path.unlink()
-            return True
-        return False
+        return self.delete_json(result_id)
 
     def update_result(self, result_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Partially update a test result."""
-        data = self.get_result(result_id)
-        if not data:
-            return None
+        with self.lock(result_id):
+            data = self.read_json(result_id)
+            if not data:
+                return None
 
-        # Apply updates
-        for key, value in updates.items():
-            if value is not None:
-                data[key] = value
+            for key, value in updates.items():
+                if value is not None:
+                    data[key] = value
 
-        data["updatedAt"] = datetime.now().isoformat()
-
-        # Save to file
-        path = self._get_result_path(result_id)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            data["updatedAt"] = datetime.now().isoformat()
+            self.write_json(result_id, data)
 
         return data
 
     def delete_case(self, result_id: str, case_index: int) -> Optional[Dict[str, Any]]:
         """Delete a single case from a test result."""
-        data = self.get_result(result_id)
-        if not data:
-            return None
+        with self.lock(result_id):
+            data = self.read_json(result_id)
+            if not data:
+                return None
 
-        results = data.get("results", [])
-        # Find and remove the case by index
-        new_results = [r for r in results if r.get("index") != case_index]
+            results = data.get("results", [])
+            new_results = [r for r in results if r.get("index") != case_index]
 
-        if len(new_results) == len(results):
-            return None  # Case not found
+            if len(new_results) == len(results):
+                return None  # Case not found
 
-        data["results"] = new_results
-        data["updatedAt"] = datetime.now().isoformat()
+            data["results"] = new_results
+            data["updatedAt"] = datetime.now().isoformat()
 
-        # Recalculate statistics by five-level risk
-        if "meta" in data and "statistics" in data["meta"]:
-            stats = data["meta"]["statistics"]
-            stats["total"] = len(new_results)
-            risk_counts = {"high": 0, "medium": 0, "low": 0, "safe": 0, "pending": 0}
-            for r in new_results:
-                level = r.get("riskLevel") or r.get("judgment", {}).get("riskLevel") or "pending"
-                if level in risk_counts:
-                    risk_counts[level] += 1
-                else:
-                    risk_counts["pending"] += 1
-            stats.update(risk_counts)
+            # Recalculate statistics by five-level risk
+            if "meta" in data and "statistics" in data["meta"]:
+                stats = data["meta"]["statistics"]
+                stats["total"] = len(new_results)
+                risk_counts = {"high": 0, "medium": 0, "low": 0, "safe": 0, "pending": 0}
+                for r in new_results:
+                    level = r.get("riskLevel") or r.get("judgment", {}).get("riskLevel") or "pending"
+                    if level in risk_counts:
+                        risk_counts[level] += 1
+                    else:
+                        risk_counts["pending"] += 1
+                stats.update(risk_counts)
 
-        path = self._get_result_path(result_id)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            self.write_json(result_id, data)
 
         return data
 
     def update_case_review(self, result_id: str, case_index: int, review: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Update a single case's review in a test result."""
-        data = self.get_result(result_id)
-        if not data:
-            return None
+        with self.lock(result_id):
+            data = self.read_json(result_id)
+            if not data:
+                return None
 
-        results = data.get("results", [])
-        case_found = False
+            results = data.get("results", [])
+            case_found = False
 
-        for result in results:
-            if result.get("index") == case_index:
-                # Initialize review structure if not exists
-                if "review" not in result:
-                    result["review"] = {"llm": None, "human": None, "source": "auto"}
+            for result in results:
+                if result.get("index") == case_index:
+                    if "review" not in result:
+                        result["review"] = {"llm": None, "human": None, "source": "auto"}
 
-                review_type = review.get("type", "human")
-                review_data = {
-                    "riskLevel": review.get("riskLevel"),
-                    "reason": review.get("reason"),
-                    "reviewedAt": datetime.now().isoformat(),
-                }
+                    review_type = review.get("type", "human")
+                    review_data = {
+                        "riskLevel": review.get("riskLevel"),
+                        "reason": review.get("reason"),
+                        "reviewedAt": datetime.now().isoformat(),
+                    }
 
-                if review_type == "human":
-                    review_data["notes"] = review.get("notes")
-                    review_data["reviewer"] = review.get("reviewer")
-                    result["review"]["human"] = review_data
-                else:
-                    result["review"]["llm"] = review_data
+                    if review_type == "human":
+                        review_data["notes"] = review.get("notes")
+                        review_data["reviewer"] = review.get("reviewer")
+                        result["review"]["human"] = review_data
+                    else:
+                        result["review"]["llm"] = review_data
 
-                # Update source and riskLevel
-                result["review"]["source"] = review_type
-                result["riskLevel"] = review.get("riskLevel")
-                case_found = True
-                break
+                    result["review"]["source"] = review_type
+                    result["riskLevel"] = review.get("riskLevel")
+                    case_found = True
+                    break
 
-        if not case_found:
-            return None
+            if not case_found:
+                return None
 
-        data["updatedAt"] = datetime.now().isoformat()
-
-        path = self._get_result_path(result_id)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            data["updatedAt"] = datetime.now().isoformat()
+            self.write_json(result_id, data)
 
         return data
 
     def update_report(self, result_id: str, content: str, edited_by: str) -> Optional[Dict[str, Any]]:
         """Update the text report for a test result."""
-        data = self.get_result(result_id)
-        if not data:
-            return None
+        with self.lock(result_id):
+            data = self.read_json(result_id)
+            if not data:
+                return None
 
-        # Initialize report structure if not exists
-        if "report" not in data:
-            data["report"] = {"content": "", "updatedAt": None, "updatedBy": None, "history": []}
+            if "report" not in data:
+                data["report"] = {"content": "", "updatedAt": None, "updatedBy": None, "history": []}
 
-        # Add to history before updating
-        if data["report"].get("content"):
-            data["report"]["history"].append({
-                "content": data["report"]["content"],
-                "updatedAt": data["report"].get("updatedAt"),
-                "updatedBy": data["report"].get("updatedBy"),
-            })
-            # Keep only last 10 history entries
-            data["report"]["history"] = data["report"]["history"][-10:]
+            if data["report"].get("content"):
+                data["report"]["history"].append({
+                    "content": data["report"]["content"],
+                    "updatedAt": data["report"].get("updatedAt"),
+                    "updatedBy": data["report"].get("updatedBy"),
+                })
+                data["report"]["history"] = data["report"]["history"][-10:]
 
-        data["report"]["content"] = content
-        data["report"]["updatedAt"] = datetime.now().isoformat()
-        data["report"]["updatedBy"] = edited_by
-        data["updatedAt"] = datetime.now().isoformat()
+            data["report"]["content"] = content
+            data["report"]["updatedAt"] = datetime.now().isoformat()
+            data["report"]["updatedBy"] = edited_by
+            data["updatedAt"] = datetime.now().isoformat()
 
-        path = self._get_result_path(result_id)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            self.write_json(result_id, data)
 
         return data
 

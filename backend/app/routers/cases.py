@@ -1,6 +1,6 @@
 """API endpoints for saved test cases."""
 from __future__ import annotations
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth.security import require_auth
@@ -16,10 +16,10 @@ from ..services.case_storage import case_storage
 router = APIRouter(prefix="/cases", tags=["cases"], dependencies=[Depends(require_auth)])
 
 
-@router.get("", response_model=List[SavedCaseSummary])
-async def list_cases():
-    """List all saved test cases."""
-    return case_storage.list_cases()
+@router.get("")
+async def list_cases(offset: int = 0, limit: Optional[int] = None):
+    """List all saved test cases with optional pagination."""
+    return case_storage.list_cases(offset=offset, limit=limit)
 
 
 @router.post("", response_model=SavedCaseDetail)

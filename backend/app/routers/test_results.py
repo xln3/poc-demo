@@ -70,10 +70,10 @@ class GenerateRequest(BaseModel):
     model: Optional[str] = None
 
 
-@router.get("", response_model=List[TestResultSummary])
-async def list_test_results():
-    """List all saved test results."""
-    return test_results_storage.list_results()
+@router.get("")
+async def list_test_results(offset: int = 0, limit: Optional[int] = None):
+    """List all saved test results with optional pagination."""
+    return test_results_storage.list_results(offset=offset, limit=limit)
 
 
 @router.get("/{result_id}")
