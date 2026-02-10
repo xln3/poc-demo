@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   buildRecordingSession,
   createStandaloneTestCase,
@@ -26,6 +26,8 @@ export const BatchResultStatus = {
   SKIPPED: 'skipped',
 };
 
+const BATCH_STORAGE_KEY = 'batchTestProgress';
+
 /**
  * 测试执行 Hook
  *
@@ -48,11 +50,19 @@ export const useTestExecution = ({
   // 批量队列
   const [batchQueue, setBatchQueue] = useState([]);
 
-  // 批量进度
-  const [batchProgress, setBatchProgress] = useState({
-    current: 0,
-    total: 0,
-    results: [], // { caseId, status, recording }
+  // 批量进度 — restore from sessionStorage if available
+  const [batchProgress, setBatchProgress] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(BATCH_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Only restore if it was a completed or aborted run (not mid-flight)
+        if (parsed && parsed.total > 0) {
+          return parsed;
+        }
+      }
+    } catch { /* ignore */ }
+    return { current: 0, total: 0, results: [] };
   });
 
   // 录制状态
@@ -65,6 +75,21 @@ export const useTestExecution = ({
 
   // 批量执行控制
   const batchAbortRef = useRef(false);
+
+  // Refs to avoid stale closures in executeBatchQueue
+  const onStartTestRef = useRef(onStartTest);
+  const stateCollectorRef = useRef(stateCollector);
+  onStartTestRef.current = onStartTest;
+  stateCollectorRef.current = stateCollector;
+
+  // Persist batchProgress to sessionStorage
+  useEffect(() => {
+    if (batchProgress.total > 0) {
+      try {
+        sessionStorage.setItem(BATCH_STORAGE_KEY, JSON.stringify(batchProgress));
+      } catch { /* quota exceeded, ignore */ }
+    }
+  }, [batchProgress]);
 
   /**
    * 开始单个测试（录制模式）
@@ -166,6 +191,9 @@ export const useTestExecution = ({
 
   /**
    * 执行批量队列（内部函数）
+   *
+   * Uses refs (onStartTestRef, stateCollectorRef) to always read the
+   * latest callbacks, avoiding stale-closure bugs from useCallback deps.
    */
   const executeBatchQueue = useCallback(async (queue, dataset) => {
     for (let i = 0; i < queue.length; i++) {
@@ -181,6 +209,7 @@ export const useTestExecution = ({
       }
 
       const testCase = queue[i];
+      const collector = stateCollectorRef.current;
 
       // 更新进度为运行中
       setBatchProgress(prev => ({
@@ -194,29 +223,27 @@ export const useTestExecution = ({
       // 执行单个测试
       try {
         // 启动状态收集
-        if (stateCollector) {
-          stateCollector.startCollecting();
+        if (collector) {
+          collector.startCollecting();
         }
 
         const startTime = Date.now();
 
-        // 调用外部开始测试
-        if (onStartTest) {
-          await onStartTest(testCase, true); // true 表示是批量模式
+        // onStartTest should return a Promise that resolves when
+        // the test actually completes (not just when it starts).
+        if (onStartTestRef.current) {
+          await onStartTestRef.current(testCase, true); // true = batch mode
         }
 
-        // 等待测试完成（这里需要外部告知完成）
-        // 实际实现中，onStartTest 应该是一个 Promise，完成时 resolve
-
         // 停止状态收集
-        if (stateCollector) {
-          stateCollector.stopCollecting();
+        if (collector) {
+          collector.stopCollecting();
         }
 
         // 构建录制
         const recording = await buildRecordingSession({
           caseId: testCase.id,
-          states: stateCollector?.states || [],
+          states: collector?.states || [],
           result: {},
           startedAt: new Date(startTime).toISOString(),
           completedAt: new Date().toISOString(),
@@ -245,7 +272,7 @@ export const useTestExecution = ({
     // 批量执行完成
     setExecutionMode(ExecutionMode.IDLE);
     setCurrentCase(null);
-  }, [stateCollector, onStartTest]);
+  }, []);
 
   /**
    * 停止批量测试
@@ -320,6 +347,7 @@ export const useTestExecution = ({
     setRecordingStartTime(null);
     setLastRecording(null);
     batchAbortRef.current = false;
+    sessionStorage.removeItem(BATCH_STORAGE_KEY);
 
     if (stateCollector) {
       stateCollector.reset();
