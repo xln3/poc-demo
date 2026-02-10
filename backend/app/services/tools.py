@@ -35,8 +35,9 @@ async def _resolve_and_validate_path(session_id: str, path: str) -> str:
         ["/usr/bin/readlink", "-f", path]
     )
     if exit_code != 0 or not resolved:
-        # readlink -f failed — fall back to pure posixpath normalization
-        resolved = posixpath.normpath(path)
+        raise ValueError(
+            f"Cannot resolve path in container: {path!r} (readlink failed)"
+        )
     else:
         resolved = resolved.strip()
 
@@ -359,6 +360,9 @@ class ToolExecutor:
         except Exception as e:
             raise RuntimeError(f"Failed to write file: {e}")
 
+    # Max output size for run_command (1 MB)
+    _MAX_OUTPUT_SIZE = 1024 * 1024
+
     async def _run_command(self, session_id: str, params: dict) -> str:
         """Run command in container."""
         command = params.get("command")
@@ -382,10 +386,19 @@ class ToolExecutor:
 
         # 合并 stdout 和 stderr 用于输出
         output = (stdout + "\n" + stderr).strip() if stderr else stdout
+
+        # Truncate oversized output
+        truncated = False
+        if len(output) > self._MAX_OUTPUT_SIZE:
+            output = output[:self._MAX_OUTPUT_SIZE]
+            truncated = True
+
         result = {
             "exit_code": exit_code,
-            "output": output
+            "output": output,
         }
+        if truncated:
+            result["truncated"] = True
 
         if exit_code != 0:
             self._emit_log(
