@@ -34,6 +34,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       RATE_LIMIT_DEFAULT: ${RATE_LIMIT_DEFAULT:-120/minute}
+      ERROR_DEBUG: ${ERROR_DEBUG:-false}
     expose:
       - "8000"
     healthcheck:

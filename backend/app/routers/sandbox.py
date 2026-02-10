@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import logging
 import tarfile
 from typing import List, Optional
 from urllib.parse import quote
@@ -10,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from datetime import datetime
 from jose import jwt
 from ..auth.security import require_auth, SECRET_KEY, ALGORITHM
+from ..utils.errors import safe_detail
 from ..models.schemas import (
     ToolCallRequest,
     ToolResult,
@@ -35,6 +37,8 @@ from ..services.terminal_lock import terminal_lock
 from ..services.file_watcher import file_watcher
 from ..services.container import container_manager as cm
 from ..config import TRANSFER_CONFIG
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sandbox", tags=["sandbox"])
 
@@ -78,7 +82,7 @@ async def create_terminal(request: CreateTerminalRequest):
             raise HTTPException(status_code=409, detail=error_msg)
         raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("终端创建失败", e, logger))
 
 
 @router.get("/terminals", response_model=TerminalListResponse, dependencies=[Depends(require_auth)])
@@ -283,7 +287,7 @@ async def upload_file(
             "source": x_source or "api",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("文件上传失败", e, logger))
 
 
 @router.get("/terminals/{tag}/files/download", dependencies=[Depends(require_auth)])
@@ -367,7 +371,7 @@ async def download_file(
             )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("文件下载失败", e, logger))
 
 
 # ============ Terminal Lock Endpoints ============

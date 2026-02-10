@@ -13,6 +13,7 @@ from typing import Optional
 
 from ..auth.security import require_auth, require_admin, SECRET_KEY, ALGORITHM
 from ..services.simulator import SimulatorBase, SimulatorRegistry
+from ..utils.errors import safe_detail
 
 # Force adapter registration by importing them
 from ..services.simulator import ai2thor as _ai2thor_mod  # noqa: F401
@@ -61,8 +62,7 @@ async def start_session(req: StartRequest):
     try:
         session_id = await engine.start(req.config)
     except Exception as e:
-        logger.error("Failed to start %s: %s", req.engine, e)
-        raise HTTPException(status_code=500, detail=f"Failed to start engine: {e}")
+        raise HTTPException(status_code=500, detail=safe_detail("仿真引擎启动失败", e, logger))
 
     _active_sessions[session_id] = engine
     action_space = await engine.get_action_space()
@@ -86,8 +86,7 @@ async def step_session(session_id: str, req: StepRequest):
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
     except Exception as e:
-        logger.error("Step failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("仿真步进失败", e, logger))
 
     return result
 
@@ -106,8 +105,7 @@ async def get_frame(session_id: str):
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
     except Exception as e:
-        logger.error("Render failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("帧渲染失败", e, logger))
 
     return Response(content=frame_bytes, media_type="image/jpeg")
 
@@ -179,7 +177,6 @@ async def stop_session(session_id: str):
     try:
         await engine.stop(session_id)
     except Exception as e:
-        logger.error("Stop failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("仿真会话停止失败", e, logger))
 
     return {"session_id": session_id, "status": "stopped"}

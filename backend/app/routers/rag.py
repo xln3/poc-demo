@@ -14,6 +14,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from ..auth.security import require_auth
+from ..utils.errors import safe_detail
 
 from ..models.rag_schemas import (
     IngestRequest, QueryRequest, DeleteDocumentRequest,
@@ -90,8 +91,7 @@ def init_rag():
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Init failed: {e}")
-        raise HTTPException(status_code=500, detail=f"初始化失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_detail("RAG 初始化失败", e, logger))
 
 
 @router.post("/reset", response_model=ResetResponse, dependencies=[Depends(require_auth)])
@@ -117,8 +117,7 @@ def reset_rag():
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Reset failed: {e}")
-        raise HTTPException(status_code=500, detail=f"重置失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_detail("RAG 重置失败", e, logger))
 
 
 @router.post("/upload", response_model=UploadResponse, dependencies=[Depends(require_auth)])
@@ -166,8 +165,7 @@ def upload_document(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Upload failed: {e}")
-        raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_detail("文件上传失败", e, logger))
 
 
 @router.post("/ingest", response_model=IngestResponse, dependencies=[Depends(require_auth)])
@@ -197,8 +195,7 @@ def ingest_text(request: IngestRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Ingest failed: {e}")
-        raise HTTPException(status_code=500, detail=f"摄入失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_detail("文本摄入失败", e, logger))
 
 
 @router.post("/query", response_model=QueryResponse, dependencies=[Depends(require_auth)])
@@ -225,8 +222,7 @@ def query_documents(request: QueryRequest):
         )
 
     except Exception as e:
-        logger.error(f"Query failed: {e}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_detail("RAG 查询失败", e, logger))
 
 
 @router.get("/documents", response_model=DocumentListResponse, dependencies=[Depends(require_auth)])
@@ -243,8 +239,7 @@ def list_documents():
         )
 
     except Exception as e:
-        logger.error(f"List documents failed: {e}")
-        raise HTTPException(status_code=500, detail=f"获取文档列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_detail("获取文档列表失败", e, logger))
 
 
 @router.delete("/documents/{document_id}", response_model=DeleteResponse, dependencies=[Depends(require_auth)])
@@ -266,8 +261,7 @@ def delete_document(document_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Delete document failed: {e}")
-        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_detail("文档删除失败", e, logger))
 
 
 @router.delete("/clear", response_model=ClearResponse, dependencies=[Depends(require_auth)])
@@ -284,8 +278,7 @@ def clear_documents():
         )
 
     except Exception as e:
-        logger.error(f"Clear documents failed: {e}")
-        raise HTTPException(status_code=500, detail=f"清空失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_detail("文档清空失败", e, logger))
 
 
 # ---- 4-stage RAG configuration ----
@@ -321,8 +314,7 @@ def update_rag_config(config: RagStageConfig):
         # update_config not yet implemented in rag_service
         return {"success": True, "message": "Configuration saved (not yet applied to service)"}
     except Exception as e:
-        logger.error(f"Update RAG config failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("RAG 配置更新失败", e, logger))
 
 
 @router.get("/config", dependencies=[Depends(require_auth)])

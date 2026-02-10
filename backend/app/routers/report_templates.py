@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth.security import require_auth
+from ..utils.errors import safe_detail
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ async def get_template(template_id: str) -> Dict[str, Any]:
         with open(template_file, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading template: {e}")
+        raise HTTPException(status_code=500, detail=safe_detail("模板读取失败", e, logger))
 
     return {
         "id": template_info.get("id"),

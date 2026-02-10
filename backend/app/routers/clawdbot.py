@@ -3,6 +3,7 @@
 提供 ClawdBot 安全测试沙箱的 REST API。
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -10,6 +11,7 @@ import asyncio
 import json
 
 from ..auth.security import require_auth, SECRET_KEY, ALGORITHM
+from ..utils.errors import safe_detail
 from jose import jwt as jose_jwt
 
 from ..services.clawdbot_sandbox import (
@@ -28,6 +30,8 @@ from ..services.behavior_monitor import (
     BehaviorSeverity
 )
 from ..services.honeypot import get_honeypot_files, list_honeypot_paths
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/clawdbot", tags=["clawdbot"])
 
@@ -152,7 +156,7 @@ async def create_sandbox(request: CreateSandboxRequest):
         )
         return info
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("沙箱创建失败", e, logger))
 
 
 @router.get("/sandbox", response_model=SandboxListResponse, dependencies=[Depends(require_auth)])
@@ -253,7 +257,7 @@ async def exec_command(sandbox_id: str, request: ExecCommandRequest):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("命令执行失败", e, logger))
 
 
 @router.post("/sandbox/{sandbox_id}/read-file", response_model=ReadFileResponse, dependencies=[Depends(require_auth)])
@@ -270,7 +274,7 @@ async def read_file(sandbox_id: str, request: ReadFileRequest):
             content=content
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_detail("文件读取失败", e, logger))
 
 
 # ============ Behavior Monitoring Endpoints ============
