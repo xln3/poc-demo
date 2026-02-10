@@ -3,9 +3,11 @@
 Supports v2.0.0 Dataset Schema format.
 """
 from __future__ import annotations
-import os
 import json
+import tempfile
+import threading
 import uuid
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -47,12 +49,25 @@ def extract_dataset_summary(dataset_data: dict) -> dict:
     }
 
 
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """Write JSON atomically: write to temp file then rename."""
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with open(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        Path(tmp_path).replace(path)
+    except BaseException:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
+
+
 class DatasetStorage:
     """Manages JSON file storage for datasets."""
 
     def __init__(self):
         """Initialize storage, create directory if needed."""
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self._locks: Dict[str, threading.Lock] = defaultdict(threading.Lock)
 
     def _get_dataset_path(self, dataset_id: str) -> Path:
         """Get the file path for a dataset."""
@@ -99,10 +114,10 @@ class DatasetStorage:
         dataset_data["id"] = dataset_id
         dataset_data["savedAt"] = meta["createdAt"]
 
-        # Write to file
+        # Write atomically
         dataset_path = self._get_dataset_path(dataset_id)
-        with open(dataset_path, "w", encoding="utf-8") as f:
-            json.dump(dataset_data, f, ensure_ascii=False, indent=2)
+        with self._locks[dataset_id]:
+            _atomic_write_json(dataset_path, dataset_data)
 
         return dataset_data
 
@@ -149,31 +164,31 @@ class DatasetStorage:
         Returns:
             Updated dataset data or None if not found
         """
-        dataset_data = self.get_dataset(dataset_id)
-        if dataset_data is None:
-            return None
+        with self._locks[dataset_id]:
+            dataset_data = self.get_dataset(dataset_id)
+            if dataset_data is None:
+                return None
 
-        now = datetime.now().isoformat()
+            now = datetime.now().isoformat()
 
-        # Update in meta
-        meta = dataset_data.get("meta", {})
-        if "name" in updates:
-            meta["name"] = updates["name"]
-        if "description" in updates:
-            meta["description"] = updates["description"]
-        if "tags" in updates:
-            meta["tags"] = updates["tags"]
-        if "capabilities" in updates:
-            meta["capabilities"] = updates["capabilities"]
-        if "source" in updates:
-            meta["source"] = updates["source"]
-        meta["updatedAt"] = now
-        dataset_data["meta"] = meta
+            # Update in meta
+            meta = dataset_data.get("meta", {})
+            if "name" in updates:
+                meta["name"] = updates["name"]
+            if "description" in updates:
+                meta["description"] = updates["description"]
+            if "tags" in updates:
+                meta["tags"] = updates["tags"]
+            if "capabilities" in updates:
+                meta["capabilities"] = updates["capabilities"]
+            if "source" in updates:
+                meta["source"] = updates["source"]
+            meta["updatedAt"] = now
+            dataset_data["meta"] = meta
 
-        # Write back
-        dataset_path = self._get_dataset_path(dataset_id)
-        with open(dataset_path, "w", encoding="utf-8") as f:
-            json.dump(dataset_data, f, ensure_ascii=False, indent=2)
+            # Write atomically
+            dataset_path = self._get_dataset_path(dataset_id)
+            _atomic_write_json(dataset_path, dataset_data)
 
         return dataset_data
 
@@ -200,37 +215,37 @@ class DatasetStorage:
         Returns:
             Updated dataset or None if not found
         """
-        dataset_data = self.get_dataset(dataset_id)
-        if dataset_data is None:
-            return None
+        with self._locks[dataset_id]:
+            dataset_data = self.get_dataset(dataset_id)
+            if dataset_data is None:
+                return None
 
-        # Ensure case has an ID
-        if not case_data.get("id"):
-            case_data["id"] = str(uuid.uuid4())
+            # Ensure case has an ID
+            if not case_data.get("id"):
+                case_data["id"] = str(uuid.uuid4())
 
-        # Add to cases array
-        cases = dataset_data.get("cases", [])
-        cases.append(case_data)
-        dataset_data["cases"] = cases
+            # Add to cases array
+            cases = dataset_data.get("cases", [])
+            cases.append(case_data)
+            dataset_data["cases"] = cases
 
-        # Update meta
-        meta = dataset_data.get("meta", {})
-        meta["caseCount"] = len(cases)
-        meta["updatedAt"] = datetime.now().isoformat()
-        meta["totalSize"] = len(json.dumps(dataset_data))
+            # Update meta
+            meta = dataset_data.get("meta", {})
+            meta["caseCount"] = len(cases)
+            meta["updatedAt"] = datetime.now().isoformat()
+            meta["totalSize"] = len(json.dumps(dataset_data))
 
-        # Update capabilities
-        if case_data.get("capability"):
-            caps = set(meta.get("capabilities", []))
-            caps.add(case_data.get("capability"))
-            meta["capabilities"] = list(caps)
+            # Update capabilities
+            if case_data.get("capability"):
+                caps = set(meta.get("capabilities", []))
+                caps.add(case_data.get("capability"))
+                meta["capabilities"] = list(caps)
 
-        dataset_data["meta"] = meta
+            dataset_data["meta"] = meta
 
-        # Write back
-        dataset_path = self._get_dataset_path(dataset_id)
-        with open(dataset_path, "w", encoding="utf-8") as f:
-            json.dump(dataset_data, f, ensure_ascii=False, indent=2)
+            # Write atomically
+            dataset_path = self._get_dataset_path(dataset_id)
+            _atomic_write_json(dataset_path, dataset_data)
 
         return dataset_data
 
@@ -244,26 +259,26 @@ class DatasetStorage:
         Returns:
             Updated dataset or None if not found
         """
-        dataset_data = self.get_dataset(dataset_id)
-        if dataset_data is None:
-            return None
+        with self._locks[dataset_id]:
+            dataset_data = self.get_dataset(dataset_id)
+            if dataset_data is None:
+                return None
 
-        # Remove from cases array
-        cases = dataset_data.get("cases", [])
-        cases = [c for c in cases if c.get("id") != case_id]
-        dataset_data["cases"] = cases
+            # Remove from cases array
+            cases = dataset_data.get("cases", [])
+            cases = [c for c in cases if c.get("id") != case_id]
+            dataset_data["cases"] = cases
 
-        # Update meta
-        meta = dataset_data.get("meta", {})
-        meta["caseCount"] = len(cases)
-        meta["updatedAt"] = datetime.now().isoformat()
-        meta["totalSize"] = len(json.dumps(dataset_data))
-        dataset_data["meta"] = meta
+            # Update meta
+            meta = dataset_data.get("meta", {})
+            meta["caseCount"] = len(cases)
+            meta["updatedAt"] = datetime.now().isoformat()
+            meta["totalSize"] = len(json.dumps(dataset_data))
+            dataset_data["meta"] = meta
 
-        # Write back
-        dataset_path = self._get_dataset_path(dataset_id)
-        with open(dataset_path, "w", encoding="utf-8") as f:
-            json.dump(dataset_data, f, ensure_ascii=False, indent=2)
+            # Write atomically
+            dataset_path = self._get_dataset_path(dataset_id)
+            _atomic_write_json(dataset_path, dataset_data)
 
         return dataset_data
 

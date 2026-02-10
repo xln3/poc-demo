@@ -90,6 +90,9 @@ class DatasetCase(BaseModel):
     benchmarkMeta: Optional[BenchmarkMetaModel] = None
 
 
+MAX_CASES_PER_DATASET = 10000
+
+
 class SaveDatasetRequest(BaseModel):
     """Request model for saving a dataset."""
     meta: DatasetMeta
@@ -151,6 +154,11 @@ async def list_datasets():
 @router.post("")
 async def save_dataset(request: SaveDatasetRequest):
     """Save a new dataset."""
+    if len(request.cases) > MAX_CASES_PER_DATASET:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Too many cases ({len(request.cases)}), max {MAX_CASES_PER_DATASET}",
+        )
     dataset_data = request.model_dump()
     saved = dataset_storage.save_dataset(dataset_data)
     return saved
