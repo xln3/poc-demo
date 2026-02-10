@@ -6,6 +6,7 @@ endpoint proxies requests to the configured LLM API, keeping keys server-side.
 
 import ipaddress
 import logging
+import os
 import socket
 from datetime import datetime
 from typing import Optional, List
@@ -29,6 +30,8 @@ from ..services.encryption import encrypt_api_key, decrypt_api_key, mask_api_key
 
 router = APIRouter(prefix="/api/llm", tags=["llm"])
 limiter = Limiter(key_func=get_remote_address)
+
+LLM_TIMEOUT = float(os.environ.get("LLM_TIMEOUT", "120"))
 
 
 def _validate_llm_url(url: str) -> None:
@@ -262,32 +265,40 @@ async def chat_proxy(
 
     if req.stream:
         return StreamingResponse(
-            _stream_proxy(url, headers, body, db, user.id, provider.id, req.model, provider),
+            _stream_proxy(url, headers, body, user.id, provider.id, req.model,
+                          provider.input_price_per_1k, provider.output_price_per_1k),
             media_type="text/event-stream",
         )
 
     # Non-streaming
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
         resp = await client.post(url, json=body, headers=headers)
 
     if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code, detail=resp.text[:1000])
+        logger.warning("LLM upstream error %d: %s", resp.status_code, resp.text[:500])
+        raise HTTPException(status_code=502, detail=f"LLM provider returned {resp.status_code}")
 
     data = resp.json()
 
     # Record usage
     usage = data.get("usage", {})
-    await _record_usage(db, user.id, provider.id, req.model, usage, provider)
+    await _record_usage(db, user.id, provider.id, req.model, usage,
+                        provider.input_price_per_1k, provider.output_price_per_1k)
 
     return data
 
 
-async def _stream_proxy(url, headers, body, db, user_id, provider_id, model, provider):
-    """Generator that proxies SSE stream and records usage at the end."""
+async def _stream_proxy(url, headers, body, user_id, provider_id, model, input_price, output_price):
+    """Generator that proxies SSE stream and records usage at the end.
+
+    Uses an independent DB session for usage recording so that the
+    caller's request-scoped session is not accessed after yield.
+    """
+    import json as _json
     prompt_tokens = 0
     completion_tokens = 0
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
         async with client.stream("POST", url, json=body, headers=headers) as resp:
             async for chunk in resp.aiter_bytes():
                 yield chunk
@@ -295,35 +306,34 @@ async def _stream_proxy(url, headers, body, db, user_id, provider_id, model, pro
                 text = chunk.decode("utf-8", errors="replace")
                 if '"usage"' in text:
                     try:
-                        import json
                         for line in text.split("\n"):
                             line = line.strip()
                             if line.startswith("data: ") and line != "data: [DONE]":
-                                parsed = json.loads(line[6:])
+                                parsed = _json.loads(line[6:])
                                 if "usage" in parsed:
                                     prompt_tokens = parsed["usage"].get("prompt_tokens", 0)
                                     completion_tokens = parsed["usage"].get("completion_tokens", 0)
                     except Exception:
                         pass
 
-    # Record usage after stream ends
-    await _record_usage(
-        db, user_id, provider_id, model,
-        {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens},
-        provider,
-    )
+    # Record usage with an independent session (the request-scoped session
+    # from Depends(get_db) should not be used inside a generator after yield).
+    from ..db.engine import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        usage = {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}
+        await _record_usage(db, user_id, provider_id, model, usage, input_price, output_price)
 
 
-async def _record_usage(db, user_id, provider_id, model, usage_dict, provider):
+async def _record_usage(db, user_id, provider_id, model, usage_dict, input_price=None, output_price=None):
     """Write a row to api_usage."""
     prompt_tokens = usage_dict.get("prompt_tokens", 0)
     completion_tokens = usage_dict.get("completion_tokens", 0)
 
     cost = None
-    if provider.input_price_per_1k and provider.output_price_per_1k:
+    if input_price and output_price:
         cost = (
-            (prompt_tokens / 1000) * provider.input_price_per_1k
-            + (completion_tokens / 1000) * provider.output_price_per_1k
+            (prompt_tokens / 1000) * input_price
+            + (completion_tokens / 1000) * output_price
         )
 
     row = ApiUsage(
