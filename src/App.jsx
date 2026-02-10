@@ -590,9 +590,9 @@ export default function App() {
     setCustomTestPayload,
   });
   const {
-    isPlaybackMode, playbackCase, isPlaying: isPlaybackPlaying,
+    isPlaybackMode, playbackCase, isPlaying: isPlaybackPlaying, isPaused: isPlaybackPaused,
     playbackProgress, playbackTotal,
-    startPlayback, stopPlayback, exitPlayback, skipToEnd
+    startPlayback, pausePlayback, resumePlayback, stopPlayback, exitPlayback, skipToEnd
   } = playback;
 
   // Datasets hook - 数据集管理
@@ -3760,9 +3760,11 @@ print('\\n'.join(all_text))
         <>
         <PlaybackControlBar
           isPlaybackMode={isPlaybackMode} playbackCase={playbackCase}
-          isPlaybackPlaying={isPlaybackPlaying} playbackProgress={playbackProgress}
-          playbackTotal={playbackTotal} stopPlayback={stopPlayback}
-          skipToEnd={skipToEnd} startPlayback={startPlayback} exitPlayback={exitPlayback}
+          isPlaybackPlaying={isPlaybackPlaying} isPlaybackPaused={isPlaybackPaused}
+          playbackProgress={playbackProgress} playbackTotal={playbackTotal}
+          pausePlayback={pausePlayback} resumePlayback={resumePlayback}
+          stopPlayback={stopPlayback} skipToEnd={skipToEnd}
+          startPlayback={startPlayback} exitPlayback={exitPlayback}
         />
 
         <AttackHeader

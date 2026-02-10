@@ -1,7 +1,7 @@
 export default function PlaybackControlBar({
-  isPlaybackMode, playbackCase, isPlaybackPlaying,
+  isPlaybackMode, playbackCase, isPlaybackPlaying, isPlaybackPaused,
   playbackProgress, playbackTotal,
-  stopPlayback, skipToEnd, startPlayback, exitPlayback,
+  pausePlayback, resumePlayback, stopPlayback, skipToEnd, startPlayback, exitPlayback,
 }) {
   if (!isPlaybackMode) return null;
 
@@ -22,12 +22,21 @@ export default function PlaybackControlBar({
         <div className="flex items-center gap-2">
           {isPlaybackPlaying ? (
             <>
-              <button
-                onClick={stopPlayback}
-                className="px-2 py-1 text-xs bg-yellow-600 hover:bg-yellow-500 rounded"
-              >
-                ⏸️ 暂停
-              </button>
+              {isPlaybackPaused ? (
+                <button
+                  onClick={resumePlayback}
+                  className="px-2 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 rounded"
+                >
+                  ▶️ 继续
+                </button>
+              ) : (
+                <button
+                  onClick={pausePlayback}
+                  className="px-2 py-1 text-xs bg-yellow-600 hover:bg-yellow-500 rounded"
+                >
+                  ⏸️ 暂停
+                </button>
+              )}
               <button
                 onClick={skipToEnd}
                 className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded"

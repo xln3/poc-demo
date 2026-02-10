@@ -57,15 +57,25 @@ export const usePlayback = ({
   const [playbackTotal, setPlaybackTotal] = useState(0);
   const [currentStateIndex, setCurrentStateIndex] = useState(0);
   const [playbackMarkers, setPlaybackMarkers] = useState([]);
+  const [isPaused, setIsPaused] = useState(false);
 
   // 动画控制
   const abortRef = useRef(false);
   const pausedRef = useRef(false);
 
   /**
-   * 延迟函数
+   * 延迟函数（已含 animationSpeed 缩放）
    */
   const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms / animationSpeed));
+
+  /**
+   * 等待直到暂停解除或中止
+   */
+  const waitWhilePaused = async () => {
+    while (pausedRef.current && !abortRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  };
 
   /**
    * 从 TestInput 或 v1 environment 恢复环境配置
@@ -382,8 +392,8 @@ export const usePlayback = ({
         const nextTime = new Date(nextState.timestamp).getTime();
         let delayMs = Math.max(nextTime - currentTime, 50);
 
-        // 应用速度调整
-        delayMs = delayMs / (suggestedSpeed || 1) / animationSpeed;
+        // 应用 suggestedSpeed 调整（animationSpeed 由 delay() 统一处理）
+        delayMs = delayMs / (suggestedSpeed || 1);
 
         // 限制最大延迟
         delayMs = Math.min(delayMs, 2000);
@@ -440,6 +450,8 @@ export const usePlayback = ({
     // 播放用户消息
     if (messagesWithType.length > 0 && messagesWithType[0].role === 'user') {
       if (abortRef.current) return;
+      await waitWhilePaused();
+      if (abortRef.current) return;
       setMessages(prev => [...prev, messagesWithType[0]]);
       messageIndex++;
       progress++;
@@ -450,6 +462,8 @@ export const usePlayback = ({
     // 播放日志
     for (const log of logsWithType) {
       if (abortRef.current) break;
+      await waitWhilePaused();
+      if (abortRef.current) break;
       setLogs(prev => [...prev, log]);
       logIndex++;
       progress++;
@@ -459,6 +473,8 @@ export const usePlayback = ({
 
     // 播放剩余的 agent 消息
     for (let i = messageIndex; i < messagesWithType.length; i++) {
+      if (abortRef.current) break;
+      await waitWhilePaused();
       if (abortRef.current) break;
       const msg = messagesWithType[i];
 
@@ -559,7 +575,7 @@ export const usePlayback = ({
         await playbackV2Sequence(sequence);
       } else {
         // 无录制数据，提示用户
-        alert('该测试用例没有录制数据，无法回放');
+        console.warn('该测试用例没有录制数据，无法回放');
         setIsPlaybackMode(false);
         setPlaybackCase(null);
       }
@@ -570,7 +586,7 @@ export const usePlayback = ({
         setPlaybackSequence(sequence);
         await playbackV2Sequence(sequence);
       } else {
-        alert('录制会话没有状态数据');
+        console.warn('录制会话没有状态数据');
         setIsPlaybackMode(false);
         setPlaybackCase(null);
       }
@@ -579,7 +595,7 @@ export const usePlayback = ({
       setPlaybackSequence(null);
       await playbackV1Execution(data);
     } else {
-      alert('未知的测试用例格式');
+      console.warn('未知的测试用例格式');
     }
   }, [restoreEnvironment, playbackV2Sequence, playbackV1Execution, buildSequenceFromRecording]);
 
@@ -588,6 +604,7 @@ export const usePlayback = ({
    */
   const pausePlayback = useCallback(() => {
     pausedRef.current = true;
+    setIsPaused(true);
   }, []);
 
   /**
@@ -595,6 +612,7 @@ export const usePlayback = ({
    */
   const resumePlayback = useCallback(() => {
     pausedRef.current = false;
+    setIsPaused(false);
   }, []);
 
   /**
@@ -603,6 +621,7 @@ export const usePlayback = ({
   const stopPlayback = useCallback(() => {
     abortRef.current = true;
     pausedRef.current = false;
+    setIsPaused(false);
     setIsPlaying(false);
   }, []);
 
@@ -699,6 +718,7 @@ export const usePlayback = ({
     playbackCase,
     playbackSequence,
     isPlaying,
+    isPaused,
     playbackProgress,
     playbackTotal,
     currentStateIndex,
