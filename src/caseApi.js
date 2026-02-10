@@ -15,10 +15,10 @@ const BASE_URL = '';  // 使用 Vite 代理
  * @returns {Promise<Object>} 保存后的用例（含ID）
  */
 export async function saveCaseToServer(testCase) {
-  // 验证格式
+  // 验证格式 — 失败则拒绝保存
   const validation = validateTestCase(testCase);
   if (!validation.valid) {
-    console.warn('测试用例验证警告:', validation.errors);
+    throw new Error(`测试用例验证失败: ${validation.errors.join('; ')}`);
   }
 
   const response = await authFetch(`${BASE_URL}/cases`, {
@@ -96,21 +96,13 @@ export async function deleteCase(id) {
  * @returns {Promise<Object[]>} 用例列表
  */
 export async function exportCases(ids = []) {
-  const cases = [];
-  if (ids.length === 0) {
-    // 获取所有用例
+  let targetIds = ids;
+  if (targetIds.length === 0) {
     const summaries = await listSavedCases();
-    for (const summary of summaries) {
-      const detail = await getCaseDetail(summary.id);
-      cases.push(detail);
-    }
-  } else {
-    for (const id of ids) {
-      const detail = await getCaseDetail(id);
-      cases.push(detail);
-    }
+    targetIds = summaries.map(s => s.id);
   }
-  return cases;
+  // Fetch all in parallel instead of sequential N+1
+  return Promise.all(targetIds.map(id => getCaseDetail(id)));
 }
 
 /**
@@ -119,12 +111,24 @@ export async function exportCases(ids = []) {
  * @returns {Promise<{success: number, failed: number, errors: string[]}>}
  */
 export async function importCases(testCases) {
-  const results = {
-    success: 0,
-    failed: 0,
-    errors: [],
-  };
+  // Validate all cases first — fail fast before any writes
+  const validationErrors = [];
+  for (const testCase of testCases) {
+    const validation = validateTestCase(testCase);
+    if (!validation.valid) {
+      validationErrors.push(`${testCase.meta?.caseId || 'unknown'}: ${validation.errors.join('; ')}`);
+    }
+  }
+  if (validationErrors.length > 0) {
+    return {
+      success: 0,
+      failed: validationErrors.length,
+      errors: validationErrors,
+    };
+  }
 
+  // All valid — save sequentially (saveCaseToServer re-validates, so skip validation there)
+  const results = { success: 0, failed: 0, errors: [] };
   for (const testCase of testCases) {
     try {
       await saveCaseToServer(testCase);
@@ -134,6 +138,5 @@ export async function importCases(testCases) {
       results.errors.push(`${testCase.meta?.caseId || 'unknown'}: ${error.message}`);
     }
   }
-
   return results;
 }
