@@ -170,5 +170,6 @@ export function useTestRecordActions(deps) {
     removeAnnotation,
     requestLLMAnnotation,
     submitHumanJudgment,
+    thinkingIndexRef,
   };
 }

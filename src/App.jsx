@@ -161,6 +161,7 @@ export default function App() {
     addTestRecord, updateTestRecord, removeTestRecord,
     startThinkingRecord, finalizeThinkingRecord, addResponseRecord,
     addAnnotation, removeAnnotation, requestLLMAnnotation, submitHumanJudgment,
+    thinkingIndexRef,
   } = useTestRecordActions({
     setTestRecords, testRecords, generateId,
     judgeConfig, setAnnotationModal, setNewAnnotation,
@@ -1052,6 +1053,16 @@ export default function App() {
     setLastTestResult,
   });
 
+  // 加载已保存的测试结果列表
+  const loadSavedTestResults = async () => {
+    try {
+      const results = await listTestResults();
+      setSavedTestResults(results);
+    } catch (err) {
+      console.error('加载测试结果列表失败:', err);
+    }
+  };
+
   // Batch test hook
   const {
     batchTestQueue, batchTestIndex, batchTestResults, setBatchTestResults,
@@ -1072,16 +1083,6 @@ export default function App() {
     addTestRecord, updateTestRecord, removeTestRecord,
     addToast, loadSavedTestResults,
   });
-
-  // 加载已保存的测试结果列表
-  const loadSavedTestResults = async () => {
-    try {
-      const results = await listTestResults();
-      setSavedTestResults(results);
-    } catch (err) {
-      console.error('加载测试结果列表失败:', err);
-    }
-  };
 
   // 查看测试结果详情
   const viewTestResultDetail = async (resultId) => {
