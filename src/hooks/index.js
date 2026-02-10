@@ -21,3 +21,5 @@ export { useAttackSelection } from './useAttackSelection.js';
 export { useTestRecords } from './useTestRecords.js';
 export { useTestRecordActions } from './useTestRecordActions.js';
 export { useFileParsing } from './useFileParsing.js';
+export { useRealTest } from './useRealTest.js';
+export { useConversationEngine } from './useConversationEngine.js';
