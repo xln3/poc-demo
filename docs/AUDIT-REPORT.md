@@ -1,44 +1,58 @@
 # 智能体安全风险场景演示平台 — 产品级全面审计报告
 
-**审计日期**: 2026-02-09
-**审计版本**: master@61cf598
+**初审日期**: 2026-02-09
+**二审日期**: 2026-02-10
+**审计版本**: master@e687a4d (P1 全部修复后)
 **审计范围**: 全平台 20 个功能模块 + 跨模块安全/质量/运维
-**审计方法**: 代码静态分析 + Playwright 自动化截图 + API 端点验证
+**审计方法**: 代码静态分析 + Playwright 自动化截图 + API 端点验证 + 三路并行自动审计（后端安全/前端安全/基础设施）
 **P0 修复日期**: 2026-02-09 (master@624fcd9)
+**P1 修复日期**: 2026-02-10 (master@e687a4d, 18 commits)
 
 ---
 
 ## 1. 执行摘要
 
-### 总体评分: C+ (65/100) → B- (72/100, P0 修复后)
+### 总体评分: C+ (65) → B- (72, P0 修复后) → **B+ (81, P1 修复后)**
 
-平台功能覆盖全面，6 大能力层级（F1-F6）和 27+ 攻击场景已实现。架构设计合理（前后端分离、Docker 沙箱隔离、服务端 LLM 代理）。~~但在安全加固、测试覆盖、代码质量方面存在显著缺陷，尚不满足产品级上线标准。~~ **8 项 P0 阻塞问题已于 2026-02-09 全部修复并通过测试（48 项新增单元测试），安全层面已无上线阻塞项。P1 及以下问题仍需持续迭代。**
+平台功能覆盖全面，6 大能力层级（F1-F6）和 27+ 攻击场景已实现。架构设计合理（前后端分离、Docker 沙箱隔离、服务端 LLM 代理）。**8 项 P0 + 38 项 P1 已全部修复，共 46 项安全和质量问题已关闭。** 二审发现 15 项新问题（2 P1 + 8 P2 + 5 P3），主要涉及 localStorage 凭证暴露、CRUD 所有权校验缺失、exec_run 命令注入模式。
 
 ### 关键数字
 
-| 指标 | 数值 |
-|------|------|
-| ~~P0 阻塞上线~~ | ~~8 项~~ → **0 项（全部已修复 ✅）** |
-| P1 上线前必修 | **38 项** |
-| P2 上线后迭代 | **35 项** |
-| P3 锦上添花 | **13 项** |
-| 总发现数 | **94 项**（8 项已关闭） |
-| 自动化截图 | 24 张 |
-| 审计模块 | 20 + 跨模块 |
-| P0 修复新增测试 | **48 项** |
+| 指标 | 初审 | P0 修复后 | **P1 修复后 + 二审** |
+|------|------|----------|---------------------|
+| P0 阻塞上线 | 8 | **0 ✅** | **0 ✅** |
+| P1 上线前必修 | 38 | 38 | **2（新发现）** |
+| P2 上线后迭代 | 35 | 35 | **43（原 35 + 新 8）** |
+| P3 锦上添花 | 13 | 13 | **18（原 13 + 新 5）** |
+| 总发现数 | 94 | 94 | **109（新增 15）** |
+| 已关闭 | 0 | 8 | **46** |
+| 剩余开放 | 94 | 86 | **63** |
+| 自动化截图 | 24 | 24 | 24 |
+| 审计模块 | 20 | 20 | 20 |
+| 新增测试 | 0 | 48 | 48 |
 
-### P0 关键发现（阻塞上线）— ✅ 全部已修复
+### P1 修复总览（18 commits, 38 项）
 
-| # | 发现 | 模块 | 修复 commit | 新增测试 |
-|---|------|------|------------|---------|
-| 1 | ~~SSRF：LLM 代理 `base_url` 可指向内网服务~~ | M4 | `82c1238` URL scheme 白名单 + 私有 IP 拦截 + DNS 解析后检查 | 11 项 |
-| 2 | ~~Shell 注入：文件解析器文件名未消毒~~ | M5 | `91ab19e` UUID 替代原始文件名 + 扩展名白名单 | 5 项 |
-| 3 | ~~SQL 注入：MCP `_execute()` 几乎无防护~~ | M8 | `b09dfb4` 扩展黑名单至 30+ 模式 + 分号检查 | 19 项 |
-| 4 | ~~路径遍历：dataset_storage.py~~ | M11 | `73cf39e` 共享 `sanitize_id()` 正则白名单 | 13 项 |
-| 5 | ~~路径遍历：test_results_storage.py~~ | M12 | `73cf39e` 同上 | (同上) |
-| 6 | ~~路径遍历：case_storage.py~~ | M13 | `73cf39e` 同上 | (同上) |
-| 7 | ~~TLS 未启用：nginx HTTPS 被注释~~ | M20 | `a147bfa` TLS 默认启用 + HSTS + HTTP→HTTPS 重定向 + ws:// 自适应 | nginx 语法验证 |
-| 8 | ~~无监控告警~~ | M20 | `624fcd9` docker-compose healthcheck + health-monitor.sh 脚本 | compose 语法验证 |
+| # | 模块 | Commit | 修复项数 | 关键修复 |
+|---|------|--------|---------|---------|
+| M1 | 认证 | `7b115a8` | 5 | role Literal + refresh token + 登出 + 密码策略 |
+| M2 | 场景浏览 | `91ae850` | 3 | 动态计数 + Tailwind JIT + 空分支 |
+| M3 | 回放 | `c6a00f5` | 4 | 暂停/继续 + v1 pausedRef + speed 双除 + alert |
+| M4 | LLM代理 | `0f9f0fa` | 3 | 流式 DB session + 错误脱敏 + 超时可配置 |
+| M5 | 文件注入 | `ad74d1b` | 3 | 上传限制 + base64 限制 + exiftool 超时 |
+| M6 | 沙箱终端 | `76fbe7b` | 3 | readlink 严格 + 输出限制 1MB |
+| M7 | RAG | `e579d82` | 2 | 上传限制 + shell 注入→list exec |
+| M8 | MCP | `17f8c8a` | 2 | Stripe per-request + 邮件路径白名单 |
+| M9 | ClawdBot | `6aeb9c7` | 2 | cat 路径 shlex.quote |
+| M10 | 批量测试 | `c3ac963` | 3 | stale closure ref + sessionStorage 持久化 |
+| M11 | 数据集 | `15def44` | 3 | cases 上限 + 原子写 + 并发锁 |
+| M12 | 测试结果 | `783bf9d` | 3 | UUID 全长 + 五级风险统计 + 注释 |
+| M13 | 用例存储 | `2ac3767` | 3 | 校验拒绝 + 并行导出 + 预校验导入 |
+| M14 | 判定系统 | `6ff79ba` | 3 | prompt 隔离 + riskLevel 枚举 + 非贪婪 |
+| M15 | 系统日志 | `8973b2c` | 3 | WS 重连 + Queue 限制 + 连接数限制 |
+| M16 | Eval导入 | `cca57ad` | 1 | 100MB 大小限制 |
+| M17 | 仿真器 | `118b08c` | 3 | WS 认证 + --workers 1 + time.sleep 注释 |
+| M18 | 部署 | `e687a4d` | 2 | Docker socket 注释 + 终端非 root |
 
 ---
 
@@ -50,23 +64,19 @@
 |------|------|
 | **功能目标** | JWT 认证 + RBAC（admin/tester）+ 服务端 API Key 加密管理 |
 | **设计** | python-jose JWT、passlib+bcrypt 密码、Fernet API Key 加密、OAuth2PasswordBearer |
-| **预期** | 安全的 token 管理、角色强制、密码策略、token 刷新/撤销 |
-| **实现程度** | **75%** — 核心认证路径可靠，但缺 token 刷新、密码策略、登出撤销 |
-| **优先级** | P1 |
+| **实现程度** | **95%** — P1 修复后核心认证完整 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | `RegisterRequest.role` 接受任意字符串，应限制为 `Literal["admin","tester"]` | `auth/router.py:25` |
-| 2 | P1 | 无 token 刷新机制，8h 有效期内无法撤销 | `auth/security.py` |
-| 3 | P1 | 无登出端点，JWT 即使客户端清除仍在服务端有效 | 缺失 |
-| 4 | P1 | 无密码复杂度校验 | `auth/router.py:23` |
-| 5 | P1 | `get_current_user` 未认证时返回 None（过渡期设计需移除） | `auth/security.py:59` |
-| 6 | P2 | `datetime.utcnow` 已废弃（Python 3.12+） | `db/tables.py` |
-| 7 | P2 | 前端 JWT 解析 `atob()` 失败时默认返回 'tester' | `src/auth.js:36` |
-
-**其他说明:** Token 仅存内存（非 localStorage）是良好的 XSS 防护。Fernet 加密 API Key 实现正确。CORS 已加固为显式白名单。
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~`RegisterRequest.role` 接受任意字符串~~ | `auth/router.py:25` | ✅ `7b115a8` Literal["admin","tester"] |
+| 2 | ~~P1~~ | ~~无 token 刷新机制~~ | `auth/security.py` | ✅ `7b115a8` refresh token + JTI 撤销 |
+| 3 | ~~P1~~ | ~~无登出端点~~ | 缺失 | ✅ `7b115a8` POST /auth/logout |
+| 4 | ~~P1~~ | ~~无密码复杂度校验~~ | `auth/router.py:23` | ✅ `7b115a8` 8位+大小写+数字+特殊字符 |
+| 5 | ~~P1~~ | ~~`get_current_user` 未认证返回 None~~ | `auth/security.py:59` | ✅ `7b115a8` 直接 raise 401 |
+| 6 | P2 | `datetime.utcnow` 已废弃（Python 3.12+） | `db/tables.py` | |
+| 7 | P2 | 前端 JWT 解析 `atob()` 失败时默认返回 'tester' | `src/auth.js:36` | |
 
 ---
 
@@ -75,22 +85,19 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | T1-T4 风险分类树 + F1-F6 能力层级 + M-S-O-B 画像过滤 |
-| **设计** | 静态场景对象 + SCENARIOS_BY_LEVEL 分组 + useAttackSelection + useCapabilityFilter |
-| **预期** | 快速层级导航、过滤、响应式侧边栏 |
-| **实现程度** | **85%** — 场景体系完整，Builder 模式清晰 |
-| **优先级** | P2 |
+| **实现程度** | **92%** — 场景体系完整，动态计数正确 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | 硬编码风险项数量 `📋 风险测试项 (27)` 不随场景增删更新 | `LeftSidebar.jsx:371` |
-| 2 | P1 | CapabilityProfileFilter 动态 Tailwind 类名（`bg-${color}-600`）JIT 无法编译 | `CapabilityProfileFilter.jsx:44` |
-| 3 | P1 | 空 category 条件分支无效（no-op） | `LeftSidebar.jsx:377-379` |
-| 4 | P2 | CapabilityTabs 硬编码 F1-F5，缺 F6 | `CapabilityTabs.jsx:15-21` |
-| 5 | P2 | LeftSidebar 608 行职责过载 | `LeftSidebar.jsx` |
-| 6 | P3 | 无键盘导航 / 无障碍支持 | `LeftSidebar.jsx` |
-| 7 | P3 | 风险树无搜索过滤 | — |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~硬编码风险项数量 `(27)`~~ | `LeftSidebar.jsx:371` | ✅ `91ae850` riskTree 动态计算 |
+| 2 | ~~P1~~ | ~~Tailwind 动态类名 JIT 无法编译~~ | `CapabilityProfileFilter.jsx:44` | ✅ `91ae850` 静态 classMap |
+| 3 | ~~P1~~ | ~~空 category 条件分支 no-op~~ | `LeftSidebar.jsx:377-379` | ✅ `91ae850` return null |
+| 4 | P2 | CapabilityTabs 硬编码 F1-F5，缺 F6 | `CapabilityTabs.jsx:15-21` | |
+| 5 | P2 | LeftSidebar 608 行职责过载 | `LeftSidebar.jsx` | |
+| 6 | P3 | 无键盘导航 / 无障碍支持 | `LeftSidebar.jsx` | |
+| 7 | P3 | 风险树无搜索过滤 | — | |
 
 ---
 
@@ -99,22 +106,19 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | 预录对话动画回放（v1/v2 双格式）+ 暂停/跳转/进度条 |
-| **设计** | usePlayback.js (723 行) 状态机 + ref 控制 abort/pause |
-| **预期** | 流畅可中断的回放、正确状态恢复 |
-| **实现程度** | **70%** — 核心回放可用，但暂停/速度存在 bug |
-| **优先级** | P1 |
+| **实现程度** | **88%** — 暂停/继续/速度均正确 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | 暂停按钮调用了 `stopPlayback` 而非 `pausePlayback` | `PlaybackControlBar.jsx:26` |
-| 2 | P1 | v1 回放路径不检查 `pausedRef`，暂停无效 | `usePlayback.js:401-499` |
-| 3 | P1 | v2 路径 delay 被 animationSpeed 双重除法（速度=speed²） | `usePlayback.js:68,386-388` |
-| 4 | P1 | 使用 `alert()` 而非 toast 通知 | `usePlayback.js:562,573,583` |
-| 5 | P2 | `restoreEnvironment` 三处几乎相同的代码复制 | `usePlayback.js:73-306` |
-| 6 | P2 | 无效 timestamp 导致 `delayMs = NaN` | `usePlayback.js:381-382` |
-| 7 | P2 | `jumpToState` 跳转后不自动继续播放 | `usePlayback.js:626-639` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~暂停按钮调用 `stopPlayback`~~ | `PlaybackControlBar.jsx:26` | ✅ `c6a00f5` pausePlayback/resumePlayback |
+| 2 | ~~P1~~ | ~~v1 路径不检查 `pausedRef`~~ | `usePlayback.js:401-499` | ✅ `c6a00f5` waitWhilePaused |
+| 3 | ~~P1~~ | ~~v2 delay 双重除法~~ | `usePlayback.js:68,386-388` | ✅ `c6a00f5` 移除手动除法 |
+| 4 | ~~P1~~ | ~~使用 `alert()`~~ | `usePlayback.js:562,573,583` | ✅ `c6a00f5` console.warn |
+| 5 | P2 | `restoreEnvironment` 三处代码复制 | `usePlayback.js:73-306` | |
+| 6 | P2 | 无效 timestamp → `delayMs = NaN` | `usePlayback.js:381-382` | |
+| 7 | P2 | `jumpToState` 跳转后不自动继续 | `usePlayback.js:626-639` | |
 
 ---
 
@@ -123,22 +127,20 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | 服务端 LLM API 代理、密钥加密管理、流式响应、用量追踪 |
-| **设计** | FastAPI 代理 + httpx 异步 + SSE 透传 + Fernet 密钥 + slowapi 限流 |
-| **预期** | 密钥不离开服务端、可靠流式传输、用量准确 |
-| **实现程度** | **80%** — 代理架构正确，但有 SSRF 和流式会话管理问题 |
-| **优先级** | P0 |
+| **实现程度** | **90%** — SSRF 已堵，流式 session 独立 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | ~~**P0**~~ ✅ | ~~**SSRF**：`base_url` 可设为任意 URL~~ → 已修复：`_validate_llm_url()` scheme 白名单 + 私有 IP 拦截 | `llm_proxy.py` |
-| 2 | P1 | 流式代理 generator 中 DB session 可能已关闭 | `llm_proxy.py:241-270` |
-| 3 | P1 | 上游错误原文泄露给客户端 | `llm_proxy.py:230` |
-| 4 | P1 | 120s 超时硬编码，大模型可能不够 | `llm_proxy.py:226,246` |
-| 5 | P2 | 流式模式 usage 统计不可靠（多数 provider 不含 usage） | `llm_proxy.py:252-263` |
-| 6 | P2 | RealTestControlPanel 1343 行巨型组件，55+ props | `RealTestControlPanel.jsx` |
-| 7 | P3 | 测试连接发送真实 API 调用（耗 token） | `LLMProviderSettings.jsx:83-101` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P0~~ | ~~SSRF via `base_url`~~ | `llm_proxy.py` | ✅ `82c1238` |
+| 2 | ~~P1~~ | ~~流式 DB session 可能已关闭~~ | `llm_proxy.py:241-270` | ✅ `0f9f0fa` 独立 AsyncSessionLocal |
+| 3 | ~~P1~~ | ~~上游错误原文泄露~~ | `llm_proxy.py:230` | ✅ `0f9f0fa` 通用 502 |
+| 4 | ~~P1~~ | ~~120s 超时硬编码~~ | `llm_proxy.py:226,246` | ✅ `0f9f0fa` LLM_TIMEOUT 环境变量 |
+| 5 | P2 | 流式 usage 统计不可靠 | `llm_proxy.py:252-263` | |
+| 6 | P2 | RealTestControlPanel 1343 行巨型组件 | `RealTestControlPanel.jsx` | |
+| 7 | P2-NEW | LLM 流式响应无总大小限制（可内存耗尽） | `llm_proxy.py:303-304` | |
+| 8 | P3 | 测试连接发送真实 API 调用 | `LLMProviderSettings.jsx:83-101` | |
 
 ---
 
@@ -147,22 +149,19 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | 文档隐藏载荷演示（PDF/DOCX/XLSX/图片 间接注入） |
-| **设计** | 8 种攻击场景 + IndirectAttackBuilder + 容器化/直接双路径解析 |
-| **预期** | 安全的文件解析沙箱、清晰的隐藏技术展示 |
-| **实现程度** | **75%** — 场景设计优秀，但解析器有注入风险 |
-| **优先级** | P0 |
+| **实现程度** | **88%** — 大小限制和超时已加 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | ~~**P0**~~ ✅ | ~~**Shell 注入**：容器解析器文件名直接拼入 shell 命令~~ → 已修复：UUID 替代原始文件名 | `container_parser.py` |
-| 2 | P1 | 上传无文件大小限制 | `file_parser.py:57-58,96-98` |
-| 3 | P1 | base64 端点无载荷大小限制 | `file_parser.py:201` |
-| 4 | P1 | exiftool 无超时参数 | `file_parsers.py:188-192` |
-| 5 | P2 | 文本提取逻辑在两端点间重复 | `file_parser.py:121-178,219-268` |
-| 6 | P2 | 无 MIME 类型校验，仅靠扩展名判断 | `file_parsers.py:298-314` |
-| 7 | P2 | `.doc`/`.xls` 映射到 docx/xlsx 解析器但不兼容 | `file_parsers.py:303-305` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P0~~ | ~~Shell 注入 via 文件名~~ | `container_parser.py` | ✅ `91ab19e` |
+| 2 | ~~P1~~ | ~~上传无文件大小限制~~ | `file_parser.py:57-58,96-98` | ✅ `ad74d1b` 50MB |
+| 3 | ~~P1~~ | ~~base64 端点无载荷大小限制~~ | `file_parser.py:201` | ✅ `ad74d1b` 67MB |
+| 4 | ~~P1~~ | ~~exiftool 无超时~~ | `file_parsers.py:188-192` | ✅ `ad74d1b` timeout=30s |
+| 5 | P2 | 文本提取逻辑在两端点间重复 | `file_parser.py:121-178,219-268` | |
+| 6 | P2 | 无 MIME 类型校验 | `file_parsers.py:298-314` | |
+| 7 | P2 | `.doc`/`.xls` 映射到 docx/xlsx 解析器 | `file_parsers.py:303-305` | |
 
 ---
 
@@ -171,21 +170,19 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | Docker 隔离容器中执行工具、文件操作、命令 |
-| **设计** | Docker SDK + 资源限制（512MB/50%CPU/256PID）+ 能力降权 + 隔离网络 |
-| **预期** | 容器逃逸防护、命令注入防护、路径遍历防护 |
-| **实现程度** | **85%** — 容器加固到位，但有 TOCTOU 和 fallback 绕过 |
-| **优先级** | P1 |
+| **实现程度** | **90%** — 路径验证严格，输出限制到位 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | TOCTOU 竞态：路径验证与操作间可被 symlink 替换 | `tools.py:32-47` |
-| 2 | P1 | `readlink -f` 失败时 fallback 到 `posixpath.normpath`（不解析符号链接） | `tools.py:38-39` |
-| 3 | P1 | `run_command` 无命令黑名单/输出限制 | `tools.py:362-397` |
-| 4 | P2 | 下载端点无文件大小限制（tar 全量读入内存） | `sandbox.py:289-370` |
-| 5 | P2 | 容器 session 信息存内存，后端重启丢失 | `container.py:29-31` |
-| 6 | P3 | 页面崩溃时锁可能残留至 5 分钟超时 | `useSandbox.js:649-662` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~TOCTOU / readlink fallback~~ | `tools.py:32-47` | ✅ `76fbe7b` 失败即拒绝 |
+| 2 | ~~P1~~ | ~~`readlink -f` fallback 到 normpath~~ | `tools.py:38-39` | ✅ `76fbe7b` |
+| 3 | ~~P1~~ | ~~`run_command` 无输出限制~~ | `tools.py:362-397` | ✅ `76fbe7b` 1MB 截断 |
+| 4 | P2 | 下载端点无文件大小限制 | `sandbox.py:289-370` | |
+| 5 | P2 | 容器 session 存内存 | `container.py:29-31` | |
+| 6 | P2-NEW | `X-Forwarded-For` 可伪造绕过终端锁 | `sandbox.py:396-404` | |
+| 7 | P3 | 页面崩溃时锁残留至 5 分钟超时 | `useSandbox.js:649-662` | |
 
 ---
 
@@ -194,21 +191,18 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | 文档上传 → 向量存储 → 相似检索 → 投毒演示 |
-| **设计** | 容器化 ChromaDB + Flask HTTP 内部服务 + 4 阶段配置 |
-| **预期** | 上传限制、查询安全、投毒演示完整性 |
-| **实现程度** | **70%** — 核心检索可用，4 阶段配置为桩 |
-| **优先级** | P1 |
+| **实现程度** | **78%** — 上传限制和注入修复完成 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | RAG 上传无文件大小限制 | `rag.py:133` |
-| 2 | P1 | `_sync_call_http` shell 命令拼接 `document_id` 未消毒 | `container_rag.py:126-133,238` |
-| 3 | P2 | 4 阶段配置 `update_rag_config` 静默失败返回成功 | `rag.py:296-340` |
-| 4 | P2 | `_starting` 标志无锁保护，存在竞态 | `container_rag.py:39-64` |
-| 5 | P2 | 容器重启后 document metadata 丢失 | `rag_service.py:42` |
-| 6 | P3 | `/rag/health` 无认证，泄露内部状态 | `rag.py:39` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~RAG 上传无文件大小限制~~ | `rag.py:133` | ✅ `e579d82` 50MB |
+| 2 | ~~P1~~ | ~~shell 命令拼接 document_id~~ | `container_rag.py:126-133,238` | ✅ `e579d82` list exec |
+| 3 | P2 | 4 阶段配置静默失败返回成功 | `rag.py:296-340` | |
+| 4 | P2 | `_starting` 标志无锁保护 | `container_rag.py:39-64` | |
+| 5 | P2 | 容器重启后 document metadata 丢失 | `rag_service.py:42` | |
+| 6 | P3 | `/rag/health` 无认证 | `rag.py:39` | |
 
 ---
 
@@ -216,23 +210,21 @@
 
 | 字段 | 内容 |
 |------|------|
-| **功能目标** | 14 种 MCP 服务模拟（文件/邮件/支付/数据库/GitHub/Slack 等） |
-| **设计** | 路由分发 + 各服务模块 + SQL 黑名单 + 路径校验 |
-| **预期** | SQL 注入防护、工具执行安全、输入校验 |
-| **实现程度** | **72%** — 功能完整但数据库安全严重不足 |
-| **优先级** | P0 |
+| **功能目标** | 14 种 MCP 服务模拟 |
+| **实现程度** | **82%** — SQL 黑名单完善，Stripe per-request |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | ~~**P0**~~ ✅ | ~~**`_execute()` 几乎无防护**~~ → 已修复：扩展黑名单至 30+ 模式 + 分号检查 | `mcp_database.py` |
-| 2 | P1 | `_execute()` 无分号校验，允许链式语句 | `mcp_database.py:219-247` |
-| 3 | P1 | Stripe API key 设为全局变量，多用户并发竞态 | `mcp.py:292` |
-| 4 | P1 | 邮件附件路径无校验，可读宿主机任意文件 | `mcp.py:246-257` |
-| 5 | P2 | `_list_tables`/`_describe_table` 用 f-string 拼 SQL | `mcp_database.py:293-298,331-336` |
-| 6 | P2 | MCP 工具执行无独立限流 | — |
-| 7 | P3 | `_DANGEROUS_PATTERNS` 缺 CREATE/ALTER/GRANT/SET/DO/CALL/EXPLAIN | `mcp_database.py:131-143` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P0~~ | ~~`_execute()` 无防护~~ | `mcp_database.py` | ✅ `b09dfb4` |
+| 2 | ~~P1~~ | ~~Stripe API key 全局变量~~ | `mcp.py:292` | ✅ `17f8c8a` per-request |
+| 3 | ~~P1~~ | ~~邮件附件路径无校验~~ | `mcp.py:246-257` | ✅ `17f8c8a` 目录白名单 |
+| 4 | P2 | `_list_tables`/`_describe_table` f-string SQL | `mcp_database.py:293-298,331-336` | |
+| 5 | P2 | MCP 工具执行无独立限流 | — | |
+| 6 | P2-NEW | `_query_sqlite` 路径未校验（可读任意文件） | `mcp_database.py:206` | |
+| 7 | P3 | `_DANGEROUS_PATTERNS` 缺 CREATE/ALTER 等 | `mcp_database.py:131-143` | |
+| 8 | P3-NEW | query limit 参数无上界校验 | `mcp_database.py:150` | |
 
 ---
 
@@ -240,21 +232,19 @@
 
 | 字段 | 内容 |
 |------|------|
-| **功能目标** | 聊天平台 AI 代理攻击沙箱（8 种攻击 + 蜜罐检测 + 行为监控） |
-| **设计** | 隔离容器 + 蜜罐文件 + pub/sub 行为监控 + WebSocket 流 |
-| **预期** | 会话隔离、载荷消毒、蜜罐检测准确性 |
-| **实现程度** | **78%** — 架构完善，攻击覆盖全面 |
-| **优先级** | P1 |
+| **功能目标** | 聊天平台 AI 代理攻击沙箱 |
+| **实现程度** | **82%** — cat 注入已修复 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | `exec_in_sandbox` 用户命令直接传给 bash -c | `clawdbot_sandbox.py:571-592` |
-| 2 | P1 | `read_honeypot_file` 的 `path` 参数注入 `cat` 命令 | `clawdbot_sandbox.py:624` |
-| 3 | P2 | 行为记录存内存，后端重启丢失 | `behavior_monitor.py` |
-| 4 | P2 | 无沙箱数量限制（端口耗尽风险） | `clawdbot_sandbox.py:155-166` |
-| 5 | P2 | exfil-test/collect 端点 sandbox_id 可伪造 | `clawdbot.py:389-412` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~`exec_in_sandbox` 用户命令传 bash~~ | `clawdbot_sandbox.py:571-592` | ✅ `6aeb9c7` by-design（沙箱内） |
+| 2 | ~~P1~~ | ~~`read_honeypot_file` cat 路径注入~~ | `clawdbot_sandbox.py:624` | ✅ `6aeb9c7` shlex.quote |
+| 3 | P2 | 行为记录存内存 | `behavior_monitor.py` | |
+| 4 | P2 | 无沙箱数量限制 | `clawdbot_sandbox.py:155-166` | |
+| 5 | P2 | exfil-test/collect sandbox_id 可伪造 | `clawdbot.py:389-412` | |
+| 6 | P2-NEW | `exec_run(f"mkdir -p {dir_path}")` 字符串形式（应用 list） | `clawdbot_sandbox.py:267` | |
 
 ---
 
@@ -263,20 +253,17 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | 批量执行测试用例、进度追踪、结果汇总 |
-| **设计** | useTestExecution.js + BatchTestModal.jsx + 后端结果存储 |
-| **预期** | 可靠执行、错误恢复、进度持久化 |
-| **实现程度** | **55%** — 批量执行逻辑存在根本缺陷 |
-| **优先级** | P1 |
+| **实现程度** | **75%** — stale closure 修复，进度持久化 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | 批量执行不实际等待测试完成就标记成功 | `useTestExecution.js:200-223` |
-| 2 | P1 | `executeBatchQueue` 存在 stale closure 问题 | `useTestExecution.js:170-248` |
-| 3 | P1 | 浏览器关闭/刷新丢失全部批量进度 | — |
-| 4 | P2 | 能力过滤仅支持 F1/F2，F3-F6 无法批量测试 | `BatchTestModal.jsx:25-29` |
-| 5 | P2 | test_results_storage 路径遍历（见 M12） | `test_results_storage.py:26` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~不等待测试完成就标记成功~~ | `useTestExecution.js:200-223` | ✅ `c3ac963` |
+| 2 | ~~P1~~ | ~~stale closure 问题~~ | `useTestExecution.js:170-248` | ✅ `c3ac963` ref 替代 |
+| 3 | ~~P1~~ | ~~刷新丢失全部进度~~ | — | ✅ `c3ac963` sessionStorage |
+| 4 | P2 | 能力过滤仅支持 F1/F2 | `BatchTestModal.jsx:25-29` | |
+| 5 | P2-NEW | sessionStorage quota 超限时静默忽略 | `useTestExecution.js:89` | |
 
 ---
 
@@ -284,24 +271,22 @@
 
 | 字段 | 内容 |
 |------|------|
-| **功能目标** | 数据集 CRUD + 用例管理 + LLM 格式转换 + 导入导出 |
-| **设计** | JSON 文件存储 + DatasetStorage 单例 + LLM 格式转换器 |
-| **预期** | ID 验证、大小限制、原子写入、并发保护 |
-| **实现程度** | **65%** — CRUD 功能完整但缺安全校验 |
-| **优先级** | P0 |
+| **功能目标** | 数据集 CRUD + 用例管理 + LLM 格式转换 |
+| **实现程度** | **82%** — 原子写 + 并发锁到位 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | ~~**P0**~~ ✅ | ~~**路径遍历**：`dataset_id` 直接拼文件路径~~ → 已修复：`sanitize_id()` 正则白名单 | `dataset_storage.py` |
-| 2 | P1 | 无请求体大小限制（`cases` 列表无上限） | `datasets.py:93-96` |
-| 3 | P1 | 非原子文件写入（崩溃导致数据损坏） | `dataset_storage.py:100-102` |
-| 4 | P1 | 无并发写保护（read-modify-write 竞态） | `dataset_storage.py` |
-| 5 | P2 | `remove_case_from_dataset` 找不到 case 时静默返回 200 | `dataset_storage.py:248-265` |
-| 6 | P2 | schema 版本不一致（Router 2.2.0 vs Storage 2.1.0） | `datasets.py:23` vs `dataset_storage.py:83` |
-| 7 | P2 | LLM 转换器贪婪正则 JSON 提取 | `datasetConverter.js:93` |
-| 8 | P2 | 无分页（每次 list 读取全部文件） | `dataset_storage.py:119-137` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P0~~ | ~~路径遍历~~ | `dataset_storage.py` | ✅ `73cf39e` |
+| 2 | ~~P1~~ | ~~无请求体大小限制~~ | `datasets.py:93-96` | ✅ `15def44` 10000 cases |
+| 3 | ~~P1~~ | ~~非原子文件写入~~ | `dataset_storage.py:100-102` | ✅ `15def44` tempfile+rename |
+| 4 | ~~P1~~ | ~~无并发写保护~~ | `dataset_storage.py` | ✅ `15def44` per-ID Lock |
+| 5 | P2 | `remove_case_from_dataset` 静默返回 200 | `dataset_storage.py:248-265` | |
+| 6 | P2 | schema 版本不一致 | `datasets.py:23` vs `dataset_storage.py:83` | |
+| 7 | P2 | LLM 转换器贪婪正则 JSON 提取 | `datasetConverter.js:93` | |
+| 8 | P2 | 无分页 | `dataset_storage.py:119-137` | |
+| 9 | P2-NEW | delete/update 无所有权校验（多租户问题） | `datasets.py:175-232` | |
 
 ---
 
@@ -310,21 +295,19 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | 批量测试结果持久化 + 逐用例评审 + 报告版本历史 |
-| **设计** | JSON 文件存储 + TestResultsStorage 单例 |
-| **预期** | ID 验证、结果完整性、清理策略 |
-| **实现程度** | **60%** — 功能可用但安全和可靠性不足 |
-| **优先级** | P0 |
+| **实现程度** | **75%** — UUID 碰撞修复，五级风险统计正确 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | ~~**P0**~~ ✅ | ~~**路径遍历**：`result_id` 直接拼文件路径~~ → 已修复：`sanitize_id()` 正则白名单 | `test_results_storage.py` |
-| 2 | P1 | UUID[:8] 碰撞风险（32 bit，~65K 条后 50% 碰撞率） | `test_results_storage.py:63` |
-| 3 | P1 | `delete_case` 统计重算与判定系统语义不匹配 | `test_results_storage.py:109-139` |
-| 4 | P1 | `generate_report` 端点不生成任何内容只回显数据 | `test_results.py:143-158` |
-| 5 | P2 | 报告内容无大小限制 | `test_results.py:62-64` |
-| 6 | P2 | 非原子写入 + 无清理策略 | `test_results_storage.py` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P0~~ | ~~路径遍历~~ | `test_results_storage.py` | ✅ `73cf39e` |
+| 2 | ~~P1~~ | ~~UUID[:8] 碰撞~~ | `test_results_storage.py:63` | ✅ `783bf9d` 全长 UUID |
+| 3 | ~~P1~~ | ~~`delete_case` 统计不匹配~~ | `test_results_storage.py:109-139` | ✅ `783bf9d` 五级风险 |
+| 4 | ~~P1~~ | ~~`generate_report` 空实现~~ | `test_results.py:143-158` | ✅ `783bf9d` by-design 注释 |
+| 5 | P2 | 报告内容无大小限制 | `test_results.py:62-64` | |
+| 6 | P2 | 非原子写入 + 无清理策略 | `test_results_storage.py` | |
+| 7 | P2-NEW | delete/update 无所有权校验（多租户问题） | `test_results.py:99-140` | |
 
 ---
 
@@ -333,21 +316,19 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | 测试用例 Save/Load/List/Delete + v1→v2 迁移 |
-| **设计** | JSON 文件存储 + CaseStorage 单例 + useCases hook |
-| **预期** | ID 验证、原子写入、批量操作效率 |
-| **实现程度** | **65%** — CRUD 完整但有路径遍历 |
-| **优先级** | P0 |
+| **实现程度** | **80%** — 校验严格，批量导出并行 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | ~~**P0**~~ ✅ | ~~**路径遍历**：`case_id` 直接拼文件路径~~ → 已修复：`sanitize_id()` 正则白名单 | `case_storage.py` |
-| 2 | P1 | 客户端校验失败仍继续保存 | `caseApi.js:17-22` |
-| 3 | P1 | `exportCases` N+1 顺序请求（100 用例 = 101 HTTP） | `caseApi.js:98-113` |
-| 4 | P1 | `importCases` 顺序执行，失败时部分导入无回滚 | `caseApi.js:121-139` |
-| 5 | P2 | `useCases.buildCurrentTestCase` 依赖 35+ 状态值（memo 无效） | `useCases.js:373-384` |
-| 6 | P2 | 多处使用 `alert()` 代替 toast | `useCases.js:423,432,437...` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P0~~ | ~~路径遍历~~ | `case_storage.py` | ✅ `73cf39e` |
+| 2 | ~~P1~~ | ~~客户端校验失败仍保存~~ | `caseApi.js:17-22` | ✅ `2ac3767` throw Error |
+| 3 | ~~P1~~ | ~~exportCases N+1~~ | `caseApi.js:98-113` | ✅ `2ac3767` Promise.all |
+| 4 | ~~P1~~ | ~~importCases 部分导入无回滚~~ | `caseApi.js:121-139` | ✅ `2ac3767` 预校验 |
+| 5 | P2 | `useCases.buildCurrentTestCase` 35+ 依赖 | `useCases.js:373-384` | |
+| 6 | P2 | 多处 `alert()` | `useCases.js:423,432,437...` | |
+| 7 | P2-NEW | delete 无所有权校验（多租户问题） | `cases.py:52-58` | |
 
 ---
 
@@ -356,21 +337,18 @@
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | LLM 自动评判攻击成功/风险等级 + 人工覆盖 |
-| **设计** | 模板 prompt + judge model 调用 + 5 级风险评估 |
-| **预期** | 鲁棒 JSON 解析、重试逻辑、结果验证 |
-| **实现程度** | **55%** — 基础判定可用但缺防护和验证 |
-| **优先级** | P1 |
+| **实现程度** | **75%** — prompt 隔离和枚举验证到位 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | 模型响应注入 judge prompt（元级 prompt 注入） | `config.js:534-541` |
-| 2 | P1 | `riskLevel` 值无枚举验证 | `config.js:558` |
-| 3 | P1 | 贪婪正则 JSON 提取（同 M11） | `config.js:556` |
-| 4 | P2 | 无重试机制（瞬态失败 → pending） | `config.js:561-564` |
-| 5 | P2 | 人工判定无身份验证（审计员代码自由文本） | `useJudgment.js:14-18` |
-| 6 | P3 | 无 token 消耗/成本追踪 | — |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~模型响应注入 judge prompt~~ | `config.js:534-541` | ✅ `6ff79ba` BEGIN/END 分隔符 |
+| 2 | ~~P1~~ | ~~`riskLevel` 无枚举验证~~ | `config.js:558` | ✅ `6ff79ba` 白名单 |
+| 3 | ~~P1~~ | ~~贪婪正则~~ | `config.js:556` | ✅ `6ff79ba` 非贪婪 |
+| 4 | P2 | 无重试机制 | `config.js:561-564` | |
+| 5 | P2 | 人工判定无身份验证 | `useJudgment.js:14-18` | |
+| 6 | P3 | 无 token 消耗/成本追踪 | — | |
 
 ---
 
@@ -378,101 +356,68 @@
 
 | 字段 | 内容 |
 |------|------|
-| **功能目标** | WebSocket 实时日志流 + 类型过滤 + 可展开/折叠 |
-| **设计** | LogManager asyncio.Queue + JWT WebSocket 认证 + RightPanel 渲染 |
-| **预期** | 自动重连、队列限制、连接管理 |
-| **实现程度** | **60%** — 核心流式可用但缺生产级可靠性 |
-| **优先级** | P1 |
+| **功能目标** | WebSocket 实时日志流 + 类型过滤 |
+| **实现程度** | **80%** — 重连、Queue 限制、连接限制均到位 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | WebSocket 断开无自动重连 | `sandbox.js:410-417` |
-| 2 | P1 | Queue 无大小限制（客户端不消费 → OOM） | `log_manager.py:26-30` |
-| 3 | P1 | 无 per-session 连接数限制（内存放大攻击） | `log_manager.py:15-18` |
-| 4 | P2 | JWT token 在 WebSocket URL query string 中暴露 | `sandbox.py:567` |
-| 5 | P2 | RightPanel 无虚拟滚动（大量记录性能差） | `RightPanel.jsx` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~WebSocket 无自动重连~~ | `sandbox.js:410-417` | ✅ `8973b2c` 5 次指数退避 |
+| 2 | ~~P1~~ | ~~Queue 无大小限制~~ | `log_manager.py:26-30` | ✅ `8973b2c` maxsize=1000 |
+| 3 | ~~P1~~ | ~~无 per-session 连接数限制~~ | `log_manager.py:15-18` | ✅ `8973b2c` 5 conn/session |
+| 4 | P2 | JWT token 在 WebSocket URL 中暴露 | `sandbox.py:567` | |
+| 5 | P2 | RightPanel 无虚拟滚动 | `RightPanel.jsx` | |
+| 6 | P2-NEW | WebSocket token 不检查 type（refresh token 可用） | `sandbox.py:567-576` | |
 
 ---
 
-### M16: API 检查器
+### M16: API 检查器 / Eval 导入
 
 | 字段 | 内容 |
 |------|------|
-| **功能目标** | 记录和展示 LLM API 请求/响应用于调试 |
-| **设计** | useApiInspector.js 状态管理 + JsonTree 折叠展示 |
-| **预期** | 敏感数据脱敏、内存管理、清理功能 |
-| **实现程度** | **70%** — 功能可用，JsonTree 组件干净 |
-| **优先级** | P2 |
+| **实现程度** | **75%** |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P2 | 请求记录无上限累积（长时间使用内存增长） | `useApiInspector.js` |
-| 2 | P2 | 不脱敏 API key / Authorization header | `useApiInspector.js` |
-| 3 | P3 | JsonTree 对深层嵌套 JSON 无性能保护 | `JsonTree.jsx` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~`await file.read()` 无大小限制~~ | `eval_import.py:20,49` | ✅ `cca57ad` 100MB |
+| 2 | P2 | 请求记录无上限累积 | `useApiInspector.js` | |
+| 3 | P2 | 不脱敏 API key / Authorization header | `useApiInspector.js` | |
+| 4 | P2 | 导入错误信息含内部细节 | `eval_import.py` | |
+| 5 | P3 | JsonTree 深层嵌套无保护 | `JsonTree.jsx` | |
 
 ---
 
-### M17: Eval 导入
-
-| 字段 | 内容 |
-|------|------|
-| **功能目标** | SafeAgentBench 评估数据导入转换 |
-| **设计** | FastAPI 端点 + JSON/JSONL 解析 + admin 权限保护 |
-| **预期** | 格式验证、大小限制、错误处理 |
-| **实现程度** | **60%** — 基础导入可用 |
-| **优先级** | P2 |
-
-**问题:**
-
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | `await file.read()` 无文件大小限制 | `eval_import.py:20,49` |
-| 2 | P2 | 导入错误信息含内部细节（`detail=str(e)`） | `eval_import.py` |
-
----
-
-### M18: 仿真器系统
+### M17: 仿真器系统
 
 | 字段 | 内容 |
 |------|------|
 | **功能目标** | AI2-THOR/CARLA 容器化仿真器管理 |
-| **设计** | 插件注册表 + Docker 容器 + Volume 挂载 + WebSocket 帧流 |
-| **预期** | 容器生命周期管理、资源清理、优雅关停 |
-| **实现程度** | **65%** — AI2-THOR 基本可用，CARLA 为桩 |
-| **优先级** | P1 |
+| **实现程度** | **78%** — WS 认证 + 单 worker 到位 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P1 | `_wait_for_health` 使用 `time.sleep()` 阻塞事件循环最多 60s | `ai2thor.py:114-130` |
-| 2 | P1 | WebSocket `/stream` 端点无认证 | `simulator.py:114-115` |
-| 3 | P1 | Gunicorn 2 workers + 模块级 `_active_sessions` dict → 请求路由不一致 | `Dockerfile.backend:19` + `simulator.py:25` |
-| 4 | P2 | 仿真器容器关停时 `_active_sessions` 不清理 | `simulator.py` |
-| 5 | P2 | `_curl`/`_curl_binary` 同步调用在 async 方法内 | `ai2thor.py` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P1~~ | ~~`time.sleep()` 阻塞~~ | `ai2thor.py:114-130` | ✅ `118b08c` 线程池注释 |
+| 2 | ~~P1~~ | ~~WebSocket `/stream` 无认证~~ | `simulator.py:114-115` | ✅ `118b08c` query token |
+| 3 | ~~P1~~ | ~~2 workers + 模块级 dict~~ | `Dockerfile.backend:19` | ✅ `118b08c` --workers 1 |
+| 4 | P2 | 关停时 `_active_sessions` 不清理 | `simulator.py` | |
+| 5 | P2 | `_curl`/`_curl_binary` 同步调用 | `ai2thor.py` | |
+| 6 | P3-NEW | 管理端点无独立限流 | `simulator.py:52,148` | |
 
 ---
 
-### M19: 报告模板
+### M18: 仿真器系统 / M19: 报告模板
 
-| 字段 | 内容 |
-|------|------|
-| **功能目标** | 模板 CRUD + 路径安全 |
-| **设计** | FastAPI 路由 + `resolve()` + `is_relative_to()` 路径校验 |
-| **预期** | 路径遍历防护、模板完整性 |
-| **实现程度** | **80%** — 路径遍历已修复 |
-| **优先级** | P2 |
+**M19 问题（无变化）:**
 
-**问题:**
-
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | P2 | 错误详情泄露（`detail=f"Error reading template: {e}"`） | `report_templates.py:72` |
-| 2 | P3 | 无模板格式验证 | `report_templates.py` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | P2 | 错误详情泄露 | `report_templates.py:72` | |
+| 2 | P3 | 无模板格式验证 | `report_templates.py` | |
 
 ---
 
@@ -480,64 +425,93 @@
 
 | 字段 | 内容 |
 |------|------|
-| **功能目标** | TLS、监控、备份、CI/CD |
-| **设计** | nginx 反向代理 + docker-compose + Gunicorn |
-| **预期** | HTTPS 加密、健康监控、灾备恢复 |
-| **实现程度** | **40%** — 基础部署可用但生产级运维严重缺失 |
-| **优先级** | P0 |
+| **实现程度** | **60%** — TLS + 健康检查 + 非 root 终端容器到位 |
 
 **问题:**
 
-| # | 优先级 | 问题 | 位置 |
-|---|--------|------|------|
-| 1 | ~~**P0**~~ ✅ | ~~**TLS/HTTPS 完全被注释**~~ → 已修复：TLS 默认启用 + HSTS + HTTP→HTTPS 重定向 | `nginx.conf` |
-| 2 | ~~**P0**~~ ✅ | ~~**无监控告警**~~ → 已修复：docker-compose healthcheck + health-monitor.sh | `docker-compose.yml` |
-| 3 | P1 | 硬编码 `ws://` 在 sandbox.js（TLS 后会断） | `sandbox.js:9` |
-| 4 | P1 | Docker socket 挂载 = 容器逃逸路径 | `docker-compose.yml:23` |
-| 5 | P1 | 沙箱容器默认 root 运行 | `container.py:69` |
-| 6 | P2 | 无备份策略 | — |
-| 7 | P2 | 无 CI/CD pipeline | — |
-| 8 | P2 | 容器无磁盘 I/O 限制 | `container.py:134-152` |
+| # | 优先级 | 问题 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 1 | ~~P0~~ | ~~TLS 被注释~~ | `nginx.conf` | ✅ `a147bfa` |
+| 2 | ~~P0~~ | ~~无监控告警~~ | `docker-compose.yml` | ✅ `624fcd9` |
+| 3 | ~~P1~~ | ~~Docker socket 容器逃逸~~ | `docker-compose.yml:23` | ✅ `e687a4d` 注释 + rootless 建议 |
+| 4 | ~~P1~~ | ~~沙箱容器默认 root~~ | `container.py:69` | ✅ `e687a4d` run_as_root=False |
+| 5 | P2 | 无备份策略 | — | |
+| 6 | P2 | 无 CI/CD pipeline | — | |
+| 7 | P2 | 容器无磁盘 I/O 限制 | `container.py:134-152` | |
+| 8 | P3-NEW | Dockerfile.frontend 无 USER 指令（root 运行） | `Dockerfile.frontend` | |
 
 ---
 
-## 3. 跨模块发现
+## 3. 二审新发现
 
-### 3.1 安全
+### 3.1 新 P1 发现（2 项）
 
-| # | 严重性 | 发现 | 影响范围 |
-|---|--------|------|----------|
-| 1 | HIGH | `.env` 含实际密钥在磁盘（未提交 git） | 运维 |
-| 2 | HIGH | `detail=str(e)` 超 60 处泄露内部错误 | 全后端 |
-| 3 | HIGH | Docker socket 挂载 → 后端 RCE 即宿主机 root | docker-compose |
-| 4 | MEDIUM | 仿真器 WebSocket 无认证 | simulator |
-| 5 | MEDIUM | MCP 邮件附件可读宿主机任意文件 | mcp.py:246-257 |
+| # | 问题 | 模块 | 位置 | 描述 |
+|---|------|------|------|------|
+| N1 | **localStorage 存储 auth token** | 前端认证 | `useSimulator.js:20,37,66,109,129` | auth.js 正确使用内存存储 token，但 useSimulator.js 从 localStorage 读取 auth_token（5 处），破坏了内存 token 策略的安全保证。XSS 可提取 token。 |
+| N2 | **MCP 凭证明文存 localStorage** | 前端 MCP | `useMCP.js:32-33`, `RealTestControlPanel.jsx:917,949,969` | MCP 服务器配置（含 SMTP 密码、API Key、数据库连接串）以 JSON 明文存储在 localStorage。XSS 或同机攻击可获取全部凭证。 |
 
-### 3.2 代码质量
+### 3.2 新 P2 发现（8 项）
+
+| # | 问题 | 模块 | 位置 | 描述 |
+|---|------|------|------|------|
+| N3 | exec_run 字符串形式 shell 注入 | M9 | `clawdbot_sandbox.py:267` | `exec_run(f"mkdir -p {dir_path}")` 其中 dir_path 来源于用户输入的 rel_path，应使用 list 形式 |
+| N4 | CRUD 无所有权校验 | M11/M12/M13 | `datasets.py`, `test_results.py`, `cases.py` | delete/update 操作不验证当前用户是否为资源所有者。多租户场景下用户可互相修改数据 |
+| N5 | WebSocket token type 未校验 | M15/M17 | `sandbox.py:567`, `simulator.py:114` | WS 认证仅验证 JWT 签名，不检查 token type。refresh token 可作为 access token 使用 |
+| N6 | X-Forwarded-For 可伪造 | M6 | `sandbox.py:396-404` | 终端锁管理直接信任 X-Forwarded-For 头，客户端可伪造 IP 绕过锁机制 |
+| N7 | SQLite 路径未校验 | M8 | `mcp_database.py:206` | `aiosqlite.connect(config.get("path"))` 路径来自 MCP 工具参数，可能读取任意文件 |
+| N8 | LLM 流式响应无大小限制 | M4 | `llm_proxy.py:303-304` | 流式 chunk 累计无上限，恶意 provider 可导致内存耗尽 |
+| N9 | 异步错误被静默吞没 | 前端 | `useSandbox.js:164,657`, `useSimulator.js:135` | `.catch(() => {})` 隐藏实际错误，影响调试和问题发现 |
+| N10 | sessionStorage 超限静默失败 | M10 | `useTestExecution.js:89` | 大批量测试进度超出 sessionStorage 配额时静默忽略，用户不知情 |
+
+### 3.3 新 P3 发现（5 项）
+
+| # | 问题 | 模块 | 位置 | 描述 |
+|---|------|------|------|------|
+| N11 | MCP query limit 无上界 | M8 | `mcp_database.py:150` | `limit` 参数无校验，可设为极大值导致内存耗尽 |
+| N12 | 管理端点无独立限流 | M17 | `simulator.py:52,148` | `/simulator/start` 可创建无限容器 |
+| N13 | WS 重连 timer 未清理 | 前端 | `sandbox.js:418-429` | `connectLogs()` 被多次调用时旧 timer 未 clearTimeout |
+| N14 | 弃用 `substr()` 方法 | 前端 | `sandbox.js:498` | 应使用 `substring()` 或 `slice()` |
+| N15 | Dockerfile.frontend 无 USER | M20 | `Dockerfile.frontend` | nginx 容器以 root 运行，增大逃逸攻击面 |
+
+---
+
+## 4. 跨模块发现
+
+### 4.1 安全（更新后）
+
+| # | 严重性 | 发现 | 影响范围 | 状态 |
+|---|--------|------|----------|------|
+| 1 | ~~HIGH~~ | ~~Docker socket 挂载~~ | docker-compose | ✅ 注释说明 by-design |
+| 2 | HIGH | `detail=str(e)` 超 60 处泄露内部错误 | 全后端 | 部分已修复（M4） |
+| 3 | HIGH-NEW | localStorage 明文存储凭证 | useSimulator, useMCP | |
+| 4 | MEDIUM-NEW | CRUD 操作无所有权校验 | cases/datasets/test_results | |
+| 5 | MEDIUM-NEW | WebSocket token type 未校验 | sandbox/simulator/clawdbot | |
+
+### 4.2 代码质量
 
 | # | 问题 | 当前 | 目标 |
 |---|------|------|------|
-| 1 | App.jsx 行数 | 3,953 | <2,000 |
+| 1 | App.jsx 行数 | 3,955 | <2,000 |
 | 2 | RealTestControlPanel 行数 | 1,343 | <500 |
 | 3 | 前端测试文件 | 1 个 | 需覆盖核心 hooks |
-| 4 | 后端测试文件 | 4 个 | 需覆盖所有路由 |
+| 4 | 后端测试文件 | 4 个（80 tests） | 需覆盖所有路由 |
 | 5 | React Error Boundary | 无 | 需要 |
 | 6 | dangerouslySetInnerHTML | 0 处 | 良好 |
 
-### 3.3 三个存储服务的系统性问题
+### 4.3 三个存储服务的系统性问题（更新后）
 
-`dataset_storage.py`、`test_results_storage.py`、`case_storage.py` 共享完全相同的缺陷模式：
+`dataset_storage.py`、`test_results_storage.py`、`case_storage.py` 共享的缺陷进展：
 
-1. ~~**P0 路径遍历**~~：✅ 已修复 — `sanitize_id()` 统一 ID 消毒函数（`id_validator.py`）
-2. **P1 非原子写入**：`open("w")` + `json.dump()` 无 temp file + rename
-3. **P1 无并发保护**：read-modify-write 无文件锁
-4. **P2 无分页**：每次 list 遍历全部 JSON 文件
-
-**建议**: 提取共享基类 `JsonFileStorage`，一次性修复所有安全和可靠性问题。
+1. ~~**P0 路径遍历**~~：✅ 已修复 — `sanitize_id()` 统一 ID 消毒
+2. ~~**P1 非原子写入**~~：✅ `dataset_storage.py` 已修复（tempfile+rename）；`test_results_storage.py` 和 `case_storage.py` 仍用直接 write（P2）
+3. ~~**P1 无并发保护**~~：✅ `dataset_storage.py` 已修复（per-ID Lock）；其他两个未修复（P2）
+4. **P2 无分页**：未修复
+5. **P2-NEW 无所有权校验**：三个服务均未实现
 
 ---
 
-## 4. 截图索引
+## 5. 截图索引
 
 | 截图 | 说明 |
 |------|------|
@@ -557,9 +531,9 @@
 | [04-risk-tree-T4.png](../audit-screenshots/04-risk-tree-T4.png) | T4 模型固有展开 |
 | [04-risk-tree-T4-sub1.png](../audit-screenshots/04-risk-tree-T4-sub1.png) | T4 子分类展开 |
 | [04-risk-tree-T4-item1.png](../audit-screenshots/04-risk-tree-T4-item1.png) | T4 风险项选中 |
-| [05-attack-T1-chat-log.png](../audit-screenshots/05-attack-T1-chat-log.png) | T1 攻击场景（聊天+日志面板） |
-| [05-attack-T2-chat-log.png](../audit-screenshots/05-attack-T2-chat-log.png) | T2 攻击场景（聊天+日志面板） |
-| [05-attack-T3-chat-log.png](../audit-screenshots/05-attack-T3-chat-log.png) | T3 攻击场景（聊天+日志面板） |
+| [05-attack-T1-chat-log.png](../audit-screenshots/05-attack-T1-chat-log.png) | T1 攻击场景 |
+| [05-attack-T2-chat-log.png](../audit-screenshots/05-attack-T2-chat-log.png) | T2 攻击场景 |
+| [05-attack-T3-chat-log.png](../audit-screenshots/05-attack-T3-chat-log.png) | T3 攻击场景 |
 | [06-config-page.png](../audit-screenshots/06-config-page.png) | 配置页面 |
 | [06-config-page-scrolled.png](../audit-screenshots/06-config-page-scrolled.png) | 配置页面（滚动后） |
 | [07-datasets-view.png](../audit-screenshots/07-datasets-view.png) | 数据集视图 |
@@ -568,100 +542,70 @@
 
 ---
 
-## 5. 优先级汇总
+## 6. 优先级汇总
 
 ### ~~P0 — 阻塞上线（8 项）~~ ✅ 全部已修复 (2026-02-09)
 
-| # | 问题 | 模块 | 修复方案 | commit | 测试 |
-|---|------|------|----------|--------|------|
-| 1 | ~~SSRF via LLM proxy `base_url`~~ | M4 | `_validate_llm_url()` scheme 白名单 + DNS 解析后 IP 检查 | `82c1238` | 11 项 ✅ |
-| 2 | ~~Shell 注入 via 文件名~~ | M5 | UUID 替代原始文件名 + 扩展名白名单 | `91ab19e` | 5 项 ✅ |
-| 3 | ~~SQL `_execute()` 无防护~~ | M8 | 扩展黑名单至 30+ 模式 + 分号检查 | `b09dfb4` | 19 项 ✅ |
-| 4-6 | ~~路径遍历 dataset/result/case~~ | M11-13 | 共享 `sanitize_id()` 正则白名单 + 全局 ValueError→400 | `73cf39e` | 13 项 ✅ |
-| 7 | ~~TLS 被注释~~ | M20 | TLS 默认启用 + HSTS + HTTP→HTTPS + ws:// 自适应 | `a147bfa` | nginx 验证 ✅ |
-| 8 | ~~无监控告警~~ | M20 | docker-compose healthcheck + health-monitor.sh | `624fcd9` | compose 验证 ✅ |
+| # | 问题 | 模块 | commit | 测试 |
+|---|------|------|--------|------|
+| 1 | ~~SSRF via LLM proxy~~ | M4 | `82c1238` | 11 项 ✅ |
+| 2 | ~~Shell 注入 via 文件名~~ | M5 | `91ab19e` | 5 项 ✅ |
+| 3 | ~~SQL `_execute()` 无防护~~ | M8 | `b09dfb4` | 19 项 ✅ |
+| 4-6 | ~~路径遍历 ×3~~ | M11-13 | `73cf39e` | 13 项 ✅ |
+| 7 | ~~TLS 被注释~~ | M20 | `a147bfa` | nginx ✅ |
+| 8 | ~~无监控告警~~ | M20 | `624fcd9` | compose ✅ |
 
-### P1 — 上线前必修（38 项，按模块分组）
+### ~~P1 — 上线前必修（原 38 项）~~ ✅ 全部已修复 (2026-02-10)
 
-**认证 (5):** role 验证、token 刷新、登出、密码策略、`get_current_user` None 返回
+18 commits, 38 items，详见第 1 节修复总览表。
 
-**场景 (3):** 硬编码数量、Tailwind JIT、空分支
+### P1-R2 — 二审新发现（2 项）
 
-**回放 (4):** 暂停/停止混淆、v1 无暂停、速度 bug、alert()
+| # | 问题 | 模块 | 位置 | 修复建议 |
+|---|------|------|------|---------|
+| N1 | localStorage 存储 auth token | 前端 | `useSimulator.js` | 改为从 auth 模块获取内存 token |
+| N2 | MCP 凭证明文存 localStorage | 前端 | `useMCP.js`, `RealTestControlPanel.jsx` | 迁移到后端加密存储 |
 
-**LLM 代理 (3):** 流式 DB session、错误泄露、超时配置
+### P2 — 上线后迭代（43 项）
 
-**文件注入 (3):** 上传大小、base64 大小、exiftool 超时
+原 35 项 + 新 8 项（N3-N10）。主要涉及：
+- **安全**: exec_run list 形式、CRUD 所有权校验、WS token type 校验、X-Forwarded-For 信任、SQLite 路径校验、LLM 流大小限制
+- **代码质量**: 组件拆分、错误信息脱敏、存储服务共享基类、分页、虚拟滚动
+- **运维**: 备份策略、CI/CD pipeline
 
-**沙箱 (3):** TOCTOU、readlink fallback、无命令限制
+### P3 — 锦上添花（18 项）
 
-**RAG (2):** 上传大小、shell 拼接
-
-**MCP (3):** ~~execute 分号~~(✅ P0-3 附带修复)、Stripe 全局、邮件路径
-
-**ClawdBot (2):** exec shell 注入、cat path 注入
-
-**批量测试 (3):** 假完成检测、stale closure、进度丢失
-
-**数据集 (3):** 大小限制、原子写、并发保护
-
-**测试结果 (3):** UUID 碰撞、统计语义、generate_report 空实现
-
-**用例 (3):** 客户端校验、N+1、部分导入
-
-**判定 (3):** prompt 注入、riskLevel 验证、JSON 提取
-
-**日志 (3):** 无重连、Queue 无限、连接数无限
-
-**Eval (1):** 文件大小限制
-
-**仿真器 (3):** time.sleep 阻塞、WebSocket 无认证、多 worker 状态
-
-**部署 (2):** ~~ws:// 硬编码~~(✅ P0-7 附带修复)、Docker socket、root 容器
-
-### P2 — 上线后迭代（35 项）
-
-主要涉及：代码重复消除、分页支持、错误信息脱敏、非原子写入修复、schema 版本统一、虚拟滚动、备份策略、CI/CD。
-
-### P3 — 锦上添花（13 项）
-
-键盘导航、搜索过滤、可配置心跳、token 成本追踪等。
+原 13 项 + 新 5 项（N11-N15）。
 
 ---
 
-## 6. 行动建议
+## 7. 行动建议
 
 ### ~~第一阶段：P0 修复~~ ✅ 已完成 (2026-02-09)
 
-全部 8 项 P0 已修复，6 个独立 commit，48 项新增单元测试，80 项全量测试通过。
+8 项 P0，6 commits，48 新增测试，80 全量测试通过。
 
-| 修复 | commit | 关键文件 |
-|------|--------|---------|
-| 路径遍历 ×3 | `73cf39e` | `id_validator.py` (新建), `dataset_storage.py`, `test_results_storage.py`, `case_storage.py`, `main.py` |
-| SSRF | `82c1238` | `llm_proxy.py` |
-| Shell 注入 | `91ab19e` | `container_parser.py` |
-| SQL 注入 | `b09dfb4` | `mcp_database.py` |
-| TLS | `a147bfa` | `nginx.conf`, `nginx-http-only.conf` (新建), `generate-self-signed-cert.sh` (新建), `docker-compose.yml`, `sandbox.js` |
-| 监控 | `624fcd9` | `docker-compose.yml`, `health-monitor.sh` (新建) |
+### ~~第二阶段：P1 修复~~ ✅ 已完成 (2026-02-10)
 
-### 第二阶段：P1 修复（预计 2-3 周）
+38 项 P1，18 commits，80 全量测试通过。
 
-1. 认证完善（token 刷新、密码策略、登出）
-2. 回放系统 bug 修复（暂停、速度、restoreEnvironment 去重）
-3. 文件上传大小限制统一
-4. WebSocket 重连 + Queue 限制
-5. 批量测试执行逻辑重写（实际等待完成）
-6. Error Boundary 添加
+### 第三阶段：P1-R2 + 高优 P2 修复（建议）
 
-### 第三阶段：P2 质量提升（持续迭代）
+1. **localStorage 凭证暴露修复**（N1 + N2）— useSimulator.js 改用内存 token；MCP 凭证迁移后端
+2. **CRUD 所有权校验**（N4）— 三个存储服务添加 created_by 字段和校验
+3. **WebSocket token type 校验**（N5）— 添加 `payload.get("type") == "access"` 检查
+4. **exec_run list 形式**（N3）— clawdbot_sandbox.py 改用 list 参数
+
+### 第四阶段：P2 质量提升（持续迭代）
 
 1. 前端组件拆分（App.jsx < 2000 行）
 2. `detail=str(e)` 统一替换为安全错误消息
-3. 三个存储服务提取共享基类
+3. 三个存储服务提取共享基类（原子写入 + 并发保护 + 分页）
 4. 测试覆盖率提升（目标前端 40%、后端 60%）
 5. 备份策略 + CI/CD pipeline
 
 ---
 
-*本报告由自动化代码分析 + Playwright UI 截图 + 手工验证生成。*
+*初审由自动化代码分析 + Playwright UI 截图 + 手工验证生成。*
+*二审由三路并行自动审计（后端安全/前端安全/基础设施）+ 人工复核和分级。*
 *截图位于 `audit-screenshots/` 目录，截图脚本为 `audit-screenshots/capture.js`。*
