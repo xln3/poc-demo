@@ -20,6 +20,9 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     volumes:
+      # Docker socket is required for managing sandbox containers (terminal,
+      # RAG, parser, simulator). In production, consider rootless Docker or
+      # a remote Docker API endpoint to reduce container-escape risk.
       - /var/run/docker.sock:/var/run/docker.sock
       - poc-demo-data:/poc-data
       - backend-logs:/app/logs

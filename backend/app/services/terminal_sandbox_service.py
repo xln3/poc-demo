@@ -174,7 +174,8 @@ class MultiTerminalSandboxService:
                 image=image.value,
                 session_id=session_id,
                 mem_limit=mem_limit,
-                volumes={mount_path: {'bind': '/workspace', 'mode': 'rw'}}
+                volumes={mount_path: {'bind': '/workspace', 'mode': 'rw'}},
+                run_as_root=False,
             )
 
             # 5. 更新注册表
