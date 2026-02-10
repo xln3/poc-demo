@@ -142,14 +142,16 @@ async def update_report(result_id: str, request: UpdateReport):
 
 @router.post("/{result_id}/report/generate")
 async def generate_report(result_id: str, request: GenerateRequest):
-    """Generate a text report using LLM."""
-    # Get the test result data
+    """Prepare data for LLM-based report generation.
+
+    By design, this endpoint does NOT call the LLM itself. It returns
+    the test result data so the frontend can call the LLM via its own
+    provider configuration (which includes the user's API key).
+    """
     result = test_results_storage.get_result(result_id)
     if not result:
         raise HTTPException(status_code=404, detail="Test result not found")
 
-    # Return data for frontend to call LLM
-    # (LLM call is done on frontend to use existing API config)
     return {
         "success": True,
         "prompt": request.prompt,

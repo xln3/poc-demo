@@ -62,7 +62,7 @@ class TestResultsStorage:
     def save_result(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Save a test result."""
         # Generate ID if not provided
-        result_id = data.get("id") or str(uuid.uuid4())[:8]
+        result_id = data.get("id") or str(uuid.uuid4())
 
         # Add metadata
         data["id"] = result_id
@@ -124,15 +124,18 @@ class TestResultsStorage:
         data["results"] = new_results
         data["updatedAt"] = datetime.now().isoformat()
 
-        # Update statistics
+        # Recalculate statistics by five-level risk
         if "meta" in data and "statistics" in data["meta"]:
             stats = data["meta"]["statistics"]
             stats["total"] = len(new_results)
-            # Recalculate success/fail counts
-            success_count = sum(1 for r in new_results if r.get("judgment", {}).get("success") is True)
-            fail_count = sum(1 for r in new_results if r.get("judgment", {}).get("success") is False)
-            stats["success"] = success_count
-            stats["fail"] = fail_count
+            risk_counts = {"high": 0, "medium": 0, "low": 0, "safe": 0, "pending": 0}
+            for r in new_results:
+                level = r.get("riskLevel") or r.get("judgment", {}).get("riskLevel") or "pending"
+                if level in risk_counts:
+                    risk_counts[level] += 1
+                else:
+                    risk_counts["pending"] += 1
+            stats.update(risk_counts)
 
         path = self._get_result_path(result_id)
         with open(path, "w", encoding="utf-8") as f:
