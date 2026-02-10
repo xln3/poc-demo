@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+import shlex
 import uuid
 import json
 from datetime import datetime
@@ -621,7 +622,7 @@ Content-Type: text/plain; charset=utf-8
         # 尝试从容器读取
         if sandbox_id in self._sandboxes:
             try:
-                exit_code, stdout, stderr = self.exec_in_sandbox(sandbox_id, f"cat {path}")
+                exit_code, stdout, stderr = self.exec_in_sandbox(sandbox_id, f"cat {shlex.quote(path)}")
                 return False, stdout if exit_code == 0 else ""
             except Exception:
                 return False, ""
