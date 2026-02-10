@@ -367,15 +367,15 @@ export default function LeftSidebar({
         onClick={() => setScenarioListExpanded(!scenarioListExpanded)}
         className="w-full flex items-center justify-between px-2 py-1.5 mb-2 rounded text-xs font-medium bg-slate-700 hover:bg-slate-600"
       >
-        <span>📋 风险测试项 (27)</span>
+        <span>📋 风险测试项 ({Object.values(riskTree).reduce((sum, cat) => sum + Object.values(cat.subcategories).reduce((s, sub) => s + sub.riskItems.length, 0), 0)})</span>
         <span className="text-slate-400">{scenarioListExpanded ? '−' : '+'}</span>
       </button>
 
       {scenarioListExpanded && Object.entries(riskTree).map(([catId, cat]) => {
         const subEntries = Object.entries(cat.subcategories);
         const itemCount = subEntries.reduce((sum, [, sub]) => sum + sub.riskItems.length, 0);
-        if (itemCount === 0 && subEntries.every(([, sub]) => sub.riskItems.length === 0)) {
-          // Skip categories with no risk items at all
+        if (itemCount === 0) {
+          return null;
         }
 
         return (

@@ -9,11 +9,11 @@ export default function CapabilityProfileFilter({
   isActive,
   CAPABILITY_AXES,
 }) {
-  const axisColors = {
-    M: 'blue',
-    S: 'green',
-    O: 'amber',
-    B: 'red',
+  const axisSelectedClass = {
+    M: 'bg-blue-600/60 text-white',
+    S: 'bg-green-600/60 text-white',
+    O: 'bg-amber-600/60 text-white',
+    B: 'bg-red-600/60 text-white',
   };
 
   return (
@@ -35,14 +35,13 @@ export default function CapabilityProfileFilter({
           <div className="flex gap-0.5 flex-wrap">
             {Object.entries(config.levels).map(([level, label]) => {
               const isSelected = filter[axis] === level;
-              const color = axisColors[axis];
               return (
                 <button
                   key={level}
                   onClick={() => setAxisLevel(axis, level)}
                   className={`px-1.5 py-0.5 rounded text-[10px] transition ${
                     isSelected
-                      ? `bg-${color}-600/60 text-white`
+                      ? axisSelectedClass[axis]
                       : 'bg-slate-600/50 text-slate-400 hover:bg-slate-600'
                   }`}
                   title={label}
