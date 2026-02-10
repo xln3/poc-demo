@@ -13,11 +13,16 @@ from ..db.tables import TestResult, TestResultEntry
 
 router = APIRouter(prefix="/eval-import", tags=["eval-import"])
 
+# Maximum eval file size: 100 MB
+MAX_EVAL_FILE_SIZE = 100 * 1024 * 1024
+
 
 @router.post("/preview")
 async def preview_eval(file: UploadFile = File(...), user=Depends(require_admin)):
     """Parse .eval file and return preview without saving."""
     content = await file.read()
+    if len(content) > MAX_EVAL_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File exceeds {MAX_EVAL_FILE_SIZE // (1024*1024)} MB limit")
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
@@ -47,6 +52,8 @@ async def upload_eval(
 ):
     """Parse .eval file, create TestResult + entries, and save to DB."""
     content = await file.read()
+    if len(content) > MAX_EVAL_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File exceeds {MAX_EVAL_FILE_SIZE // (1024*1024)} MB limit")
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
