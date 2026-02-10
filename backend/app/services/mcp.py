@@ -244,17 +244,22 @@ class McpService:
             msg.attach(MIMEText(body, "plain"))
 
             if attachment_path:
-                path = Path(attachment_path)
-                if path.exists() and path.is_file():
-                    with open(path, "rb") as f:
-                        part = MIMEBase("application", "octet-stream")
-                        part.set_payload(f.read())
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        "Content-Disposition",
-                        f"attachment; filename={attachment_name or path.name}",
-                    )
-                    msg.attach(part)
+                path = Path(attachment_path).resolve()
+                # Only allow attachments from /tmp or /workspace
+                _ALLOWED_ATTACHMENT_DIRS = ("/tmp", "/workspace")
+                if not any(str(path).startswith(d) for d in _ALLOWED_ATTACHMENT_DIRS):
+                    return {"success": False, "error": f"Attachment path not in allowed directories: {_ALLOWED_ATTACHMENT_DIRS}"}
+                if not path.exists() or not path.is_file():
+                    return {"success": False, "error": f"Attachment not found: {attachment_path}"}
+                with open(path, "rb") as f:
+                    part = MIMEBase("application", "octet-stream")
+                    part.set_payload(f.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename={attachment_name or path.name}",
+                )
+                msg.attach(part)
 
             with smtplib.SMTP(smtp_host, smtp_port) as server:
                 server.starttls()
@@ -288,15 +293,12 @@ class McpService:
         if not api_key:
             return {"success": False, "error": "Missing API key configuration"}
 
-        # Set Stripe API key
-        stripe.api_key = api_key
-
         if tool_name == "payment_create_order":
-            return await self._payment_create_order(params, merchant_id)
+            return await self._payment_create_order(params, merchant_id, api_key)
         elif tool_name == "payment_query_status":
-            return await self._payment_query_status(params)
+            return await self._payment_query_status(params, api_key)
         elif tool_name == "payment_refund":
-            return await self._payment_refund(params)
+            return await self._payment_refund(params, api_key)
         else:
             return {"success": False, "error": f"Unknown payment tool: {tool_name}"}
 
@@ -304,6 +306,7 @@ class McpService:
         self,
         params: Dict[str, Any],
         merchant_id: str,
+        api_key: str,
     ) -> Dict[str, Any]:
         """Create a Stripe PaymentIntent."""
         amount = params.get("amount")  # Amount in smallest currency unit (cents)
@@ -323,6 +326,7 @@ class McpService:
                 "metadata": {
                     "merchant_id": merchant_id,
                 },
+                "api_key": api_key,
             }
 
             if customer_email:
@@ -353,6 +357,7 @@ class McpService:
     async def _payment_query_status(
         self,
         params: Dict[str, Any],
+        api_key: str,
     ) -> Dict[str, Any]:
         """Query Stripe PaymentIntent status."""
         payment_intent_id = params.get("payment_intent_id") or params.get("order_id")
@@ -361,7 +366,7 @@ class McpService:
             return {"success": False, "error": "Missing 'payment_intent_id' parameter"}
 
         try:
-            payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+            payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id, api_key=api_key)
 
             return {
                 "success": True,
@@ -395,6 +400,7 @@ class McpService:
     async def _payment_refund(
         self,
         params: Dict[str, Any],
+        api_key: str,
     ) -> Dict[str, Any]:
         """Initiate a Stripe refund."""
         payment_intent_id = params.get("payment_intent_id") or params.get("order_id")
@@ -421,7 +427,7 @@ class McpService:
             if amount:
                 refund_params["amount"] = int(amount)
 
-            refund = stripe.Refund.create(**refund_params)
+            refund = stripe.Refund.create(**refund_params, api_key=api_key)
 
             return {
                 "success": True,
@@ -501,11 +507,8 @@ class McpService:
             return {"success": False, "error": "Invalid API key format (should start with sk_)"}
 
         try:
-            # Set API key and make a test call
-            stripe.api_key = api_key
-
-            # Retrieve balance to verify API key is valid
-            balance = stripe.Balance.retrieve()
+            # Retrieve balance to verify API key is valid (per-request key)
+            balance = stripe.Balance.retrieve(api_key=api_key)
 
             # Determine if this is test or live mode
             is_test = api_key.startswith("sk_test_")
