@@ -412,11 +412,32 @@ class SandboxClient {
       if (onError) onError(error);
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
       this.ws = null;
+      // Auto-reconnect on abnormal closure (not intentional disconnect)
+      if (!this._wsDisconnectIntentional && this.sessionId) {
+        const reconnectDelay = Math.min(1000 * (this._wsReconnectAttempts || 0 + 1), 10000);
+        this._wsReconnectAttempts = (this._wsReconnectAttempts || 0) + 1;
+        if (this._wsReconnectAttempts <= 5) {
+          console.warn(`WebSocket closed (code ${event.code}), reconnecting in ${reconnectDelay}ms...`);
+          this._wsReconnectTimer = setTimeout(() => {
+            if (this.sessionId && !this.ws) {
+              this.connectLogs(onLog, onError);
+            }
+          }, reconnectDelay);
+        }
+      }
     };
 
+    this._wsDisconnectIntentional = false;
+    this._wsReconnectAttempts = 0;
+
     return () => {
+      this._wsDisconnectIntentional = true;
+      if (this._wsReconnectTimer) {
+        clearTimeout(this._wsReconnectTimer);
+        this._wsReconnectTimer = null;
+      }
       if (this.ws) {
         this.ws.close();
         this.ws = null;

@@ -6,6 +6,10 @@ from collections import defaultdict
 from ..models.schemas import LogEntry, LogType, LogStatus
 
 
+MAX_QUEUE_SIZE = 1000  # per-client queue cap — prevents OOM if client stops consuming
+MAX_CONNECTIONS_PER_SESSION = 5  # prevent memory amplification via many connections
+
+
 class LogManager:
     """Manages log streams for sessions."""
 
@@ -13,8 +17,13 @@ class LogManager:
         self._queues: Dict[str, List[asyncio.Queue]] = defaultdict(list)
 
     def create_queue(self, session_id: str) -> asyncio.Queue:
-        """Create a new log queue for a session."""
-        queue = asyncio.Queue()
+        """Create a new log queue for a session.
+
+        Raises ValueError if per-session connection limit is reached.
+        """
+        if len(self._queues[session_id]) >= MAX_CONNECTIONS_PER_SESSION:
+            raise ValueError(f"Max {MAX_CONNECTIONS_PER_SESSION} connections per session")
+        queue = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)
         self._queues[session_id].append(queue)
         return queue
 
