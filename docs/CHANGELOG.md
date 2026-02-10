@@ -39,6 +39,46 @@
 
 ## 变更记录
 
+### [2.1.0] - 2026-02-10
+
+#### Changed
+
+**结构性重构 — 存储基类、错误脱敏、App.jsx 拆分**
+
+**Part A: 存储基类提取 + 分页**
+
+- 新增 `backend/app/services/json_file_storage.py`：JSON 文件存储基类，提供原子写入（tempfile + rename）、per-ID 并发锁、分页查询
+- `dataset_storage.py`、`case_storage.py`、`test_results_storage.py` 继承基类，删除重复的文件 I/O 代码
+- `case_storage` 和 `test_results_storage` 新增原子写入和并发锁（此前缺失）
+- 三个 list 端点（`/cases`、`/datasets`、`/test-results`）新增可选分页参数 `offset`/`limit`
+- 响应格式从裸数组 `[...]` 改为 `{"items": [...], "total": N, "offset": 0, "limit": null}`
+- 前端 API client（`caseApi.js`、`datasetApi.js`、`testResultsApi.js`）适配新格式
+
+**Part B: 错误消息脱敏**
+
+- 新增 `backend/app/utils/errors.py`：`safe_detail()` 工具函数
+  - `ERROR_DEBUG=true`（开发）：返回完整错误信息
+  - `ERROR_DEBUG=false`（生产）：仅返回摘要，完整错误记录到日志
+- 6 个 router 共 21 处 `detail=str(e)` 替换为 `safe_detail()` 调用
+  - `rag.py`（8 处）、`sandbox.py`（3 处）、`simulator.py`（4 处）、`clawdbot.py`（3 处）、`file_parser.py`（1 处）、`report_templates.py`（1 处）
+- `docker-compose.yml` 新增 `ERROR_DEBUG: ${ERROR_DEBUG:-false}` 环境变量
+
+**Part C: App.jsx 拆分（3955 → 1698 行）**
+
+- 新增 `src/hooks/useTestRecordActions.js`：测试记录 CRUD、标注、LLM 分析、人工评判
+- 新增 `src/hooks/useFileParsing.js`：文件类型检测、MCP/沙箱解析、文件上传
+- 新增 `src/hooks/useRealTest.js`：单次攻击测试执行（LLM 调用、流式处理、工具调用、评判）
+- 新增 `src/hooks/useConversationEngine.js`：多轮对话引擎（start/send/stop + 流式 + 工具调用）
+- 新增 `src/hooks/useBatchTest.js`：批量测试队列管理、暂停/恢复、导出报告、服务端保存
+- 所有新 hooks 使用 deps ref 模式（`const d = useRef(deps); d.current = deps`）避免 stale closure
+
+#### Fixed
+
+- 修复 `thinkingIndexRef` 未从 `useTestRecordActions` 导出导致白屏
+- 修复 `loadSavedTestResults` TDZ 错误（`const` 定义在引用之后）
+
+---
+
 ### [2.0.0] - 2026-02-07
 
 #### Security
