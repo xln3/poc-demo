@@ -112,7 +112,12 @@ class AI2ThorSimulator(SimulatorBase):
         )
 
     def _wait_for_health(self, container_sid: str):
-        """Poll /health until the Flask server is ready."""
+        """Poll /health until the Flask server is ready.
+
+        Uses blocking time.sleep because this sync method runs in FastAPI's
+        default thread pool (via asyncio.to_thread / run_in_executor), so it
+        does not block the event loop.
+        """
         for i in range(HEALTH_TIMEOUT_S):
             time.sleep(1)
             exit_code, stdout, _ = container_manager.exec_in_container(

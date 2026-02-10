@@ -5,12 +5,13 @@ execute actions, capture frames, and record video.
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
+from jose import jwt
 from pydantic import BaseModel
 from typing import Optional
 
-from ..auth.security import require_auth, require_admin
+from ..auth.security import require_auth, require_admin, SECRET_KEY, ALGORITHM
 from ..services.simulator import SimulatorBase, SimulatorRegistry
 
 # Force adapter registration by importing them
@@ -112,8 +113,17 @@ async def get_frame(session_id: str):
 
 
 @router.websocket("/{session_id}/stream")
-async def stream_frames(websocket: WebSocket, session_id: str):
+async def stream_frames(websocket: WebSocket, session_id: str, token: str = Query(None)):
     """WebSocket MJPEG frame stream for live viewing."""
+    if not token:
+        await websocket.close(code=4001, reason="Auth required")
+        return
+    try:
+        jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
     engine = _active_sessions.get(session_id)
     if not engine:
         await websocket.close(code=4004, reason="Session not found")
