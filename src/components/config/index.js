@@ -5,6 +5,6 @@ export { default as McpParserConfig } from './McpParserConfig.jsx';
 export { default as TerminalToolsConfig } from './TerminalToolsConfig.jsx';
 export { default as RagConfig } from './RagConfig.jsx';
 export { default as McpServerConfig } from './McpServerConfig.jsx';
-export { default as PromptConfig } from './PromptConfig.jsx';
+export { default as UserPayloadConfig } from './UserPayloadConfig.jsx';
 export { default as ParsingProgress } from './ParsingProgress.jsx';
 export { default as SimulationEnvConfig } from './SimulationEnvConfig.jsx';

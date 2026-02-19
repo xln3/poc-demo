@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Section from './Section.jsx';
+import { benchmarkApi } from '../../benchmarkApi.js';
 
 /**
  * AI2-THOR simulation environment config + SafeAgentBench case browser.
@@ -37,7 +38,6 @@ function getRiskColor(category) {
 export default function SimulationEnvConfig({
   isDemo,
   simulator,          // useSimulator() return value
-  benchmarkApi,       // { getMeta, getCases, getCase } from benchmarkApi
   safeAgentBenchCase, setSafeAgentBenchCase,
   onApplyTestCase,    // callback: (testCase) => void — fills systemPrompt + payload
 }) {
@@ -48,17 +48,18 @@ export default function SimulationEnvConfig({
   const [selectedCase, setSelectedCase] = useState(null);
   const [riskFilter, setRiskFilter] = useState('');
   const [offset, setOffset] = useState(0);
+  const [loadError, setLoadError] = useState(null);
   const LIMIT = 50;
 
   // Fetch metadata on mount
   useEffect(() => {
-    if (!benchmarkApi) return;
-    benchmarkApi.getMeta().then(setMeta).catch(console.error);
-  }, [benchmarkApi]);
+    benchmarkApi.getMeta()
+      .then(data => { setMeta(data); setLoadError(null); })
+      .catch(e => setLoadError(e.message));
+  }, []);
 
   // Fetch cases when dataset/filter/offset changes
   const loadCases = useCallback(async () => {
-    if (!benchmarkApi) return;
     setCasesLoading(true);
     try {
       const data = await benchmarkApi.getCases({
@@ -73,7 +74,7 @@ export default function SimulationEnvConfig({
     } finally {
       setCasesLoading(false);
     }
-  }, [benchmarkApi, activeDataset, riskFilter, offset]);
+  }, [activeDataset, riskFilter, offset]);
 
   useEffect(() => {
     loadCases();
@@ -89,9 +90,11 @@ export default function SimulationEnvConfig({
 
   return (
     <Section title="仿真环境">
-      {!benchmarkApi ? (
-        <div className="text-xs text-slate-500 py-2">
-          SafeAgentBench 服务未连接
+      {loadError && !meta ? (
+        <div className="text-xs text-yellow-500 py-2">
+          SafeAgentBench 数据加载失败 — {loadError}
+          <button onClick={() => { setLoadError(null); benchmarkApi.getMeta().then(data => { setMeta(data); setLoadError(null); }).catch(e => setLoadError(e.message)); }}
+            className="ml-2 text-blue-400 hover:text-blue-300 underline">重试</button>
         </div>
       ) : (
         <div className="space-y-3">

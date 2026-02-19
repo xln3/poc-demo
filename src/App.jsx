@@ -68,7 +68,7 @@ export default function App() {
     customSystemPrompt, setCustomSystemPrompt,
     resetPayloadEditor,
   } = usePayloadEditor();
-  const [isEditingLlmConfig, setIsEditingLlmConfig] = useState(false);
+  const [isEditingSystemPrompt, setIsEditingSystemPrompt] = useState(false);
   const [lastTestResult, setLastTestResult] = useState(null); // 存储最后一次测试结果
 
   // ============ 测试记录面板状态 ============
@@ -298,7 +298,6 @@ export default function App() {
   // Tool calling UI config
   const [toolsEnabled, setToolsEnabled] = useState(true);
   const [toolsConfigCollapsed, setToolsConfigCollapsed] = useState(true);
-  const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false);
 
   // Simulation state
   const [simEngine, setSimEngine] = useState(null);        // 'ai2thor' | null
@@ -1399,6 +1398,7 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
             thinkingBudget, setThinkingBudget,
             // System prompt
             customSystemPrompt, setCustomSystemPrompt,
+            isEditingSystemPrompt, setIsEditingSystemPrompt,
             // Feature toggles
             mcpEnabled, setMcpEnabled, mcpParserServiceAvailable, isParsingFile,
             toolsEnabled, setToolsEnabled, enabledTools, setEnabledTools,
@@ -1423,18 +1423,16 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
             toolsConfigCollapsed, setToolsConfigCollapsed,
             // Parsing progress
             parsingProgress, parsingAbortController,
-            // Prompt config
-            promptConfigCollapsed, setPromptConfigCollapsed,
+            // User payload
             customTestPayload, setCustomTestPayload,
             currentScenario, currentAttack,
-            isEditingLlmConfig, setIsEditingLlmConfig,
             isEditingPayload, setIsEditingPayload,
             setPayloadFiles, removePayloadFile, handleAddFile, getDisplayPayload,
             dialogMode, setDialogMode, conversationMode,
             // Risk context
             currentRiskItemData,
             // Simulation
-            simulator: null, benchmarkApi: null,
+            simulator: null,
             safeAgentBenchCase, setSafeAgentBenchCase,
             onApplyTestCase: null,
             // Actions

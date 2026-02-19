@@ -6,14 +6,13 @@ import {
   TerminalToolsConfig,
   RagConfig,
   McpServerConfig,
-  PromptConfig,
+  UserPayloadConfig,
   ParsingProgress,
   SimulationEnvConfig,
 } from './config/index.js';
 
 /**
  * ConfigPanel - orchestrator that arranges all config sections.
- * Each section is a self-contained component from ./config/.
  */
 export default function ConfigPanel({
   appMode,
@@ -26,6 +25,7 @@ export default function ConfigPanel({
   thinkingBudget, setThinkingBudget,
   // System prompt
   customSystemPrompt, setCustomSystemPrompt,
+  isEditingSystemPrompt, setIsEditingSystemPrompt,
   // Feature toggles
   mcpEnabled, setMcpEnabled, mcpParserServiceAvailable, isParsingFile,
   toolsEnabled, setToolsEnabled, enabledTools, setEnabledTools,
@@ -52,19 +52,16 @@ export default function ConfigPanel({
   mcpServerConfigCollapsed, setMcpServerConfigCollapsed,
   // Parsing progress
   parsingProgress, parsingAbortController,
-  // Prompt config
-  promptConfigCollapsed, setPromptConfigCollapsed,
+  // User payload
   customTestPayload, setCustomTestPayload,
   currentScenario, currentAttack,
-  isEditingLlmConfig, setIsEditingLlmConfig,
   isEditingPayload, setIsEditingPayload,
   setPayloadFiles, removePayloadFile, handleAddFile, getDisplayPayload,
   dialogMode, setDialogMode, conversationMode,
-  // Payload
   // Risk context
   currentRiskItemData,
   // Simulation
-  simulator, benchmarkApi,
+  simulator,
   safeAgentBenchCase, setSafeAgentBenchCase,
   onApplyTestCase,
   // Actions
@@ -90,14 +87,12 @@ export default function ConfigPanel({
             <span>{currentRiskItemData.name}</span>
           </div>
           {currentRiskItemData.categoryName && (
-            <div className="text-[10px] text-slate-500">
-              {currentRiskItemData.categoryName}
-            </div>
+            <div className="text-[10px] text-slate-500">{currentRiskItemData.categoryName}</div>
           )}
         </div>
       )}
 
-      {/* 1. Model settings */}
+      {/* 1. Model config (provider/model/params/thinking/dialog mode + system prompt) */}
       <ModelSettings
         isDemo={isDemo}
         providers={providers} selectedProviderId={selectedProviderId}
@@ -109,6 +104,11 @@ export default function ConfigPanel({
         llmTopP={llmTopP} setLlmTopP={setLlmTopP}
         thinkingEnabled={thinkingEnabled} setThinkingEnabled={setThinkingEnabled}
         thinkingBudget={thinkingBudget} setThinkingBudget={setThinkingBudget}
+        dialogMode={dialogMode} setDialogMode={setDialogMode}
+        conversationMode={conversationMode}
+        customSystemPrompt={customSystemPrompt} setCustomSystemPrompt={setCustomSystemPrompt}
+        currentScenario={currentScenario}
+        isEditingSystemPrompt={isEditingSystemPrompt} setIsEditingSystemPrompt={setIsEditingSystemPrompt}
       />
 
       {/* 2. Feature toggles */}
@@ -175,32 +175,22 @@ export default function ConfigPanel({
         />
       )}
 
-      {/* 8. Prompt config (system/user prompt + LLM params) */}
-      <PromptConfig
+      {/* 8. User payload / test input */}
+      <UserPayloadConfig
         isDemo={isDemo}
-        customSystemPrompt={customSystemPrompt} setCustomSystemPrompt={setCustomSystemPrompt}
+        dialogMode={dialogMode}
         customTestPayload={customTestPayload} setCustomTestPayload={setCustomTestPayload}
-        currentScenario={currentScenario} currentAttack={currentAttack}
-        thinkingEnabled={thinkingEnabled} setThinkingEnabled={setThinkingEnabled}
-        thinkingBudget={thinkingBudget} setThinkingBudget={setThinkingBudget}
-        llmTemperature={llmTemperature} setLlmTemperature={setLlmTemperature}
-        llmMaxTokens={llmMaxTokens} setLlmMaxTokens={setLlmMaxTokens}
-        llmTopP={llmTopP} setLlmTopP={setLlmTopP}
-        isEditingLlmConfig={isEditingLlmConfig} setIsEditingLlmConfig={setIsEditingLlmConfig}
+        currentAttack={currentAttack}
         isEditingPayload={isEditingPayload} setIsEditingPayload={setIsEditingPayload}
         payloadFiles={payloadFiles} setPayloadFiles={setPayloadFiles}
         removePayloadFile={removePayloadFile} handleAddFile={handleAddFile}
         getDisplayPayload={getDisplayPayload}
-        dialogMode={dialogMode} setDialogMode={setDialogMode}
-        conversationMode={conversationMode}
-        promptConfigCollapsed={promptConfigCollapsed} setPromptConfigCollapsed={setPromptConfigCollapsed}
       />
 
       {/* 9. Simulation environment */}
       <SimulationEnvConfig
         isDemo={isDemo}
         simulator={simulator}
-        benchmarkApi={benchmarkApi}
         safeAgentBenchCase={safeAgentBenchCase}
         setSafeAgentBenchCase={setSafeAgentBenchCase}
         onApplyTestCase={onApplyTestCase}
