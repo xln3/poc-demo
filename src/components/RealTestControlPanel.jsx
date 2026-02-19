@@ -4,6 +4,7 @@ import { mcpClient } from '../mcp.js';
 import JsonTree from './JsonTree.jsx';
 
 export default function RealTestControlPanel({
+  appMode,
   // Provider & model
   providers, selectedProviderId, setSelectedProviderId, providerModels,
   selectedModel, setSelectedModel, setProviderSettingsOpen,
@@ -54,8 +55,16 @@ export default function RealTestControlPanel({
   // Error
   apiError,
 }) {
+  const isDemo = appMode === 'demo';
+
   return (
     <div className="mb-4 p-3 bg-slate-800 rounded-lg">
+      {/* Demo mode banner */}
+      {isDemo && (
+        <div className="mb-3 py-1.5 px-3 bg-amber-900/30 border border-amber-700/50 rounded text-xs text-amber-400 text-center">
+          演示模式 — 测试控制已禁用
+        </div>
+      )}
       {/* 模型选择、MCP配置和执行按钮 */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-4">
@@ -342,9 +351,9 @@ export default function RealTestControlPanel({
             // 单轮模式
             <button
               onClick={() => { startRecording(); runRealTest(); }}
-              disabled={apiStatus === 'loading'}
+              disabled={apiStatus === 'loading' || isDemo}
               className={`px-4 py-1.5 rounded text-xs font-medium transition ${
-                apiStatus === 'loading'
+                apiStatus === 'loading' || isDemo
                   ? 'bg-slate-600 cursor-not-allowed'
                   : 'bg-green-600 hover:bg-green-500'
               }`}
@@ -355,8 +364,8 @@ export default function RealTestControlPanel({
             // 多轮模式 - 空闲
             <button
               onClick={() => { startRecording(); startConversation(); }}
-              disabled={apiStatus === 'loading'}
-              className="px-4 py-1.5 rounded text-xs font-medium transition bg-green-600 hover:bg-green-500"
+              disabled={apiStatus === 'loading' || isDemo}
+              className={`px-4 py-1.5 rounded text-xs font-medium transition ${isDemo ? 'bg-slate-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
             >
               ▶️ 开始测试
             </button>

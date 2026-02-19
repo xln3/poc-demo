@@ -1,135 +1,232 @@
 """
-Parser for inspect-ai .eval files.
+Parser for inspect-ai .eval files (ZIP format).
 
-An .eval file is JSON with structure:
-{
-  "eval": { "task": "...", "model": "...", ... },
-  "plan": { "steps": [{ "solver": "..." }, ...] },
-  "samples": [
-    {
-      "id": ...,
-      "input": "...",
-      "messages": [{ "role": "...", "content": "...", "tool_calls": [...] }],
-      "scores": { "judge_name": { "value": "C"|"I", "answer": "...", "explanation": "..." } },
-      ...
-    }
-  ],
-  "results": { ... }
-}
+An .eval file is a ZIP archive containing:
+  - header.json: eval metadata, config, results summary (scores/metrics)
+  - summaries.json: per-sample summary (scores, model_usage, timing)
+  - samples/*.json: per-sample detail (messages, events) — only loaded on demand
+  - _journal/: internal logging data
+  - reductions.json: epoch reduction data
 """
 
+import io
+import json
+import zipfile
 from datetime import datetime
 from typing import Any
 
 
-def parse_eval_file(data: dict) -> dict:
+def parse_eval_zip(file_bytes: bytes) -> dict:
     """
-    Parse a .eval JSON structure and extract structured test data.
+    Parse a .eval ZIP file and extract structured data.
 
     Returns:
         {
-            "meta": { "task", "model", "solver_type", "created_at" },
+            "meta": {
+                "task": str,
+                "model": str,
+                "created_at": str,
+                "dataset_name": str,
+                "dataset_samples": int,
+                "solver_type": str | None,
+                "status": str,
+                "scores": [ { "name": str, "metrics": { metric_name: value } } ],
+                "total_samples": int,
+                "completed_samples": int,
+                "task_args": dict,
+            },
             "samples": [
                 {
-                    "id": ...,
-                    "input": "...",
-                    "events": [...],  # InteractionEvent-compatible
-                    "scores": { ... },
-                    "judgment": { "passed": bool, "reason": str },
+                    "id": str,
+                    "scores": dict,
+                    "model_usage": dict,
+                    "total_time": float,
+                    "metadata": dict,
                 }
             ]
         }
     """
-    eval_info = data.get("eval", {})
-    plan = data.get("plan", {})
-    raw_samples = data.get("samples", [])
+    with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+        header = _read_json_from_zip(zf, "header.json")
+        summaries = _read_json_from_zip(zf, "summaries.json")
 
+    if not header:
+        raise ValueError("Missing header.json in .eval file")
+
+    eval_info = header.get("eval", {})
+    plan = header.get("plan", {})
+    results = header.get("results", {})
+
+    # Extract solver type from plan steps
     solver_type = None
     if plan.get("steps"):
-        solver_type = plan["steps"][-1].get("solver", None)
+        solver_type = plan["steps"][-1].get("solver")
+
+    # Extract score summaries
+    score_summaries = []
+    for score_block in results.get("scores", []):
+        metrics = {}
+        for metric_name, metric_data in score_block.get("metrics", {}).items():
+            metrics[metric_name] = metric_data.get("value")
+        score_summaries.append({
+            "name": score_block.get("name", "unknown"),
+            "scorer": score_block.get("scorer"),
+            "metrics": metrics,
+        })
+
+    dataset_info = eval_info.get("dataset", {})
 
     meta = {
         "task": eval_info.get("task", "unknown"),
+        "task_display_name": eval_info.get("task_display_name", eval_info.get("task", "unknown")),
         "model": eval_info.get("model", "unknown"),
-        "solver_type": solver_type,
         "created_at": eval_info.get("created", datetime.utcnow().isoformat()),
+        "dataset_name": dataset_info.get("name", ""),
+        "dataset_samples": dataset_info.get("samples", 0),
+        "solver_type": solver_type,
+        "status": header.get("status", "unknown"),
+        "scores": score_summaries,
+        "total_samples": results.get("total_samples", 0),
+        "completed_samples": results.get("completed_samples", 0),
+        "task_args": eval_info.get("task_args", {}),
     }
 
+    # Parse summaries
     samples = []
-    for sample in raw_samples:
-        events = _messages_to_events(sample.get("messages", []))
-        scores = sample.get("scores", {})
-        judgment = _scores_to_judgment(scores)
-
-        samples.append({
-            "id": sample.get("id"),
-            "input": sample.get("input", ""),
-            "events": events,
-            "scores": scores,
-            "judgment": judgment,
-        })
+    if isinstance(summaries, list):
+        for s in summaries:
+            samples.append({
+                "id": s.get("id", ""),
+                "scores": s.get("scores", {}),
+                "model_usage": s.get("model_usage", {}),
+                "total_time": s.get("total_time", 0),
+                "metadata": s.get("metadata", {}),
+            })
 
     return {"meta": meta, "samples": samples}
 
 
-def _messages_to_events(messages: list[dict]) -> list[dict]:
-    """Convert .eval messages to InteractionEvent format."""
-    events = []
-    for msg in messages:
-        role = msg.get("role", "unknown")
-        content = msg.get("content", "")
+def eval_to_test_result(parsed: dict) -> dict:
+    """
+    Convert parsed eval data to test_results_storage compatible format.
 
-        # Handle tool_calls in assistant messages
-        tool_calls = msg.get("tool_calls", [])
-        if tool_calls:
-            for tc in tool_calls:
-                events.append({
-                    "type": "tool_call",
-                    "timestamp": msg.get("timestamp", datetime.utcnow().isoformat()),
-                    "data": {
-                        "toolName": tc.get("function", {}).get("name", "unknown"),
-                        "args": tc.get("function", {}).get("arguments", ""),
-                        "result": None,
-                        "status": "pending",
-                    },
-                })
+    Returns a dict matching the SaveTestResultRequest schema.
+    """
+    meta = parsed["meta"]
+    samples = parsed["samples"]
 
-        # Standard message event
-        if content:
-            events.append({
-                "type": "message",
-                "timestamp": msg.get("timestamp", datetime.utcnow().isoformat()),
-                "data": {
-                    "role": role,
-                    "content": content if isinstance(content, str) else str(content),
-                },
-            })
+    # Build statistics from scores
+    statistics = _build_statistics(meta, samples)
 
-    return events
+    # Convert samples to test result cases
+    results = []
+    for i, sample in enumerate(samples):
+        judgment = _sample_to_judgment(sample)
+        results.append({
+            "index": i,
+            "caseId": sample["id"],
+            "caseName": sample["id"],
+            "attackType": None,
+            "attackDescription": sample.get("metadata", {}).get("task_instruction", ""),
+            "input": {
+                "metadata": sample.get("metadata", {}),
+            },
+            "execution": {
+                "scores": sample.get("scores", {}),
+                "model_usage": sample.get("model_usage", {}),
+                "total_time": sample.get("total_time", 0),
+            },
+            "judgment": judgment,
+            "riskLevel": judgment.get("riskLevel", "pending"),
+        })
+
+    task_display = meta.get("task_display_name", meta["task"])
+    model_short = meta["model"].split("/")[-1] if "/" in meta["model"] else meta["model"]
+
+    return {
+        "name": f"[eval] {task_display} — {model_short}",
+        "meta": {
+            "schemaVersion": "1.0.0",
+            "type": "EvalImport",
+            "testModel": meta["model"],
+            "judgeModel": None,
+            "evalTask": meta["task"],
+            "evalCreatedAt": meta["created_at"],
+            "evalStatus": meta["status"],
+            "evalScores": meta["scores"],
+            "statistics": statistics,
+        },
+        "results": results,
+    }
 
 
-def _scores_to_judgment(scores: dict[str, Any]) -> dict:
-    """Convert .eval scores to a unified judgment."""
+def _read_json_from_zip(zf: zipfile.ZipFile, name: str) -> Any:
+    """Read and parse a JSON file from a ZipFile, returning None if not found."""
+    try:
+        with zf.open(name) as f:
+            return json.loads(f.read())
+    except (KeyError, json.JSONDecodeError):
+        return None
+
+
+def _build_statistics(meta: dict, samples: list) -> dict:
+    """Build statistics dict compatible with the test results format."""
+    total = len(samples)
+    stats = {"total": total, "high": 0, "medium": 0, "low": 0, "safe": 0, "pending": 0}
+
+    for sample in samples:
+        judgment = _sample_to_judgment(sample)
+        level = judgment.get("riskLevel", "pending")
+        if level in stats:
+            stats[level] += 1
+        else:
+            stats["pending"] += 1
+
+    return stats
+
+
+def _sample_to_judgment(sample: dict) -> dict:
+    """Convert eval sample scores to a riskLevel judgment."""
+    scores = sample.get("scores", {})
     if not scores:
-        return {"passed": None, "reason": "No scores available"}
+        return {"riskLevel": "pending", "reason": "No scores"}
 
-    for judge_name, score_data in scores.items():
-        value = score_data.get("value", "")
+    # Iterate through scorers to find risk signals
+    for scorer_name, score_data in scores.items():
+        value = score_data.get("value", {})
         explanation = score_data.get("explanation", "")
-        answer = score_data.get("answer", "")
 
-        passed = None
-        if value in ("C", "CORRECT", "correct", True, 1):
-            passed = True
-        elif value in ("I", "INCORRECT", "incorrect", False, 0):
-            passed = False
+        # Handle dict-type values (e.g. safeagentbench_scorer)
+        if isinstance(value, dict):
+            rejected = value.get("rejected", 0)
+            risk_rate = value.get("risk_rate", None)
+            plan_success = value.get("plan_success", 0)
+            exec_success = value.get("exec_success", None)
 
-        return {
-            "passed": passed,
-            "judge": judge_name,
-            "value": value,
-            "answer": answer,
-            "reason": explanation,
-        }
+            # If explicitly rejected, it's safe
+            if rejected == 1:
+                return {"riskLevel": "safe", "reason": f"[{scorer_name}] Rejected by model"}
 
-    return {"passed": None, "reason": "Unknown score format"}
+            # Check for explicit risk indicators
+            if risk_rate is not None and risk_rate > 0:
+                return {"riskLevel": "high", "reason": f"[{scorer_name}] Risk detected: {explanation}"}
+
+            # Plan succeeded on a potentially risky task
+            if plan_success == 1:
+                return {"riskLevel": "low", "reason": f"[{scorer_name}] Plan succeeded: {explanation}"}
+
+            # exec_success from execution_scorer
+            if exec_success is not None:
+                if exec_success == 1:
+                    return {"riskLevel": "safe", "reason": f"[{scorer_name}] Execution succeeded: {explanation}"}
+                else:
+                    return {"riskLevel": "low", "reason": f"[{scorer_name}] Execution failed: {explanation}"}
+
+        # Handle simple string/numeric values (C/I, True/False, 0/1)
+        elif isinstance(value, (str, int, float, bool)):
+            if value in ("C", "CORRECT", "correct", True, 1):
+                return {"riskLevel": "safe", "reason": f"[{scorer_name}] Correct: {explanation}"}
+            elif value in ("I", "INCORRECT", "incorrect", False, 0):
+                return {"riskLevel": "medium", "reason": f"[{scorer_name}] Incorrect: {explanation}"}
+
+    return {"riskLevel": "pending", "reason": "Could not determine from scores"}

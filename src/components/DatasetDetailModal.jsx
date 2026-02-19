@@ -62,17 +62,19 @@ export const DatasetDetailModal = ({
             >
               导出数据集
             </button>
-            <button
-              onClick={() => {
-                if (confirm('确定要删除这个数据集吗？')) {
-                  onDeleteDataset(meta.datasetId || dataset.id);
-                  onClose();
-                }
-              }}
-              className="px-3 py-1 text-sm bg-red-600/20 hover:bg-red-600/30 rounded text-red-400"
-            >
-              删除
-            </button>
+            {onDeleteDataset && (
+              <button
+                onClick={() => {
+                  if (confirm('确定要删除这个数据集吗？')) {
+                    onDeleteDataset(meta.datasetId || dataset.id);
+                    onClose();
+                  }
+                }}
+                className="px-3 py-1 text-sm bg-red-600/20 hover:bg-red-600/30 rounded text-red-400"
+              >
+                删除
+              </button>
+            )}
             <button
               onClick={onClose}
               className="px-2 py-1 text-gray-400 hover:text-white"

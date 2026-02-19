@@ -1,28 +1,22 @@
-export { ThreatCategory, ThreatSubcategory, RiskGoal } from './taxonomy.js';
-export { RISK_ITEMS, RISK_ITEMS_BY_ID } from './items.js';
+export { RISK_CATEGORIES, SUBCATEGORY_BY_ID } from './benchmarkRiskItems.js';
 export { LEGACY_CASE_MAP } from './legacyCases.js';
 
-import { ThreatCategory, ThreatSubcategory } from './taxonomy.js';
-import { RISK_ITEMS } from './items.js';
+import { RISK_CATEGORIES } from './benchmarkRiskItems.js';
 import { LEGACY_CASE_MAP } from './legacyCases.js';
 import { SCENARIOS } from '../scenarios/index.js';
 
 /**
- * Build a 4-level tree: Category → Subcategory → RiskItem → LegacyCases
+ * Build a 3-level tree: Category → Subcategory → (Benchmarks + LegacyCases)
  *
  * Returns:
  * {
- *   T1: {
- *     ...ThreatCategory.T1,
+ *   '1': {
+ *     id: '1', name: '模型安全性',
  *     subcategories: {
- *       'T1.1': {
- *         ...ThreatSubcategory['T1.1'],
- *         riskItems: [
- *           {
- *             ...riskItem,
- *             cases: [{ scenario, attackIndex, attack, scenarioData }]
- *           }
- *         ]
+ *       '1.1': {
+ *         id: '1.1', name: '恶意使用', description: '...',
+ *         benchmarks: [...],
+ *         cases: [{ scenario, attackIndex, attack, scenarioData }]
  *       }
  *     }
  *   }
@@ -31,51 +25,54 @@ import { SCENARIOS } from '../scenarios/index.js';
 export function getRiskTree() {
   const tree = {};
 
-  // Initialize categories
-  for (const [catId, cat] of Object.entries(ThreatCategory)) {
-    tree[catId] = {
-      ...cat,
-      subcategories: {},
-    };
-  }
+  for (const cat of RISK_CATEGORIES) {
+    const subcategories = {};
 
-  // Initialize subcategories under their parent categories
-  for (const [subId, sub] of Object.entries(ThreatSubcategory)) {
-    if (tree[sub.parent]) {
-      tree[sub.parent].subcategories[subId] = {
-        ...sub,
-        id: subId,
-        riskItems: [],
+    for (const sub of cat.subcategories) {
+      const legacyCases = (LEGACY_CASE_MAP[sub.id] || [])
+        .map(ref => {
+          const scenarioData = SCENARIOS[ref.scenario];
+          if (!scenarioData) return null;
+          const attack = scenarioData.attacks[ref.attackIndex];
+          if (!attack) return null;
+          return { ...ref, attack, scenarioData };
+        })
+        .filter(Boolean);
+
+      subcategories[sub.id] = {
+        id: sub.id,
+        name: sub.name,
+        description: sub.description,
+        benchmarks: sub.benchmarks,
+        cases: legacyCases,
       };
     }
-  }
 
-  // Place risk items into subcategories and resolve legacy cases
-  for (const item of RISK_ITEMS) {
-    const sub = tree[ThreatSubcategory[item.threatClass]?.parent]
-      ?.subcategories[item.threatClass];
-    if (!sub) continue;
-
-    const legacyCases = (LEGACY_CASE_MAP[item.id] || [])
-      .map(ref => {
-        const scenarioData = SCENARIOS[ref.scenario];
-        if (!scenarioData) return null;
-        const attack = scenarioData.attacks[ref.attackIndex];
-        if (!attack) return null;
-        return { ...ref, attack, scenarioData };
-      })
-      .filter(Boolean);
-
-    sub.riskItems.push({ ...item, cases: legacyCases });
+    tree[cat.id] = {
+      id: cat.id,
+      name: cat.name,
+      subcategories,
+    };
   }
 
   return tree;
 }
 
-// Category icons
+// Category icons for the 15 risk categories
 export const CATEGORY_ICONS = {
-  T1: '🗣️',
-  T2: '💉',
-  T3: '🔓',
-  T4: '🧠',
+  '1':  '🛡️',
+  '2':  '📝',
+  '3':  '⚖️',
+  '4':  '🔒',
+  '5':  '⚠️',
+  '6':  '🔧',
+  '7':  '📚',
+  '8':  '🎨',
+  '9':  '📋',
+  '10': '🤝',
+  '11': '👤',
+  '12': '⏱️',
+  '13': '🏢',
+  '14': '🔄',
+  '15': '🎭',
 };

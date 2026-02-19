@@ -18,7 +18,7 @@ export async function listTestResults() {
     throw new Error(`Failed to list test results: ${response.statusText}`);
   }
   const data = await response.json();
-  return data.items;
+  return Array.isArray(data) ? data : (data.items || []);
 }
 
 /**

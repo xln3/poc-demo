@@ -62,23 +62,29 @@ export const DatasetList = ({
   return (
     <div className="space-y-1">
       {/* 导入/模板按钮区 */}
-      <div className="flex gap-2 mb-2">
-        <button
-          onClick={onImportDataset}
-          className="flex-1 px-3 py-2 rounded bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 text-sm flex items-center justify-center gap-1.5 transition-colors"
-        >
-          <span>+</span>
-          <span>导入数据集</span>
-        </button>
-        <button
-          onClick={onDownloadTemplate}
-          className="px-3 py-2 rounded bg-gray-700/50 hover:bg-gray-600/50 border border-gray-600/50 text-gray-400 hover:text-gray-300 text-sm flex items-center justify-center gap-1.5 transition-colors"
-          title="下载数据集模板文件，了解数据结构"
-        >
-          <span>📄</span>
-          <span>模板</span>
-        </button>
-      </div>
+      {(onImportDataset || onDownloadTemplate) && (
+        <div className="flex gap-2 mb-2">
+          {onImportDataset && (
+            <button
+              onClick={onImportDataset}
+              className="flex-1 px-3 py-2 rounded bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 text-sm flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <span>+</span>
+              <span>导入数据集</span>
+            </button>
+          )}
+          {onDownloadTemplate && (
+            <button
+              onClick={onDownloadTemplate}
+              className="px-3 py-2 rounded bg-gray-700/50 hover:bg-gray-600/50 border border-gray-600/50 text-gray-400 hover:text-gray-300 text-sm flex items-center justify-center gap-1.5 transition-colors"
+              title="下载数据集模板文件，了解数据结构"
+            >
+              <span>📄</span>
+              <span>模板</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {datasets.length === 0 ? (
         <div className="text-center text-gray-500 py-4 text-sm">

@@ -20,16 +20,10 @@ import Toast from './components/Toast.jsx';
 import LLMProviderSettings from './components/LLMProviderSettings.jsx';
 import LeftSidebar from './components/LeftSidebar.jsx';
 import AppModals from './components/AppModals.jsx';
-import SavedCaseDetailView from './components/SavedCaseDetailView.jsx';
-import TestResultDetailView from './components/TestResultDetailView.jsx';
-import RealTestControlPanel from './components/RealTestControlPanel.jsx';
-import AttackDetailPanel from './components/AttackDetailPanel.jsx';
-import AttackHeader from './components/AttackHeader.jsx';
-import PlaybackControlBar from './components/PlaybackControlBar.jsx';
-import ConversationPanel from './components/ConversationPanel.jsx';
-import RightPanel from './components/RightPanel.jsx';
-import ConfigPanel from './components/ConfigPanel.jsx';
-import { CapabilityTabs, DatasetList, DatasetDetailModal, BatchTestModal } from './components/index.js';
+import RunPage from './components/pages/RunPage.jsx';
+import ConfigPage from './components/pages/ConfigPage.jsx';
+import ReportPage from './components/pages/ReportPage.jsx';
+import RiskItemsPage from './components/pages/RiskItemsPage.jsx';
 import {
   TerminalItem,
   DeletedTerminalsPanel,
@@ -47,12 +41,13 @@ export default function App() {
     expanded, setExpanded, scenarioListExpanded, setScenarioListExpanded,
     selectedRiskItem, setSelectedRiskItem,
     currentScenario, currentAttack, attackType, riskLevel, currentRiskItemData,
-    toggleCategory, toggleSubcategory, toggleRiskItem,
-    toggleType, toggleScenario,
+    toggleCategory, toggleSubcategory,
   } = attackSelection;
 
-  // Page mode: 'config' | 'demo' | 'report' (auditor: 3 pages, tester: 2 pages)
-  const [pageMode, setPageMode] = useState('demo');
+  // Tab navigation: 4 tabs
+  const [activeTab, setActiveTab] = useState('run');
+  // App mode: test vs demo
+  const [appMode, setAppMode] = useState('test');
 
   const [messages, setMessages] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -403,7 +398,7 @@ export default function App() {
     judgeConfig,
   });
   const {
-    viewMode, setViewMode, savedCases, setSavedCases, selectedCase, setSelectedCase,
+    savedCases, setSavedCases, selectedCase, setSelectedCase,
     isSaving, loadingSavedCases, saveToServer, exportCurrentCase, importFromFile,
     loadSavedCases, viewCaseDetail, handleDeleteCase
   } = cases;
@@ -728,7 +723,7 @@ export default function App() {
         // 导入数据集
         await importDatasetFromJSON(data);
         addToast(`已导入数据集: ${data.meta?.name || '未命名'}，包含 ${data.cases?.length || 0} 个用例`, 'success');
-        setViewMode('datasets');
+        setActiveTab('risk-items');
       } else if (type === 'TestCase' || type === 'TestInput' || version === '1.0.0') {
         // 导入单个测试用例
         const testCase = type === 'TestInput' ? { input: data, criteria: {} } : data;
@@ -745,7 +740,7 @@ export default function App() {
       console.error('导入失败:', error);
       addToast('导入失败: ' + error.message, 'error');
     }
-  }, [importDatasetFromJSON, addToast, setViewMode, startPlayback]);
+  }, [importDatasetFromJSON, addToast, setActiveTab, startPlayback]);
 
   // 开始录制
   const startRecording = useCallback(() => {
@@ -1104,7 +1099,6 @@ export default function App() {
       loadSavedTestResults();
       if (selectedTestResult?.id === resultId) {
         setSelectedTestResult(null);
-        setViewMode('scenarios');
       }
     } catch (err) {
       addToast(`删除失败: ${err.message}`, 'error');
@@ -1371,8 +1365,6 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
     }
   };
 
-  // toggleType, toggleScenario come from useAttackSelection
-
   // 文件解析函数已移至 useFileParsing hook
 
 
@@ -1383,243 +1375,184 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
 
       {/* 滚动条样式已移至 index.css */}
 
-      {/* 左侧导航 */}
+      {/* 左侧 Tab Bar */}
       <LeftSidebar
-        attackSelection={attackSelection}
-        sandbox={sandbox}
-        clawdbot={clawdbot}
-        datasets={datasets}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-        pageMode={pageMode}
-        setPageMode={setPageMode}
-        isAuditor={true}
-        setSelectedCase={setSelectedCase}
-        selectAttack={selectAttack}
-        savedTestResults={savedTestResults}
-        selectedTestResult={selectedTestResult}
-        viewTestResultDetail={viewTestResultDetail}
-        handleDeleteTestResult={handleDeleteTestResult}
-        importedTestCase={importedTestCase}
-        setImportedTestCase={setImportedTestCase}
-        handleImportDataset={handleImportDataset}
-        handleViewDataset={handleViewDataset}
-        handleSelectCaseFromDataset={handleSelectCaseFromDataset}
-        handleDownloadTemplate={handleDownloadTemplate}
-        applyImportedTestCase={applyImportedTestCase}
+        activeTab={activeTab} setActiveTab={setActiveTab}
+        appMode={appMode} setAppMode={setAppMode}
       />
 
+      {/* 主内容区 - 按 tab 切换 */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {/* 配置 tab */}
+        {activeTab === 'config' && (
+          <ConfigPage appMode={appMode} configPanel={{
+            providers, selectedProviderId, setSelectedProviderId, providerModels,
+            selectedModel, setSelectedModel, setProviderSettingsOpen,
+            llmTemperature, setLlmTemperature, llmMaxTokens, setLlmMaxTokens,
+            llmTopP, setLlmTopP, thinkingEnabled, setThinkingEnabled,
+            thinkingBudget, setThinkingBudget,
+            customSystemPrompt, setCustomSystemPrompt,
+            toolsEnabled, setToolsEnabled, enabledTools, setEnabledTools,
+            maxToolCalls, setMaxToolCalls,
+            sandboxEnabled, setSandboxEnabled,
+            ragEnabled, setRagEnabled, ragMode, setRagMode,
+            ragKnowledge, setRagKnowledge,
+            mcpEnabled, setMcpEnabled, mcpServerEnabled, setMcpServerEnabled,
+            selectedMcpServer, setSelectedMcpServer,
+            customTestPayload, setCustomTestPayload,
+            payloadFiles, setPayloadFiles,
+            runRealTest, apiStatus,
+            currentRiskItemData, currentAttack,
+          }} />
+        )}
 
-      {/* 右侧主区域 */}
-      <div className="flex-1 p-4 overflow-hidden flex flex-col">
-        {/* Config page */}
-        {pageMode === 'config' ? (
-          <ConfigPanel
-            providers={providers} selectedProviderId={selectedProviderId} setSelectedProviderId={setSelectedProviderId}
-            providerModels={providerModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel}
-            setProviderSettingsOpen={setProviderSettingsOpen}
-            llmTemperature={llmTemperature} setLlmTemperature={setLlmTemperature}
-            llmMaxTokens={llmMaxTokens} setLlmMaxTokens={setLlmMaxTokens}
-            llmTopP={llmTopP} setLlmTopP={setLlmTopP}
-            thinkingEnabled={thinkingEnabled} setThinkingEnabled={setThinkingEnabled}
-            thinkingBudget={thinkingBudget} setThinkingBudget={setThinkingBudget}
-            customSystemPrompt={customSystemPrompt} setCustomSystemPrompt={setCustomSystemPrompt}
-            toolsEnabled={toolsEnabled} setToolsEnabled={setToolsEnabled}
-            enabledTools={enabledTools} setEnabledTools={setEnabledTools}
-            maxToolCalls={maxToolCalls} setMaxToolCalls={setMaxToolCalls}
-            sandboxEnabled={sandboxEnabled} setSandboxEnabled={setSandboxEnabled}
-            ragEnabled={ragEnabled} setRagEnabled={setRagEnabled}
-            ragMode={ragMode} setRagMode={setRagMode}
-            ragKnowledge={ragKnowledge} setRagKnowledge={setRagKnowledge}
-            mcpEnabled={mcpEnabled} setMcpEnabled={setMcpEnabled}
-            mcpServerEnabled={mcpServerEnabled} setMcpServerEnabled={setMcpServerEnabled}
-            selectedMcpServer={selectedMcpServer} setSelectedMcpServer={setSelectedMcpServer}
-            customTestPayload={customTestPayload} setCustomTestPayload={setCustomTestPayload}
-            payloadFiles={payloadFiles} setPayloadFiles={setPayloadFiles}
-            runRealTest={runRealTest} apiStatus={apiStatus}
-            currentRiskItemData={currentRiskItemData} currentAttack={currentAttack}
-          />
-        ) : pageMode === 'report' ? (
-          selectedTestResult ? (
-          <TestResultDetailView
-            selectedTestResult={selectedTestResult}
-            openDetailModal={openDetailModal}
-            openReviewModal={openReviewModal}
-            handleDeleteTestCase={handleDeleteTestCase}
-            reportContent={reportContent}
-            setReportContent={setReportContent}
-            reportEditMode={reportEditMode}
-            setReportEditMode={setReportEditMode}
-            reportSaving={reportSaving}
-            handleSaveReport={handleSaveReport}
-            reportTemplates={reportTemplates}
-            selectedTemplate={selectedTemplate}
-            setSelectedTemplate={setSelectedTemplate}
-            applyReportTemplate={applyReportTemplate}
-            handleLLMGenerateReport={handleLLMGenerateReport}
-          />
-          ) : (
-          <div className="flex-1 flex items-center justify-center text-slate-500">
-            <div className="text-center">
-              <div className="text-4xl mb-4">📊</div>
-              <div>选择左侧的测试报告查看详情</div>
-            </div>
-          </div>
-          )
-        ) : /* Demo page */ viewMode === 'saved' && selectedCase ? (
-          <SavedCaseDetailView selectedCase={selectedCase} startPlayback={startPlayback} setViewMode={setViewMode} />
-        ) : viewMode === 'saved' ? (
-          <div className="flex-1 flex items-center justify-center text-slate-500">
-            <div className="text-center">
-              <div className="text-4xl mb-4">📁</div>
-              <div>选择左侧的用例查看详情</div>
-            </div>
-          </div>
-        ) : viewMode === 'test-results' && selectedTestResult ? (
-          <TestResultDetailView
-            selectedTestResult={selectedTestResult}
-            openDetailModal={openDetailModal}
-            openReviewModal={openReviewModal}
-            handleDeleteTestCase={handleDeleteTestCase}
-            reportContent={reportContent}
-            setReportContent={setReportContent}
-            reportEditMode={reportEditMode}
-            setReportEditMode={setReportEditMode}
-            reportSaving={reportSaving}
-            handleSaveReport={handleSaveReport}
-            reportTemplates={reportTemplates}
-            selectedTemplate={selectedTemplate}
-            setSelectedTemplate={setSelectedTemplate}
-            applyReportTemplate={applyReportTemplate}
-            handleLLMGenerateReport={handleLLMGenerateReport}
-          />
-        ) : viewMode === 'test-results' ? (
-          <div className="flex-1 flex items-center justify-center text-slate-500">
-            <div className="text-center">
-              <div className="text-4xl mb-4">📊</div>
-              <div>选择左侧的测试报告查看详情</div>
-            </div>
-          </div>
-        ) : (
-        <>
-        <PlaybackControlBar
-          isPlaybackMode={isPlaybackMode} playbackCase={playbackCase}
-          isPlaybackPlaying={isPlaybackPlaying} isPlaybackPaused={isPlaybackPaused}
-          playbackProgress={playbackProgress} playbackTotal={playbackTotal}
-          pausePlayback={pausePlayback} resumePlayback={resumePlayback}
-          stopPlayback={stopPlayback} skipToEnd={skipToEnd}
-          startPlayback={startPlayback} exitPlayback={exitPlayback}
-        />
-
-        <AttackHeader
-          currentAttack={currentAttack} currentScenario={currentScenario}
-          isPlaying={isPlaying} apiStatus={apiStatus} apiElapsedTime={apiElapsedTime}
-          attackType={attackType} riskLevel={riskLevel} isPlaybackMode={isPlaybackMode}
-          isBatchTesting={isBatchTesting} batchTestIndex={batchTestIndex} batchTestQueue={batchTestQueue}
-        />
-
-        <AttackDetailPanel
-          currentAttack={currentAttack}
-          showDocument={showDocument} setShowDocument={setShowDocument}
-          docTab={docTab} setDocTab={setDocTab}
-          documentReadme={documentReadme}
-        />
-
-
-        {/* 真实测试模式控制面板 */}
-        {(
-          <RealTestControlPanel
-            providers={providers} selectedProviderId={selectedProviderId} setSelectedProviderId={setSelectedProviderId}
-            providerModels={providerModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel}
-            setProviderSettingsOpen={setProviderSettingsOpen}
-            mcpEnabled={mcpEnabled} setMcpEnabled={setMcpEnabled}
-            mcpParserServiceAvailable={mcpParserServiceAvailable} isParsingFile={isParsingFile}
-            toolsEnabled={toolsEnabled} setToolsEnabled={setToolsEnabled}
-            sandboxStatus={sandboxStatus} enabledTools={enabledTools} setEnabledTools={setEnabledTools}
-            ragEnabled={ragEnabled} setRagEnabled={setRagEnabled} ragKnowledge={ragKnowledge}
-            mcpServerEnabled={mcpServerEnabled} setMcpServerEnabled={setMcpServerEnabled}
-            mcpServerConfigs={mcpServerConfigs} setMcpServerConfigs={setMcpServerConfigs}
-            mcpServerStatus={mcpServerStatus} setMcpServerStatus={setMcpServerStatus}
-            selectedMcpServer={selectedMcpServer} setSelectedMcpServer={setSelectedMcpServer}
-            isBatchTesting={isBatchTesting} batchTestIndex={batchTestIndex}
-            batchTestQueue={batchTestQueue} batchTestResults={batchTestResults}
-            batchTestPaused={batchTestPaused} toggleBatchTestPause={toggleBatchTestPause}
-            cancelBatchTest={cancelBatchTest} exportBatchTestReport={exportBatchTestReport}
-            saveBatchTestToServer={saveBatchTestToServer} setBatchTestResults={setBatchTestResults}
-            showImportMenu={showImportMenu} setShowImportMenu={setShowImportMenu}
-            importTestFromFile={importFromFile} setShowBatchTestModal={setShowBatchTestModal}
-            handleDownloadTemplate={handleDownloadTemplate} exportCurrentTest={exportCurrentCase}
-            lastRecording={lastRecording} setLastRecording={setLastRecording}
-            isRecording={isRecording} startRecording={startRecording}
-            stopRecording={stopRecording} stopConversation={stopConversation}
-            dialogMode={dialogMode} setDialogMode={setDialogMode}
-            conversationMode={conversationMode} startConversation={startConversation}
-            runRealTest={runRealTest} apiStatus={apiStatus} apiElapsedTime={apiElapsedTime}
-            setShowSaveDialog={setShowSaveDialog} startPlayback={startPlayback}
-            setMessages={setMessages} setLogs={setLogs}
-            mcpConfigCollapsed={mcpConfigCollapsed} setMcpConfigCollapsed={setMcpConfigCollapsed}
-            mcpParsers={mcpParsers} setMcpParsers={setMcpParsers} payloadFiles={payloadFiles}
-            toolsConfigCollapsed={toolsConfigCollapsed} setToolsConfigCollapsed={setToolsConfigCollapsed}
-            maxToolCalls={maxToolCalls} setMaxToolCalls={setMaxToolCalls}
-            ragConfigCollapsed={ragConfigCollapsed} setRagConfigCollapsed={setRagConfigCollapsed}
-            ragKnowledgeEdit={ragKnowledgeEdit} setRagKnowledgeEdit={setRagKnowledgeEdit}
-            setRagKnowledge={setRagKnowledge} ragMode={ragMode} setRagMode={setRagMode}
-            ragServiceAvailable={ragServiceAvailable} ragDocuments={ragDocuments}
-            ragUploading={ragUploading} handleRagUpload={handleRagUpload}
-            handleRagDelete={handleRagDelete} handleRagClear={handleRagClear}
-            handleRagReset={handleRagReset} ragQueryResults={ragQueryResults}
-            mcpServerConfigCollapsed={mcpServerConfigCollapsed} setMcpServerConfigCollapsed={setMcpServerConfigCollapsed}
-            parsingProgress={parsingProgress} parsingAbortController={parsingAbortController}
-            promptConfigCollapsed={promptConfigCollapsed} setPromptConfigCollapsed={setPromptConfigCollapsed}
-            customSystemPrompt={customSystemPrompt} setCustomSystemPrompt={setCustomSystemPrompt}
-            customTestPayload={customTestPayload} setCustomTestPayload={setCustomTestPayload}
-            currentScenario={currentScenario} currentAttack={currentAttack}
-            thinkingEnabled={thinkingEnabled} setThinkingEnabled={setThinkingEnabled}
-            thinkingBudget={thinkingBudget} setThinkingBudget={setThinkingBudget}
-            llmTemperature={llmTemperature} setLlmTemperature={setLlmTemperature}
-            llmMaxTokens={llmMaxTokens} setLlmMaxTokens={setLlmMaxTokens}
-            llmTopP={llmTopP} setLlmTopP={setLlmTopP}
-            isEditingLlmConfig={isEditingLlmConfig} setIsEditingLlmConfig={setIsEditingLlmConfig}
-            isEditingPayload={isEditingPayload} setIsEditingPayload={setIsEditingPayload}
-            setPayloadFiles={setPayloadFiles} removePayloadFile={removePayloadFile}
-            handleAddFile={handleAddFile} getDisplayPayload={getDisplayPayload}
-            apiError={apiError}
+        {/* 运行 tab */}
+        {activeTab === 'run' && (
+          <RunPage
+            appMode={appMode}
+            chatRef={chatRef} logRef={logRef}
+            playbackBar={{
+              isPlaybackMode, playbackCase,
+              isPlaybackPlaying, isPlaybackPaused,
+              playbackProgress, playbackTotal,
+              pausePlayback, resumePlayback, stopPlayback, skipToEnd,
+              startPlayback, exitPlayback,
+            }}
+            attackHeader={{
+              currentAttack, currentScenario,
+              isPlaying, apiStatus, apiElapsedTime,
+              attackType, riskLevel, isPlaybackMode,
+              isBatchTesting, batchTestIndex, batchTestQueue,
+            }}
+            attackDetail={{
+              currentAttack,
+              showDocument, setShowDocument,
+              docTab, setDocTab,
+              documentReadme,
+            }}
+            testControl={{
+              providers, selectedProviderId, setSelectedProviderId,
+              providerModels, selectedModel, setSelectedModel,
+              setProviderSettingsOpen,
+              mcpEnabled, setMcpEnabled,
+              mcpParserServiceAvailable, isParsingFile,
+              toolsEnabled, setToolsEnabled,
+              sandboxStatus, enabledTools, setEnabledTools,
+              ragEnabled, setRagEnabled, ragKnowledge,
+              mcpServerEnabled, setMcpServerEnabled,
+              mcpServerConfigs, setMcpServerConfigs,
+              mcpServerStatus, setMcpServerStatus,
+              selectedMcpServer, setSelectedMcpServer,
+              isBatchTesting, batchTestIndex,
+              batchTestQueue, batchTestResults,
+              batchTestPaused, toggleBatchTestPause,
+              cancelBatchTest, exportBatchTestReport,
+              saveBatchTestToServer, setBatchTestResults,
+              showImportMenu, setShowImportMenu,
+              importTestFromFile: importFromFile, setShowBatchTestModal,
+              handleDownloadTemplate, exportCurrentTest: exportCurrentCase,
+              lastRecording, setLastRecording,
+              isRecording, startRecording,
+              stopRecording, stopConversation,
+              dialogMode, setDialogMode,
+              conversationMode, startConversation,
+              runRealTest, apiStatus, apiElapsedTime,
+              setShowSaveDialog, startPlayback,
+              setMessages, setLogs,
+              mcpConfigCollapsed, setMcpConfigCollapsed,
+              mcpParsers, setMcpParsers, payloadFiles,
+              toolsConfigCollapsed, setToolsConfigCollapsed,
+              maxToolCalls, setMaxToolCalls,
+              ragConfigCollapsed, setRagConfigCollapsed,
+              ragKnowledgeEdit, setRagKnowledgeEdit,
+              setRagKnowledge, ragMode, setRagMode,
+              ragServiceAvailable, ragDocuments,
+              ragUploading, handleRagUpload,
+              handleRagDelete, handleRagClear,
+              handleRagReset, ragQueryResults,
+              mcpServerConfigCollapsed, setMcpServerConfigCollapsed,
+              parsingProgress, parsingAbortController,
+              promptConfigCollapsed, setPromptConfigCollapsed,
+              customSystemPrompt, setCustomSystemPrompt,
+              customTestPayload, setCustomTestPayload,
+              currentScenario, currentAttack,
+              thinkingEnabled, setThinkingEnabled,
+              thinkingBudget, setThinkingBudget,
+              llmTemperature, setLlmTemperature,
+              llmMaxTokens, setLlmMaxTokens,
+              llmTopP, setLlmTopP,
+              isEditingLlmConfig, setIsEditingLlmConfig,
+              isEditingPayload, setIsEditingPayload,
+              setPayloadFiles, removePayloadFile,
+              handleAddFile, getDisplayPayload,
+              apiError,
+            }}
+            conversationPanel={{
+              leftPanelTab, setLeftPanelTab,
+              selectedModel, messages,
+              typingMsg, dialogMode, conversationMode,
+              apiStatus, userInput, setUserInput,
+              sendUserMessage, handleMultiRoundFileUpload,
+              isPlaybackMode,
+              thinkingEntries, setThinkingEntries,
+              expandedThinking, setExpandedThinking,
+              thinkingIndexRef,
+              apiInteractions, setApiInteractions,
+              expandedApiInteraction, setExpandedApiInteraction,
+            }}
+            rightPanel={{
+              rightPanelTab, setRightPanelTab,
+              rightSubTab, setRightSubTab,
+              testRecords, setTestRecords,
+              expandedRecords, setExpandedRecords,
+              thinkingIndexRef,
+              setAnnotationModal, removeAnnotation,
+              setLeftPanelTab, setExpandedThinking,
+              chatRef,
+              judgeConfig, setJudgeConfig,
+              humanJudgment, setHumanJudgment,
+              submitHumanJudgment,
+            }}
           />
         )}
 
-        {/* 主面板 - 固定二列布局 */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
-          <ConversationPanel
-            ref={chatRef}
-            leftPanelTab={leftPanelTab} setLeftPanelTab={setLeftPanelTab}
-            selectedModel={selectedModel} messages={messages}
-            typingMsg={typingMsg} dialogMode={dialogMode} conversationMode={conversationMode}
-            apiStatus={apiStatus} userInput={userInput} setUserInput={setUserInput}
-            sendUserMessage={sendUserMessage} handleMultiRoundFileUpload={handleMultiRoundFileUpload}
-            isPlaybackMode={isPlaybackMode}
-            thinkingEntries={thinkingEntries} setThinkingEntries={setThinkingEntries}
-            expandedThinking={expandedThinking} setExpandedThinking={setExpandedThinking}
-            thinkingIndexRef={thinkingIndexRef}
-            apiInteractions={apiInteractions} setApiInteractions={setApiInteractions}
-            expandedApiInteraction={expandedApiInteraction} setExpandedApiInteraction={setExpandedApiInteraction}
+        {/* 报告 tab */}
+        {activeTab === 'report' && (
+          <ReportPage
+            appMode={appMode}
+            savedTestResults={savedTestResults}
+            selectedTestResult={selectedTestResult}
+            viewTestResultDetail={viewTestResultDetail}
+            handleDeleteTestResult={handleDeleteTestResult}
+            loadSavedTestResults={loadSavedTestResults}
+            detailView={{
+              selectedTestResult,
+              openDetailModal, openReviewModal, handleDeleteTestCase,
+              reportContent, setReportContent,
+              reportEditMode, setReportEditMode,
+              reportSaving, handleSaveReport,
+              reportTemplates, selectedTemplate, setSelectedTemplate,
+              applyReportTemplate, handleLLMGenerateReport,
+            }}
           />
+        )}
 
-          <RightPanel
-            ref={logRef}
-            rightPanelTab={rightPanelTab} setRightPanelTab={setRightPanelTab}
-            rightSubTab={rightSubTab} setRightSubTab={setRightSubTab}
-            testRecords={testRecords} setTestRecords={setTestRecords}
-            expandedRecords={expandedRecords} setExpandedRecords={setExpandedRecords}
-            thinkingIndexRef={thinkingIndexRef}
-            setAnnotationModal={setAnnotationModal} removeAnnotation={removeAnnotation}
-            setLeftPanelTab={setLeftPanelTab} setExpandedThinking={setExpandedThinking}
-            chatRef={chatRef}
-            judgeConfig={judgeConfig} setJudgeConfig={setJudgeConfig}
-            humanJudgment={humanJudgment} setHumanJudgment={setHumanJudgment}
-            submitHumanJudgment={submitHumanJudgment}
+        {/* 风险项 tab */}
+        {activeTab === 'risk-items' && (
+          <RiskItemsPage
+            appMode={appMode}
+            attackSelection={attackSelection}
+            selectAttack={selectAttack}
+            datasets={datasets}
+            importedTestCase={importedTestCase}
+            setImportedTestCase={setImportedTestCase}
+            handleImportDataset={handleImportDataset}
+            handleViewDataset={handleViewDataset}
+            handleSelectCaseFromDataset={handleSelectCaseFromDataset}
+            handleDownloadTemplate={handleDownloadTemplate}
+            applyImportedTestCase={applyImportedTestCase}
+            setActiveTab={setActiveTab}
           />
-        </div>
-        </>
         )}
 
         {/* 文件浏览器 Modal */}

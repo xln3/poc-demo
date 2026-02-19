@@ -11,9 +11,10 @@ import { useAuth } from '../contexts/AuthContext.jsx';
  * - 仿真环境 (预留)
  * - 测试输入 (Payload/文件上传/多轮配置)
  *
- * 此组件为 Phase 2 骨架，后续 Phase 逐步充实各区块。
+ * appMode='demo' 时所有输入禁用。
  */
 export default function ConfigPanel({
+  appMode,
   // Provider & model
   providers, selectedProviderId, setSelectedProviderId, providerModels,
   selectedModel, setSelectedModel, setProviderSettingsOpen,
@@ -43,20 +44,29 @@ export default function ConfigPanel({
   currentRiskItemData, currentAttack,
 }) {
   const { isAuditor } = useAuth();
+  const isDemo = appMode === 'demo';
 
   return (
     <div className="flex-1 overflow-y-auto custom-scroll p-4 space-y-4">
+      {/* Demo mode banner */}
+      {isDemo && (
+        <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-3 text-xs text-amber-400 text-center">
+          演示模式 — 配置仅供查看，切换到测试模式以编辑
+        </div>
+      )}
+
       {/* Current risk item context */}
       {currentRiskItemData && (
         <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
           <div className="flex items-center gap-2 text-sm font-medium mb-1">
-            <span className="text-slate-400">#{currentRiskItemData.id}</span>
+            <span className="text-slate-400">{currentRiskItemData.id}</span>
             <span>{currentRiskItemData.name}</span>
           </div>
-          <div className="flex gap-2 text-[10px] text-slate-500">
-            <span>{currentRiskItemData.threatClass}</span>
-            <span>{currentRiskItemData.goal}</span>
-          </div>
+          {currentRiskItemData.categoryName && (
+            <div className="text-[10px] text-slate-500">
+              {currentRiskItemData.categoryName}
+            </div>
+          )}
         </div>
       )}
 
@@ -68,7 +78,8 @@ export default function ConfigPanel({
             <select
               value={selectedProviderId || ''}
               onChange={(e) => setSelectedProviderId(e.target.value)}
-              className="w-full bg-slate-700 text-white text-xs px-2 py-1.5 rounded border border-slate-600 focus:outline-none focus:border-blue-500"
+              disabled={isDemo}
+              className="w-full bg-slate-700 text-white text-xs px-2 py-1.5 rounded border border-slate-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
             >
               <option value="">默认</option>
               {providers.map(p => (
@@ -81,7 +92,8 @@ export default function ConfigPanel({
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full bg-slate-700 text-white text-xs px-2 py-1.5 rounded border border-slate-600 focus:outline-none focus:border-blue-500"
+              disabled={isDemo}
+              className="w-full bg-slate-700 text-white text-xs px-2 py-1.5 rounded border border-slate-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
             >
               {providerModels.map(m => (
                 <option key={m.id || m} value={m.id || m}>{m.name || m}</option>
@@ -94,7 +106,8 @@ export default function ConfigPanel({
               type="range" min="0" max="2" step="0.1"
               value={llmTemperature}
               onChange={(e) => setLlmTemperature(parseFloat(e.target.value))}
-              className="w-full"
+              disabled={isDemo}
+              className="w-full disabled:opacity-50"
             />
           </div>
           <div>
@@ -103,7 +116,8 @@ export default function ConfigPanel({
               type="range" min="256" max="16384" step="256"
               value={llmMaxTokens}
               onChange={(e) => setLlmMaxTokens(parseInt(e.target.value))}
-              className="w-full"
+              disabled={isDemo}
+              className="w-full disabled:opacity-50"
             />
           </div>
         </div>
@@ -112,6 +126,7 @@ export default function ConfigPanel({
             <input
               type="checkbox" checked={thinkingEnabled}
               onChange={(e) => setThinkingEnabled(e.target.checked)}
+              disabled={isDemo}
               className="rounded"
             />
             扩展思考
@@ -122,16 +137,19 @@ export default function ConfigPanel({
               <input
                 type="number" value={thinkingBudget}
                 onChange={(e) => setThinkingBudget(parseInt(e.target.value) || 10000)}
-                className="w-20 bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600"
+                disabled={isDemo}
+                className="w-20 bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 disabled:opacity-50"
               />
             </div>
           )}
-          <button
-            onClick={() => setProviderSettingsOpen(true)}
-            className="ml-auto text-xs text-blue-400 hover:text-blue-300"
-          >
-            管理 Provider
-          </button>
+          {!isDemo && (
+            <button
+              onClick={() => setProviderSettingsOpen(true)}
+              className="ml-auto text-xs text-blue-400 hover:text-blue-300"
+            >
+              管理 Provider
+            </button>
+          )}
         </div>
       </Section>
 
@@ -140,8 +158,9 @@ export default function ConfigPanel({
         <textarea
           value={customSystemPrompt}
           onChange={(e) => setCustomSystemPrompt(e.target.value)}
+          readOnly={isDemo}
           rows={6}
-          className="w-full bg-slate-700 text-white text-xs px-3 py-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500 font-mono resize-y"
+          className="w-full bg-slate-700 text-white text-xs px-3 py-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500 font-mono resize-y read-only:opacity-50"
           placeholder="输入 Agent 的 System Prompt..."
         />
       </Section>
@@ -153,6 +172,7 @@ export default function ConfigPanel({
             <input
               type="checkbox" checked={toolsEnabled}
               onChange={(e) => setToolsEnabled(e.target.checked)}
+              disabled={isDemo}
             />
             启用工具调用
           </label>
@@ -160,6 +180,7 @@ export default function ConfigPanel({
             <input
               type="checkbox" checked={mcpEnabled}
               onChange={(e) => setMcpEnabled(e.target.checked)}
+              disabled={isDemo}
             />
             MCP 解析器
           </label>
@@ -167,6 +188,7 @@ export default function ConfigPanel({
             <input
               type="checkbox" checked={mcpServerEnabled}
               onChange={(e) => setMcpServerEnabled(e.target.checked)}
+              disabled={isDemo}
             />
             MCP 服务器
           </label>
@@ -184,6 +206,7 @@ export default function ConfigPanel({
           <input
             type="checkbox" checked={ragEnabled}
             onChange={(e) => setRagEnabled(e.target.checked)}
+            disabled={isDemo}
           />
           启用 RAG 检索
         </label>
@@ -206,8 +229,9 @@ export default function ConfigPanel({
         <textarea
           value={customTestPayload}
           onChange={(e) => setCustomTestPayload(e.target.value)}
+          readOnly={isDemo}
           rows={4}
-          className="w-full bg-slate-700 text-white text-xs px-3 py-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500 font-mono resize-y"
+          className="w-full bg-slate-700 text-white text-xs px-3 py-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500 font-mono resize-y read-only:opacity-50"
           placeholder="输入测试 Payload..."
         />
         {payloadFiles.length > 0 && (
@@ -218,7 +242,7 @@ export default function ConfigPanel({
       </Section>
 
       {/* Action buttons */}
-      {isAuditor && (
+      {isAuditor && !isDemo && (
         <div className="flex gap-2 pt-2">
           <button
             onClick={runRealTest}

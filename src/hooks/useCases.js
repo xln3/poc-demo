@@ -98,18 +98,15 @@ export const useCases = ({
   stateCollector,
 }) => {
   // Case management states
-  const [viewMode, setViewMode] = useState('scenarios'); // 'scenarios' | 'saved'
   const [savedCases, setSavedCases] = useState([]);
   const [selectedCase, setSelectedCase] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [loadingSavedCases, setLoadingSavedCases] = useState(false);
 
-  // Load saved cases when view mode changes
+  // Load saved cases on mount
   useEffect(() => {
-    if (viewMode === 'saved') {
-      loadSavedCases();
-    }
-  }, [viewMode]);
+    loadSavedCases();
+  }, []);
 
   /**
    * 确定能力层级
@@ -430,9 +427,7 @@ export const useCases = ({
       const saved = await saveCaseToServer(testCase);
       const caseId = saved.meta?.caseId || saved.id;
       alert(`保存成功！用例 ID: ${caseId}`);
-      if (viewMode === 'saved') {
-        loadSavedCases();
-      }
+      loadSavedCases();
     } catch (error) {
       alert(`保存失败: ${error.message}`);
     } finally {
@@ -549,8 +544,6 @@ export const useCases = ({
 
   return {
     // State
-    viewMode,
-    setViewMode,
     savedCases,
     setSavedCases,
     selectedCase,

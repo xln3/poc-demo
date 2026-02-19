@@ -1,23 +1,23 @@
 import { useState, useMemo, useCallback } from 'react';
 import { SCENARIOS } from '../scenarios/index.js';
 import { ATTACK_TYPES, RISK_LEVELS } from '../config.js';
-import { RISK_ITEMS_BY_ID } from '../riskItems/index.js';
+import { SUBCATEGORY_BY_ID } from '../riskItems/index.js';
 
 /**
- * Manages attack scenario selection state and sidebar expansion.
- * Supports both the new T1-T4 risk tree and legacy scenario references.
+ * Manages attack scenario selection state and risk tree expansion.
+ * Supports the new 15-category benchmark risk tree + legacy scenario cases.
  */
 export function useAttackSelection() {
-  // Selected attack still references legacy SCENARIOS
+  // Selected attack references legacy SCENARIOS
   const [selectedAttack, setSelectedAttack] = useState(null);
 
-  // T1-T4 tree expansion: { category, subcategory, riskItem }
-  const [expanded, setExpanded] = useState({ category: null, subcategory: null, riskItem: null });
+  // Risk tree expansion: { category, subcategory }
+  const [expanded, setExpanded] = useState({ category: null, subcategory: null });
 
-  // Selected risk item ID (new)
+  // Selected risk subcategory ID (e.g., '1.1', '5.2')
   const [selectedRiskItem, setSelectedRiskItem] = useState(null);
 
-  // Legacy compatibility: old {type, scenario} expansion
+  // Risk tree collapsed/expanded toggle
   const [scenarioListExpanded, setScenarioListExpanded] = useState(false);
 
   const currentScenario = useMemo(
@@ -37,16 +37,14 @@ export function useAttackSelection() {
     [currentAttack]
   );
   const currentRiskItemData = useMemo(
-    () => selectedRiskItem ? RISK_ITEMS_BY_ID[selectedRiskItem] : null,
+    () => selectedRiskItem ? SUBCATEGORY_BY_ID[selectedRiskItem] : null,
     [selectedRiskItem]
   );
 
-  // T1-T4 tree toggles
   const toggleCategory = useCallback((catId) => {
     setExpanded(prev => ({
       category: prev.category === catId ? null : catId,
       subcategory: null,
-      riskItem: null,
     }));
   }, []);
 
@@ -54,20 +52,8 @@ export function useAttackSelection() {
     setExpanded(prev => ({
       ...prev,
       subcategory: prev.subcategory === subId ? null : subId,
-      riskItem: null,
     }));
   }, []);
-
-  const toggleRiskItem = useCallback((riskId) => {
-    setExpanded(prev => ({
-      ...prev,
-      riskItem: prev.riskItem === riskId ? null : riskId,
-    }));
-  }, []);
-
-  // Legacy compatibility aliases
-  const toggleType = toggleCategory;
-  const toggleScenario = toggleSubcategory;
 
   return {
     selectedAttack, setSelectedAttack,
@@ -76,7 +62,6 @@ export function useAttackSelection() {
     scenarioListExpanded, setScenarioListExpanded,
     currentScenario, currentAttack, attackType, riskLevel,
     currentRiskItemData,
-    toggleCategory, toggleSubcategory, toggleRiskItem,
-    toggleType, toggleScenario,
+    toggleCategory, toggleSubcategory,
   };
 }
