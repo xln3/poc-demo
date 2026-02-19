@@ -300,6 +300,10 @@ export default function App() {
   const [toolsConfigCollapsed, setToolsConfigCollapsed] = useState(true);
   const [promptConfigCollapsed, setPromptConfigCollapsed] = useState(false);
 
+  // Simulation state
+  const [simEngine, setSimEngine] = useState(null);        // 'ai2thor' | null
+  const [safeAgentBenchCase, setSafeAgentBenchCase] = useState(null);
+
   // 录制相关状态
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState(null);
@@ -1386,23 +1390,55 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
         {/* 配置 tab */}
         {activeTab === 'config' && (
           <ConfigPage appMode={appMode} configPanel={{
+            // Provider & model
             providers, selectedProviderId, setSelectedProviderId, providerModels,
             selectedModel, setSelectedModel, setProviderSettingsOpen,
+            // LLM config
             llmTemperature, setLlmTemperature, llmMaxTokens, setLlmMaxTokens,
             llmTopP, setLlmTopP, thinkingEnabled, setThinkingEnabled,
             thinkingBudget, setThinkingBudget,
+            // System prompt
             customSystemPrompt, setCustomSystemPrompt,
+            // Feature toggles
+            mcpEnabled, setMcpEnabled, mcpParserServiceAvailable, isParsingFile,
             toolsEnabled, setToolsEnabled, enabledTools, setEnabledTools,
-            maxToolCalls, setMaxToolCalls,
-            sandboxEnabled, setSandboxEnabled,
+            maxToolCalls, setMaxToolCalls, sandboxStatus,
+            // RAG (full config)
             ragEnabled, setRagEnabled, ragMode, setRagMode,
             ragKnowledge, setRagKnowledge,
-            mcpEnabled, setMcpEnabled, mcpServerEnabled, setMcpServerEnabled,
+            ragKnowledgeEdit, setRagKnowledgeEdit,
+            ragServiceAvailable, ragDocuments,
+            ragUploading, handleRagUpload, handleRagDelete, handleRagClear, handleRagReset,
+            ragQueryResults,
+            ragConfigCollapsed, setRagConfigCollapsed,
+            // MCP parser config
+            mcpConfigCollapsed, setMcpConfigCollapsed, mcpParsers, setMcpParsers, payloadFiles,
+            // MCP server config
+            mcpServerEnabled, setMcpServerEnabled,
+            mcpServerConfigs, setMcpServerConfigs,
+            mcpServerStatus, setMcpServerStatus,
             selectedMcpServer, setSelectedMcpServer,
+            mcpServerConfigCollapsed, setMcpServerConfigCollapsed,
+            // Tools config
+            toolsConfigCollapsed, setToolsConfigCollapsed,
+            // Parsing progress
+            parsingProgress, parsingAbortController,
+            // Prompt config
+            promptConfigCollapsed, setPromptConfigCollapsed,
             customTestPayload, setCustomTestPayload,
-            payloadFiles, setPayloadFiles,
+            currentScenario, currentAttack,
+            isEditingLlmConfig, setIsEditingLlmConfig,
+            isEditingPayload, setIsEditingPayload,
+            setPayloadFiles, removePayloadFile, handleAddFile, getDisplayPayload,
+            dialogMode, setDialogMode, conversationMode,
+            // Risk context
+            currentRiskItemData,
+            // Simulation
+            simulator: null, benchmarkApi: null,
+            safeAgentBenchCase, setSafeAgentBenchCase,
+            onApplyTestCase: null,
+            // Actions
             runRealTest, apiStatus,
-            currentRiskItemData, currentAttack,
           }} />
         )}
 
@@ -1411,6 +1447,8 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
           <RunPage
             appMode={appMode}
             chatRef={chatRef} logRef={logRef}
+            simulator={null}
+            thinkingEnabled={thinkingEnabled}
             playbackBar={{
               isPlaybackMode, playbackCase,
               isPlaybackPlaying, isPlaybackPaused,
@@ -1431,60 +1469,33 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
               documentReadme,
             }}
             testControl={{
-              providers, selectedProviderId, setSelectedProviderId,
-              providerModels, selectedModel, setSelectedModel,
-              setProviderSettingsOpen,
-              mcpEnabled, setMcpEnabled,
-              mcpParserServiceAvailable, isParsingFile,
-              toolsEnabled, setToolsEnabled,
-              sandboxStatus, enabledTools, setEnabledTools,
-              ragEnabled, setRagEnabled, ragKnowledge,
-              mcpServerEnabled, setMcpServerEnabled,
-              mcpServerConfigs, setMcpServerConfigs,
-              mcpServerStatus, setMcpServerStatus,
-              selectedMcpServer, setSelectedMcpServer,
+              // Read-only summary
+              providers, selectedProviderId, selectedModel,
+              mcpEnabled, mcpParserServiceAvailable, isParsingFile,
+              toolsEnabled, sandboxStatus, enabledTools,
+              ragEnabled, ragKnowledge,
+              mcpServerEnabled, mcpServerConfigs,
+              thinkingEnabled,
+              simEngine,
+              // Batch test
               isBatchTesting, batchTestIndex,
               batchTestQueue, batchTestResults,
               batchTestPaused, toggleBatchTestPause,
               cancelBatchTest, exportBatchTestReport,
               saveBatchTestToServer, setBatchTestResults,
+              // Import/export
               showImportMenu, setShowImportMenu,
               importTestFromFile: importFromFile, setShowBatchTestModal,
               handleDownloadTemplate, exportCurrentTest: exportCurrentCase,
+              // Recording & execution
               lastRecording, setLastRecording,
               isRecording, startRecording,
               stopRecording, stopConversation,
-              dialogMode, setDialogMode,
-              conversationMode, startConversation,
+              dialogMode, conversationMode, startConversation,
               runRealTest, apiStatus, apiElapsedTime,
               setShowSaveDialog, startPlayback,
               setMessages, setLogs,
-              mcpConfigCollapsed, setMcpConfigCollapsed,
-              mcpParsers, setMcpParsers, payloadFiles,
-              toolsConfigCollapsed, setToolsConfigCollapsed,
-              maxToolCalls, setMaxToolCalls,
-              ragConfigCollapsed, setRagConfigCollapsed,
-              ragKnowledgeEdit, setRagKnowledgeEdit,
-              setRagKnowledge, ragMode, setRagMode,
-              ragServiceAvailable, ragDocuments,
-              ragUploading, handleRagUpload,
-              handleRagDelete, handleRagClear,
-              handleRagReset, ragQueryResults,
-              mcpServerConfigCollapsed, setMcpServerConfigCollapsed,
-              parsingProgress, parsingAbortController,
-              promptConfigCollapsed, setPromptConfigCollapsed,
-              customSystemPrompt, setCustomSystemPrompt,
-              customTestPayload, setCustomTestPayload,
-              currentScenario, currentAttack,
-              thinkingEnabled, setThinkingEnabled,
-              thinkingBudget, setThinkingBudget,
-              llmTemperature, setLlmTemperature,
-              llmMaxTokens, setLlmMaxTokens,
-              llmTopP, setLlmTopP,
-              isEditingLlmConfig, setIsEditingLlmConfig,
-              isEditingPayload, setIsEditingPayload,
-              setPayloadFiles, removePayloadFile,
-              handleAddFile, getDisplayPayload,
+              // Error
               apiError,
             }}
             conversationPanel={{

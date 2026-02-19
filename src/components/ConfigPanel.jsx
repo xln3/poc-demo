@@ -1,17 +1,19 @@
 import { useAuth } from '../contexts/AuthContext.jsx';
+import {
+  ModelSettings,
+  FeatureToggles,
+  McpParserConfig,
+  TerminalToolsConfig,
+  RagConfig,
+  McpServerConfig,
+  PromptConfig,
+  ParsingProgress,
+  SimulationEnvConfig,
+} from './config/index.js';
 
 /**
- * ConfigPanel - Agent 配置页面
- *
- * 整合所有配置项到一个独立页面：
- * - 模型设置 (Provider/模型/Temperature/MaxTokens)
- * - System Prompt 编辑
- * - 工具声明 (工具列表/MCP 服务器)
- * - RAG 配置 (四阶段)
- * - 仿真环境 (预留)
- * - 测试输入 (Payload/文件上传/多轮配置)
- *
- * appMode='demo' 时所有输入禁用。
+ * ConfigPanel - orchestrator that arranges all config sections.
+ * Each section is a self-contained component from ./config/.
  */
 export default function ConfigPanel({
   appMode,
@@ -24,24 +26,49 @@ export default function ConfigPanel({
   thinkingBudget, setThinkingBudget,
   // System prompt
   customSystemPrompt, setCustomSystemPrompt,
-  // Tools
+  // Feature toggles
+  mcpEnabled, setMcpEnabled, mcpParserServiceAvailable, isParsingFile,
   toolsEnabled, setToolsEnabled, enabledTools, setEnabledTools,
-  maxToolCalls, setMaxToolCalls,
-  // Sandbox
-  sandboxEnabled, setSandboxEnabled,
+  maxToolCalls, setMaxToolCalls, sandboxStatus,
   // RAG
   ragEnabled, setRagEnabled, ragMode, setRagMode,
   ragKnowledge, setRagKnowledge,
+  ragKnowledgeEdit, setRagKnowledgeEdit,
+  ragServiceAvailable, ragDocuments,
+  ragUploading, handleRagUpload, handleRagDelete, handleRagClear, handleRagReset,
+  ragQueryResults,
   // MCP
-  mcpEnabled, setMcpEnabled, mcpServerEnabled, setMcpServerEnabled,
+  mcpServerEnabled, setMcpServerEnabled,
+  mcpServerConfigs, setMcpServerConfigs,
+  mcpServerStatus, setMcpServerStatus,
   selectedMcpServer, setSelectedMcpServer,
-  // Payload
+  // MCP parser
+  mcpConfigCollapsed, setMcpConfigCollapsed, mcpParsers, setMcpParsers, payloadFiles,
+  // Tools
+  toolsConfigCollapsed, setToolsConfigCollapsed,
+  // RAG collapsible
+  ragConfigCollapsed, setRagConfigCollapsed,
+  // MCP server collapsible
+  mcpServerConfigCollapsed, setMcpServerConfigCollapsed,
+  // Parsing progress
+  parsingProgress, parsingAbortController,
+  // Prompt config
+  promptConfigCollapsed, setPromptConfigCollapsed,
   customTestPayload, setCustomTestPayload,
-  payloadFiles, setPayloadFiles,
+  currentScenario, currentAttack,
+  isEditingLlmConfig, setIsEditingLlmConfig,
+  isEditingPayload, setIsEditingPayload,
+  setPayloadFiles, removePayloadFile, handleAddFile, getDisplayPayload,
+  dialogMode, setDialogMode, conversationMode,
+  // Payload
+  // Risk context
+  currentRiskItemData,
+  // Simulation
+  simulator, benchmarkApi,
+  safeAgentBenchCase, setSafeAgentBenchCase,
+  onApplyTestCase,
   // Actions
   runRealTest, apiStatus,
-  // Risk context
-  currentRiskItemData, currentAttack,
 }) {
   const { isAuditor } = useAuth();
   const isDemo = appMode === 'demo';
@@ -70,176 +97,114 @@ export default function ConfigPanel({
         </div>
       )}
 
-      {/* Model settings */}
-      <Section title="模型设置">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] text-slate-500 mb-1 block">Provider</label>
-            <select
-              value={selectedProviderId || ''}
-              onChange={(e) => setSelectedProviderId(e.target.value)}
-              disabled={isDemo}
-              className="w-full bg-slate-700 text-white text-xs px-2 py-1.5 rounded border border-slate-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
-            >
-              <option value="">默认</option>
-              {providers.map(p => (
-                <option key={p.id} value={p.id}>{p.provider_name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] text-slate-500 mb-1 block">模型</label>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              disabled={isDemo}
-              className="w-full bg-slate-700 text-white text-xs px-2 py-1.5 rounded border border-slate-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
-            >
-              {providerModels.map(m => (
-                <option key={m.id || m} value={m.id || m}>{m.name || m}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] text-slate-500 mb-1 block">Temperature: {llmTemperature}</label>
-            <input
-              type="range" min="0" max="2" step="0.1"
-              value={llmTemperature}
-              onChange={(e) => setLlmTemperature(parseFloat(e.target.value))}
-              disabled={isDemo}
-              className="w-full disabled:opacity-50"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] text-slate-500 mb-1 block">Max Tokens: {llmMaxTokens}</label>
-            <input
-              type="range" min="256" max="16384" step="256"
-              value={llmMaxTokens}
-              onChange={(e) => setLlmMaxTokens(parseInt(e.target.value))}
-              disabled={isDemo}
-              className="w-full disabled:opacity-50"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-3 mt-2">
-          <label className="flex items-center gap-1 text-xs text-slate-400">
-            <input
-              type="checkbox" checked={thinkingEnabled}
-              onChange={(e) => setThinkingEnabled(e.target.checked)}
-              disabled={isDemo}
-              className="rounded"
-            />
-            扩展思考
-          </label>
-          {thinkingEnabled && (
-            <div className="flex items-center gap-1">
-              <label className="text-[10px] text-slate-500">Budget:</label>
-              <input
-                type="number" value={thinkingBudget}
-                onChange={(e) => setThinkingBudget(parseInt(e.target.value) || 10000)}
-                disabled={isDemo}
-                className="w-20 bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 disabled:opacity-50"
-              />
-            </div>
-          )}
-          {!isDemo && (
-            <button
-              onClick={() => setProviderSettingsOpen(true)}
-              className="ml-auto text-xs text-blue-400 hover:text-blue-300"
-            >
-              管理 Provider
-            </button>
-          )}
-        </div>
-      </Section>
+      {/* 1. Model settings */}
+      <ModelSettings
+        isDemo={isDemo}
+        providers={providers} selectedProviderId={selectedProviderId}
+        setSelectedProviderId={setSelectedProviderId} providerModels={providerModels}
+        selectedModel={selectedModel} setSelectedModel={setSelectedModel}
+        setProviderSettingsOpen={setProviderSettingsOpen}
+        llmTemperature={llmTemperature} setLlmTemperature={setLlmTemperature}
+        llmMaxTokens={llmMaxTokens} setLlmMaxTokens={setLlmMaxTokens}
+        llmTopP={llmTopP} setLlmTopP={setLlmTopP}
+        thinkingEnabled={thinkingEnabled} setThinkingEnabled={setThinkingEnabled}
+        thinkingBudget={thinkingBudget} setThinkingBudget={setThinkingBudget}
+      />
 
-      {/* System Prompt */}
-      <Section title="System Prompt">
-        <textarea
-          value={customSystemPrompt}
-          onChange={(e) => setCustomSystemPrompt(e.target.value)}
-          readOnly={isDemo}
-          rows={6}
-          className="w-full bg-slate-700 text-white text-xs px-3 py-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500 font-mono resize-y read-only:opacity-50"
-          placeholder="输入 Agent 的 System Prompt..."
+      {/* 2. Feature toggles */}
+      <FeatureToggles
+        isDemo={isDemo}
+        mcpEnabled={mcpEnabled} setMcpEnabled={setMcpEnabled}
+        mcpParserServiceAvailable={mcpParserServiceAvailable} isParsingFile={isParsingFile}
+        toolsEnabled={toolsEnabled} setToolsEnabled={setToolsEnabled}
+        sandboxStatus={sandboxStatus} enabledTools={enabledTools}
+        ragEnabled={ragEnabled} setRagEnabled={setRagEnabled}
+        ragKnowledge={ragKnowledge}
+        mcpServerEnabled={mcpServerEnabled} setMcpServerEnabled={setMcpServerEnabled}
+        mcpServerConfigs={mcpServerConfigs}
+      />
+
+      {/* 3. MCP parser config (conditional) */}
+      {mcpEnabled && (
+        <McpParserConfig
+          mcpConfigCollapsed={mcpConfigCollapsed} setMcpConfigCollapsed={setMcpConfigCollapsed}
+          mcpParsers={mcpParsers} setMcpParsers={setMcpParsers}
+          payloadFiles={payloadFiles}
         />
-      </Section>
+      )}
 
-      {/* Tool declaration */}
-      <Section title="工具声明">
-        <div className="flex items-center gap-3 mb-2">
-          <label className="flex items-center gap-1 text-xs text-slate-400">
-            <input
-              type="checkbox" checked={toolsEnabled}
-              onChange={(e) => setToolsEnabled(e.target.checked)}
-              disabled={isDemo}
-            />
-            启用工具调用
-          </label>
-          <label className="flex items-center gap-1 text-xs text-slate-400">
-            <input
-              type="checkbox" checked={mcpEnabled}
-              onChange={(e) => setMcpEnabled(e.target.checked)}
-              disabled={isDemo}
-            />
-            MCP 解析器
-          </label>
-          <label className="flex items-center gap-1 text-xs text-slate-400">
-            <input
-              type="checkbox" checked={mcpServerEnabled}
-              onChange={(e) => setMcpServerEnabled(e.target.checked)}
-              disabled={isDemo}
-            />
-            MCP 服务器
-          </label>
-        </div>
-        {toolsEnabled && (
-          <div className="text-[10px] text-slate-500">
-            最大调用次数: {maxToolCalls}
-          </div>
-        )}
-      </Section>
-
-      {/* RAG config */}
-      <Section title="RAG 配置">
-        <label className="flex items-center gap-1 text-xs text-slate-400 mb-2">
-          <input
-            type="checkbox" checked={ragEnabled}
-            onChange={(e) => setRagEnabled(e.target.checked)}
-            disabled={isDemo}
-          />
-          启用 RAG 检索
-        </label>
-        {ragEnabled && (
-          <div className="text-[10px] text-slate-500">
-            模式: {ragMode} | 后续 Phase 5 实现四阶段配置
-          </div>
-        )}
-      </Section>
-
-      {/* Simulation environment placeholder */}
-      <Section title="仿真环境">
-        <div className="text-xs text-slate-500 py-2">
-          Phase 6 实现 - AI2-THOR / CARLA / 自定义
-        </div>
-      </Section>
-
-      {/* Test input */}
-      <Section title="测试输入">
-        <textarea
-          value={customTestPayload}
-          onChange={(e) => setCustomTestPayload(e.target.value)}
-          readOnly={isDemo}
-          rows={4}
-          className="w-full bg-slate-700 text-white text-xs px-3 py-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500 font-mono resize-y read-only:opacity-50"
-          placeholder="输入测试 Payload..."
+      {/* 4. Terminal tools config (conditional) */}
+      {toolsEnabled && (
+        <TerminalToolsConfig
+          toolsConfigCollapsed={toolsConfigCollapsed} setToolsConfigCollapsed={setToolsConfigCollapsed}
+          enabledTools={enabledTools} setEnabledTools={setEnabledTools}
+          maxToolCalls={maxToolCalls} setMaxToolCalls={setMaxToolCalls}
         />
-        {payloadFiles.length > 0 && (
-          <div className="mt-1 text-[10px] text-slate-500">
-            {payloadFiles.length} 个文件已附加
-          </div>
-        )}
-      </Section>
+      )}
+
+      {/* 5. RAG config (conditional) */}
+      {ragEnabled && (
+        <RagConfig
+          ragConfigCollapsed={ragConfigCollapsed} setRagConfigCollapsed={setRagConfigCollapsed}
+          ragKnowledgeEdit={ragKnowledgeEdit} setRagKnowledgeEdit={setRagKnowledgeEdit}
+          ragKnowledge={ragKnowledge} setRagKnowledge={setRagKnowledge}
+          ragMode={ragMode} setRagMode={setRagMode}
+          ragServiceAvailable={ragServiceAvailable} ragDocuments={ragDocuments}
+          ragUploading={ragUploading} handleRagUpload={handleRagUpload}
+          handleRagDelete={handleRagDelete} handleRagClear={handleRagClear}
+          handleRagReset={handleRagReset} ragQueryResults={ragQueryResults}
+        />
+      )}
+
+      {/* 6. MCP server config (conditional) */}
+      {mcpServerEnabled && (
+        <McpServerConfig
+          mcpServerConfigCollapsed={mcpServerConfigCollapsed}
+          setMcpServerConfigCollapsed={setMcpServerConfigCollapsed}
+          mcpServerConfigs={mcpServerConfigs} setMcpServerConfigs={setMcpServerConfigs}
+          mcpServerStatus={mcpServerStatus} setMcpServerStatus={setMcpServerStatus}
+          selectedMcpServer={selectedMcpServer} setSelectedMcpServer={setSelectedMcpServer}
+        />
+      )}
+
+      {/* 7. Parsing progress */}
+      {isParsingFile && (
+        <ParsingProgress
+          parsingProgress={parsingProgress}
+          parsingAbortController={parsingAbortController}
+        />
+      )}
+
+      {/* 8. Prompt config (system/user prompt + LLM params) */}
+      <PromptConfig
+        isDemo={isDemo}
+        customSystemPrompt={customSystemPrompt} setCustomSystemPrompt={setCustomSystemPrompt}
+        customTestPayload={customTestPayload} setCustomTestPayload={setCustomTestPayload}
+        currentScenario={currentScenario} currentAttack={currentAttack}
+        thinkingEnabled={thinkingEnabled} setThinkingEnabled={setThinkingEnabled}
+        thinkingBudget={thinkingBudget} setThinkingBudget={setThinkingBudget}
+        llmTemperature={llmTemperature} setLlmTemperature={setLlmTemperature}
+        llmMaxTokens={llmMaxTokens} setLlmMaxTokens={setLlmMaxTokens}
+        llmTopP={llmTopP} setLlmTopP={setLlmTopP}
+        isEditingLlmConfig={isEditingLlmConfig} setIsEditingLlmConfig={setIsEditingLlmConfig}
+        isEditingPayload={isEditingPayload} setIsEditingPayload={setIsEditingPayload}
+        payloadFiles={payloadFiles} setPayloadFiles={setPayloadFiles}
+        removePayloadFile={removePayloadFile} handleAddFile={handleAddFile}
+        getDisplayPayload={getDisplayPayload}
+        dialogMode={dialogMode} setDialogMode={setDialogMode}
+        conversationMode={conversationMode}
+        promptConfigCollapsed={promptConfigCollapsed} setPromptConfigCollapsed={setPromptConfigCollapsed}
+      />
+
+      {/* 9. Simulation environment */}
+      <SimulationEnvConfig
+        isDemo={isDemo}
+        simulator={simulator}
+        benchmarkApi={benchmarkApi}
+        safeAgentBenchCase={safeAgentBenchCase}
+        setSafeAgentBenchCase={setSafeAgentBenchCase}
+        onApplyTestCase={onApplyTestCase}
+      />
 
       {/* Action buttons */}
       {isAuditor && !isDemo && (
@@ -257,15 +222,6 @@ export default function ConfigPanel({
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-function Section({ title, children }) {
-  return (
-    <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-      <h3 className="text-xs font-medium text-slate-300 mb-2">{title}</h3>
-      {children}
     </div>
   );
 }

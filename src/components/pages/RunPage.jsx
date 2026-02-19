@@ -4,10 +4,11 @@ import AttackDetailPanel from '../AttackDetailPanel.jsx';
 import RealTestControlPanel from '../RealTestControlPanel.jsx';
 import ConversationPanel from '../ConversationPanel.jsx';
 import RightPanel from '../RightPanel.jsx';
+import SimulationViewer from '../SimulationViewer.jsx';
 
 /**
  * RunPage - 运行 tab 主内容
- * 提取自 App.jsx 的 demo 页面区域，接受按子组件分组的 prop bundles
+ * Layout: control bar → optional video → panels (2 or 3 columns)
  */
 export default function RunPage({
   appMode,
@@ -18,14 +19,28 @@ export default function RunPage({
   testControl,
   conversationPanel,
   rightPanel,
+  // Simulation
+  simulator,
+  thinkingEnabled,
 }) {
+  const hasSimulation = simulator?.sessionId && simulator?.isConnected;
+
   return (
     <div className="flex-1 p-4 overflow-hidden flex flex-col">
       <PlaybackControlBar {...playbackBar} />
       <AttackHeader {...attackHeader} />
       <AttackDetailPanel {...attackDetail} />
       <RealTestControlPanel appMode={appMode} {...testControl} />
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
+
+      {/* Simulation viewer — full width, above panels */}
+      {hasSimulation && (
+        <SimulationViewer simulator={simulator} />
+      )}
+
+      {/* Panels: 2-col (default) or 3-col (thinking enabled) */}
+      <div className={`flex-1 grid gap-4 min-h-0 ${
+        thinkingEnabled ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'
+      }`}>
         <ConversationPanel ref={chatRef} {...conversationPanel} />
         <RightPanel ref={logRef} {...rightPanel} />
       </div>
