@@ -1,6 +1,8 @@
 """Abstract base class for simulation environments."""
 
+import uuid
 from abc import ABC, abstractmethod
+from typing import Optional
 
 
 class SimulatorBase(ABC):
@@ -11,9 +13,17 @@ class SimulatorBase(ABC):
     and communicates via this abstract interface.
     """
 
+    def generate_session_id(self) -> str:
+        return f"sim-{self.engine_name}-{uuid.uuid4().hex[:8]}"
+
     @abstractmethod
     async def start(self, config: dict) -> str:
         """Start simulation environment. Returns session_id."""
+
+    async def start_with_progress(self, config: dict, session_id: str,
+                                  status_dict: dict) -> str:
+        """Start with progress reporting. Default falls back to start()."""
+        return await self.start(config)
 
     @abstractmethod
     async def step(self, session_id: str, action: dict) -> dict:

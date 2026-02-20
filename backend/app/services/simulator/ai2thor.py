@@ -7,11 +7,10 @@ Communication pattern (same as container_rag.py):
     backend adapter  ──exec_in_container(curl)──►  ai2thor_server.py (Flask :9090)
 """
 
+import asyncio
 import json
 import logging
 import os
-import time
-import uuid
 from typing import Dict
 
 from .base import SimulatorBase
@@ -96,30 +95,17 @@ class AI2ThorSimulator(SimulatorBase):
             )
         return stdout_bytes
 
-    def _copy_server_script(self, container_sid: str):
-        """Copy ai2thor_server.py into the container."""
-        # ai2thor_server.py lives at backend/app/services/ai2thor_server.py
-        # This file lives at backend/app/services/simulator/ai2thor.py
-        script_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "ai2thor_server.py")
-        )
-        if not os.path.isfile(script_path):
-            raise FileNotFoundError(f"ai2thor_server.py not found at {script_path}")
-        with open(script_path, "rb") as f:
-            content = f.read()
-        container_manager.copy_file_to_container(
-            container_sid, "/app/ai2thor_server.py", content
-        )
-
-    def _wait_for_health(self, container_sid: str):
-        """Poll /health until the Flask server is ready.
-
-        Uses blocking time.sleep because this sync method runs in FastAPI's
-        default thread pool (via asyncio.to_thread / run_in_executor), so it
-        does not block the event loop.
-        """
+    async def _wait_for_health(self, container_sid: str, status_dict: dict = None,
+                               session_id: str = None):
+        """Poll /health until the Flask server is ready."""
         for i in range(HEALTH_TIMEOUT_S):
-            time.sleep(1)
+            await asyncio.sleep(1)
+            if status_dict and session_id:
+                pct = 25 + int(40 * (i + 1) / HEALTH_TIMEOUT_S)
+                status_dict[session_id] = {
+                    "phase": "waiting_health", "progress": min(pct, 65),
+                    "message": f"等待服务就绪... ({i + 1}s)",
+                }
             exit_code, stdout, _ = container_manager.exec_in_container(
                 container_sid,
                 f"curl -s --connect-timeout 2 http://127.0.0.1:{SIM_PORT}/health "
@@ -137,16 +123,22 @@ class AI2ThorSimulator(SimulatorBase):
     # ── SimulatorBase interface ──────────────────────────────
 
     async def start(self, config: dict) -> str:
-        session_id = f"sim-ai2thor-{uuid.uuid4().hex[:8]}"
+        """Legacy start (no progress). Delegates to start_with_progress."""
+        session_id = self.generate_session_id()
+        dummy = {}
+        return await self.start_with_progress(config, session_id, dummy)
+
+    async def start_with_progress(self, config: dict, session_id: str,
+                                  status_dict: dict) -> str:
         scene = config.get("scene", "FloorPlan1")
         logger.info("AI2-THOR start: session=%s scene=%s", session_id, scene)
 
-        # 1. Create container with Unity binary volume mount
+        # Phase 1: Create container
+        status_dict[session_id] = {
+            "phase": "creating_container", "progress": 5,
+            "message": "创建 Docker 容器...",
+        }
         mem_limit = MEMORY_LIMITS[ContainerType.SIM_AI2THOR]
-
-        # Volume 挂载宿主机预下载的 Unity 二进制（参考 safeagentbench）
-        # 宿主机路径: /tmp/thor-download/releases/thor-CloudRendering-f0825767cd50d69f666c7f282e54abfe58f1e917
-        # 容器路径: /root/.ai2thor/releases/thor-CloudRendering-f0825767cd50d69f666c7f282e54abfe58f1e917
         thor_release_id = "thor-CloudRendering-f0825767cd50d69f666c7f282e54abfe58f1e917"
         volumes = {
             f"/tmp/thor-download/releases/{thor_release_id}": {
@@ -154,41 +146,56 @@ class AI2ThorSimulator(SimulatorBase):
                 "mode": "ro",
             }
         }
-
-        container_manager.get_or_create_container(
-            image=SIM_IMAGE,
-            session_id=session_id,
-            mem_limit=mem_limit,
-            volumes=volumes,
+        await asyncio.to_thread(
+            container_manager.get_or_create_container,
+            image=SIM_IMAGE, session_id=session_id,
+            mem_limit=mem_limit, volumes=volumes,
         )
 
-        # 2. Start Flask server with Xvfb (container_manager overrides CMD with tail -f /dev/null)
-        # Start Xvfb in background, then Flask server
-        container_manager.exec_in_container(
-            session_id,
+        # Phase 2: Start services (Xvfb + Flask)
+        status_dict[session_id] = {
+            "phase": "starting_services", "progress": 20,
+            "message": "启动 Xvfb + AI2-THOR 服务...",
+        }
+        await asyncio.to_thread(
+            container_manager.exec_in_container, session_id,
             f"nohup bash -c 'Xvfb :99 -screen 0 1024x768x24 -nolisten tcp & "
             f"sleep 1 && DISPLAY=:99 python3 /app/ai2thor_server.py {SIM_PORT}' "
             f"> /tmp/ai2thor_server.log 2>&1 &",
         )
 
-        # 3. Wait for /health
-        self._wait_for_health(session_id)
+        # Phase 3: Wait for health
+        status_dict[session_id] = {
+            "phase": "waiting_health", "progress": 25,
+            "message": "等待服务就绪...",
+        }
+        await self._wait_for_health(session_id, status_dict, session_id)
 
-        # 4. Initialize controller with scene config
+        # Phase 4: Initialize scene
+        status_dict[session_id] = {
+            "phase": "initializing_scene", "progress": 70,
+            "message": f"初始化场景 {scene}...",
+        }
         init_data = {
             "scene": scene,
             "width": config.get("width", 640),
             "height": config.get("height", 480),
             "platform": config.get("platform", "CloudRendering"),
         }
-        result = self._curl(session_id, "POST", "/init", init_data, timeout=INIT_TIMEOUT_S)
+        result = await asyncio.to_thread(
+            self._curl, session_id, "POST", "/init", init_data, INIT_TIMEOUT_S,
+        )
         if not result.get("success"):
             error = result.get("error", "unknown")
-            # Cleanup on failure
-            container_manager.destroy_container(session_id)
+            await asyncio.to_thread(container_manager.destroy_container, session_id)
             raise RuntimeError(f"AI2-THOR init failed: {error}")
 
         self._sessions[session_id] = session_id
+
+        status_dict[session_id] = {
+            "phase": "ready", "progress": 100,
+            "message": "就绪",
+        }
         return session_id
 
     async def step(self, session_id: str, action: dict) -> dict:

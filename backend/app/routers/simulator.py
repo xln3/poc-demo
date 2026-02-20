@@ -4,6 +4,7 @@ Manages simulator engine lifecycle: list engines, start/stop sessions,
 execute actions, capture frames, and record video.
 """
 
+import asyncio
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
@@ -25,6 +26,9 @@ router = APIRouter(prefix="/simulator", tags=["Simulator"])
 
 # Active sessions: session_id → SimulatorBase instance
 _active_sessions: dict[str, SimulatorBase] = {}
+
+# Startup progress: session_id → {phase, progress, message, error?}
+_startup_status: dict[str, dict] = {}
 
 
 class StartRequest(BaseModel):
@@ -50,28 +54,61 @@ def list_engines():
 
 # ── Session lifecycle ─────────────────────────────────────────────
 
+async def _start_session_bg(session_id: str, engine: SimulatorBase, config: dict):
+    """Background task: run the slow startup and update progress."""
+    try:
+        _startup_status[session_id] = {
+            "phase": "creating_container", "progress": 5,
+            "message": "创建 Docker 容器...",
+        }
+        await engine.start_with_progress(config, session_id, _startup_status)
+        _active_sessions[session_id] = engine
+        _startup_status[session_id] = {
+            "phase": "ready", "progress": 100,
+            "message": "就绪",
+            "action_space": await engine.get_action_space(),
+        }
+    except Exception as e:
+        logger.error("Background start failed for %s: %s", session_id, e)
+        _startup_status[session_id] = {
+            "phase": "error", "progress": 0,
+            "message": str(e),
+        }
+
+
 @router.post("/start", dependencies=[Depends(require_admin)])
 async def start_session(req: StartRequest):
-    """Start a new simulation session."""
+    """Start a new simulation session (returns immediately, poll /status)."""
     try:
         engine_cls = SimulatorRegistry.get(req.engine)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
     engine = engine_cls()
-    try:
-        session_id = await engine.start(req.config)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=safe_detail("仿真引擎启动失败", e, logger))
+    session_id = engine.generate_session_id()
 
-    _active_sessions[session_id] = engine
-    action_space = await engine.get_action_space()
-
-    return {
-        "session_id": session_id,
-        "engine": req.engine,
-        "action_space": action_space,
+    _startup_status[session_id] = {
+        "phase": "queued", "progress": 0,
+        "message": "排队中...",
     }
+
+    asyncio.create_task(_start_session_bg(session_id, engine, req.config))
+
+    return {"session_id": session_id, "status": "starting"}
+
+
+@router.get("/{session_id}/status", dependencies=[Depends(require_auth)])
+async def get_session_status(session_id: str):
+    """Poll startup progress for a session."""
+    # Already fully started?
+    if session_id in _active_sessions and session_id not in _startup_status:
+        return {"phase": "ready", "progress": 100, "message": "就绪"}
+
+    status = _startup_status.get(session_id)
+    if not status:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+
+    return status
 
 
 @router.post("/{session_id}/step", dependencies=[Depends(require_admin)])
@@ -132,8 +169,6 @@ async def stream_frames(websocket: WebSocket, session_id: str, token: str = Quer
         while session_id in _active_sessions:
             frame = await engine.render(session_id)
             await websocket.send_bytes(frame)
-            # TODO: configurable frame rate
-            import asyncio
             await asyncio.sleep(1 / 10)  # ~10 FPS
     except WebSocketDisconnect:
         logger.info("Stream client disconnected: %s", session_id)
@@ -170,6 +205,9 @@ async def get_video(session_id: str):
 @router.delete("/{session_id}", dependencies=[Depends(require_admin)])
 async def stop_session(session_id: str):
     """Stop and destroy a simulation session."""
+    # Clean up startup status if still starting
+    _startup_status.pop(session_id, None)
+
     engine = _active_sessions.pop(session_id, None)
     if not engine:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")

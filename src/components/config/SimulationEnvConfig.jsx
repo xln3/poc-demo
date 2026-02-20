@@ -99,36 +99,63 @@ export default function SimulationEnvConfig({
       ) : (
         <div className="space-y-3">
           {/* Engine status */}
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-slate-400">AI2-THOR 引擎</span>
-            {simulator?.sessionId ? (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-400" />
-                <span className="text-green-400">运行中</span>
-                <span className="text-slate-500">({simulator.engineName})</span>
-                <button
-                  onClick={() => simulator.stopSession()}
-                  disabled={isDemo}
-                  className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px] disabled:opacity-50"
-                >
-                  停止
-                </button>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-slate-400">AI2-THOR 引擎</span>
+              {simulator?.sessionId ? (
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400" />
+                  <span className="text-green-400">运行中</span>
+                  <span className="text-slate-500">({simulator.engineName})</span>
+                  <button
+                    onClick={() => simulator.stopSession()}
+                    disabled={isDemo}
+                    className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px] disabled:opacity-50"
+                  >
+                    停止
+                  </button>
+                </div>
+              ) : simulator?.loading ? (
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                  <span className="text-yellow-400">启动中</span>
+                  <button
+                    onClick={() => simulator.cancelStart()}
+                    className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px]"
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-slate-500" />
+                  <span className="text-slate-500">未启动</span>
+                  <button
+                    onClick={() => simulator.startSession('ai2thor', {})}
+                    disabled={isDemo}
+                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-[10px] disabled:opacity-50"
+                  >
+                    启动
+                  </button>
+                </div>
+              )}
+              {simulator?.error && (
+                <span className="text-red-400 text-[10px]">{simulator.error}</span>
+              )}
+            </div>
+            {/* Progress bar during startup */}
+            {simulator?.loading && (
+              <div className="space-y-1">
+                <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                    style={{ width: `${simulator.startProgress || 0}%` }}
+                  />
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {simulator.startMessage || '准备中...'} ({simulator.startProgress || 0}%)
+                </div>
               </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-slate-500" />
-                <span className="text-slate-500">未启动</span>
-                <button
-                  onClick={() => simulator.startSession('ai2thor', {})}
-                  disabled={isDemo || simulator?.loading}
-                  className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-[10px] disabled:opacity-50"
-                >
-                  {simulator?.loading ? '启动中...' : '启动'}
-                </button>
-              </div>
-            )}
-            {simulator?.error && (
-              <span className="text-red-400 text-[10px]">{simulator.error}</span>
             )}
           </div>
 
