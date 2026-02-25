@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../../config.js';
 
 export const FileUploadDialog = ({
@@ -7,6 +8,7 @@ export const FileUploadDialog = ({
   onClose,
   onUpload,
 }) => {
+  const { t } = useTranslation();
   const [dragOver, setDragOver] = useState(false);
 
   const handleDrop = (e) => {
@@ -94,19 +96,19 @@ export const FileUploadDialog = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-slate-800 rounded-lg shadow-xl w-[400px] p-6">
+      <div className="bg-surface rounded-lg shadow-xl w-[400px] p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">上传文件</h3>
+          <h3 className="text-lg font-semibold text-on-canvas">{t('sandbox.uploadFiles')}</h3>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-xl leading-none"
+            className="text-on-muted hover:text-on-canvas text-xl leading-none"
           >
             ✕
           </button>
         </div>
 
-        <div className="text-sm text-slate-400 mb-4">
-          目标路径: <span className="text-cyan-400 font-mono">{targetPath}</span>
+        <div className="text-sm text-on-muted mb-4">
+          {t('sandbox.targetPath')}: <span className="text-cyan-400 font-mono">{targetPath}</span>
         </div>
 
         {/* 拖放区域 */}
@@ -115,27 +117,27 @@ export const FileUploadDialog = ({
             border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
             ${dragOver
               ? 'border-cyan-500 bg-cyan-900/20'
-              : 'border-slate-600 hover:border-slate-500'}
+              : 'border-edge-strong hover:border-edge-strong'}
           `}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
         >
           <div className="text-4xl mb-2">📂</div>
-          <p className="text-slate-300 mb-1">
-            拖放文件或文件夹到此处
+          <p className="text-on-surface mb-1">
+            {t('sandbox.dragDropHint')}
           </p>
-          <p className="text-slate-500 text-xs">
-            单文件最大 {maxSizeMB}MB
+          <p className="text-on-dim text-xs">
+            {t('sandbox.maxFileSize', { size: maxSizeMB })}
           </p>
         </div>
 
         <div className="flex justify-end mt-4">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm"
+            className="px-4 py-2 rounded bg-surface-raised hover:bg-surface-hover text-white text-sm"
           >
-            取消
+            {t('buttons.cancel')}
           </button>
         </div>
       </div>

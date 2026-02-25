@@ -19,12 +19,12 @@ export default function PromptConfig({
   promptConfigCollapsed, setPromptConfigCollapsed,
 }) {
   return (
-    <div className="bg-slate-800 rounded-lg border border-slate-700">
+    <div className="bg-surface rounded-lg border border-edge">
       {/* Collapse header */}
-      <div className="flex items-center justify-between p-3 border-b border-slate-700">
+      <div className="flex items-center justify-between p-3 border-b border-edge">
         <button
           onClick={() => setPromptConfigCollapsed(!promptConfigCollapsed)}
-          className="flex items-center gap-2 text-xs text-slate-300 hover:text-slate-100 transition"
+          className="flex items-center gap-2 text-xs text-on-surface hover:text-on-canvas transition"
         >
           <span>{promptConfigCollapsed ? '▶' : '▼'}</span>
           <span className="font-medium">模型配置</span>
@@ -40,32 +40,32 @@ export default function PromptConfig({
               checked={thinkingEnabled}
               onChange={(e) => setThinkingEnabled(e.target.checked)}
               disabled={isDemo}
-              className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
+              className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
             />
-            <span className="text-slate-400">思考模式</span>
+            <span className="text-on-muted">思考模式</span>
           </label>
           {thinkingEnabled && (
             <div className="flex items-center gap-1">
-              <span className="text-slate-500 text-[10px]">budget:</span>
+              <span className="text-on-dim text-[10px]">budget:</span>
               <input
                 type="number"
                 min="1000" max="100000" step="1000"
                 value={thinkingBudget}
                 onChange={(e) => setThinkingBudget(parseInt(e.target.value) || 10000)}
                 disabled={isDemo}
-                className="w-16 bg-slate-700 border border-slate-600 rounded px-1 text-pink-400 font-mono text-[10px]"
+                className="w-16 bg-surface-raised border border-edge-strong rounded px-1 text-pink-400 font-mono text-[10px]"
               />
             </div>
           )}
           {/* Dialog mode toggle */}
-          <div className="flex items-center gap-1 bg-slate-700 rounded p-0.5">
+          <div className="flex items-center gap-1 bg-surface-raised rounded p-0.5">
             <button
               onClick={() => setDialogMode('single')}
               disabled={conversationMode !== 'idle'}
               className={`px-2 py-0.5 rounded text-[10px] transition ${
                 dialogMode === 'single'
-                  ? 'bg-slate-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-surface-hover text-white'
+                  : 'text-on-muted hover:text-on-canvas'
               } ${conversationMode !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               单轮
@@ -76,7 +76,7 @@ export default function PromptConfig({
               className={`px-2 py-0.5 rounded text-[10px] transition ${
                 dialogMode === 'multi'
                   ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-on-muted hover:text-on-canvas'
               } ${conversationMode !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               多轮
@@ -90,39 +90,39 @@ export default function PromptConfig({
         <div className="p-3">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* System prompt */}
-            <div className="bg-slate-700/50 rounded border border-slate-600 flex flex-col">
-              <div className="flex items-center justify-between p-2 border-b border-slate-600">
+            <div className="bg-surface-muted/50 rounded border border-edge-strong flex flex-col">
+              <div className="flex items-center justify-between p-2 border-b border-edge-strong">
                 <div className="flex items-center gap-2 flex-wrap text-xs">
-                  <span className="text-slate-400 font-medium">系统提示词</span>
+                  <span className="text-on-muted font-medium">系统提示词</span>
                   {/* LLM params inline */}
-                  <span className="text-slate-500">Temp</span>
+                  <span className="text-on-dim">Temp</span>
                   <input
                     type="number" min="0" max="2" step="0.1"
                     value={llmTemperature}
                     onChange={(e) => setLlmTemperature(parseFloat(e.target.value) || 0)}
                     disabled={!isEditingLlmConfig}
-                    className={`w-12 bg-slate-700 border rounded px-1 text-cyan-400 font-mono text-xs ${
-                      isEditingLlmConfig ? 'border-blue-500' : 'border-slate-500'
+                    className={`w-12 bg-surface-raised border rounded px-1 text-cyan-400 font-mono text-xs ${
+                      isEditingLlmConfig ? 'border-blue-500' : 'border-edge-strong'
                     }`}
                   />
-                  <span className="text-slate-500">MaxTok</span>
+                  <span className="text-on-dim">MaxTok</span>
                   <input
                     type="number" min="256" max="131072" step="1024"
                     value={llmMaxTokens}
                     onChange={(e) => setLlmMaxTokens(parseInt(e.target.value) || 256)}
                     disabled={!isEditingLlmConfig}
-                    className={`w-16 bg-slate-700 border rounded px-1 text-cyan-400 font-mono text-xs ${
-                      isEditingLlmConfig ? 'border-blue-500' : 'border-slate-500'
+                    className={`w-16 bg-surface-raised border rounded px-1 text-cyan-400 font-mono text-xs ${
+                      isEditingLlmConfig ? 'border-blue-500' : 'border-edge-strong'
                     }`}
                   />
-                  <span className="text-slate-500">TopP</span>
+                  <span className="text-on-dim">TopP</span>
                   <input
                     type="number" min="0" max="1" step="0.05"
                     value={llmTopP}
                     onChange={(e) => setLlmTopP(parseFloat(e.target.value) || 0)}
                     disabled={!isEditingLlmConfig}
-                    className={`w-12 bg-slate-700 border rounded px-1 text-cyan-400 font-mono text-xs ${
-                      isEditingLlmConfig ? 'border-blue-500' : 'border-slate-500'
+                    className={`w-12 bg-surface-raised border rounded px-1 text-cyan-400 font-mono text-xs ${
+                      isEditingLlmConfig ? 'border-blue-500' : 'border-edge-strong'
                     }`}
                   />
                   {customSystemPrompt !== currentScenario?.systemPrompt && (
@@ -146,7 +146,7 @@ export default function PromptConfig({
                           setLlmTopP(CONFIG.llmParams.top_p);
                           setIsEditingLlmConfig(false);
                         }}
-                        className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                        className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded transition"
                       >
                         取消
                       </button>
@@ -155,7 +155,7 @@ export default function PromptConfig({
                     <>
                       <button
                         onClick={() => setIsEditingLlmConfig(true)}
-                        className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                        className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded transition"
                       >
                         编辑
                       </button>
@@ -166,7 +166,7 @@ export default function PromptConfig({
                           setLlmMaxTokens(CONFIG.llmParams.max_tokens);
                           setLlmTopP(CONFIG.llmParams.top_p);
                         }}
-                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                        className="px-2 py-1 text-xs bg-surface-raised hover:bg-surface-hover rounded transition"
                       >
                         重置
                       </button>
@@ -179,11 +179,11 @@ export default function PromptConfig({
                   <textarea
                     value={customSystemPrompt}
                     onChange={(e) => setCustomSystemPrompt(e.target.value)}
-                    className="w-full h-full min-h-[8rem] max-h-[8rem] text-xs bg-slate-700 p-2 rounded border border-blue-500 text-cyan-300 font-mono resize-none focus:outline-none custom-scroll"
+                    className="w-full h-full min-h-[8rem] max-h-[8rem] text-xs bg-surface-raised p-2 rounded border border-blue-500 text-cyan-300 font-mono resize-none focus:outline-none custom-scroll"
                     placeholder="输入系统提示词..."
                   />
                 ) : (
-                  <pre className="text-xs bg-slate-700 p-2 rounded overflow-auto max-h-[8rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
+                  <pre className="text-xs bg-surface-raised p-2 rounded overflow-auto max-h-[8rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
                     {customSystemPrompt || '(无系统提示词)'}
                   </pre>
                 )}
@@ -191,10 +191,10 @@ export default function PromptConfig({
             </div>
 
             {/* User prompt */}
-            <div className="bg-slate-700/50 rounded border border-slate-600 flex flex-col">
-              <div className="flex items-center justify-between p-2 border-b border-slate-600">
+            <div className="bg-surface-muted/50 rounded border border-edge-strong flex flex-col">
+              <div className="flex items-center justify-between p-2 border-b border-edge-strong">
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-400 font-medium">用户提示词</span>
+                  <span className="text-on-muted font-medium">用户提示词</span>
                   {(customTestPayload !== currentAttack?.testPayload || payloadFiles.length > 0) && (
                     <span className="text-yellow-400 text-[10px]">(改)</span>
                   )}
@@ -202,7 +202,7 @@ export default function PromptConfig({
                 <div className="flex items-center gap-1">
                   {isEditingPayload && (
                     <label
-                      className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded cursor-pointer transition"
+                      className="px-2 py-1 text-xs bg-surface-raised hover:bg-surface-hover rounded cursor-pointer transition"
                       title="添加文件作为用户输入，文件内容将被解析后注入提示词"
                     >
                       添加文件
@@ -223,7 +223,7 @@ export default function PromptConfig({
                           setPayloadFiles([]);
                           setIsEditingPayload(false);
                         }}
-                        className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                        className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded transition"
                       >
                         取消
                       </button>
@@ -232,7 +232,7 @@ export default function PromptConfig({
                     <>
                       <button
                         onClick={() => setIsEditingPayload(true)}
-                        className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded transition"
+                        className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded transition"
                       >
                         编辑
                       </button>
@@ -241,7 +241,7 @@ export default function PromptConfig({
                           setCustomTestPayload(currentAttack?.testPayload || '');
                           setPayloadFiles([]);
                         }}
-                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition"
+                        className="px-2 py-1 text-xs bg-surface-raised hover:bg-surface-hover rounded transition"
                       >
                         重置
                       </button>
@@ -253,7 +253,7 @@ export default function PromptConfig({
               {payloadFiles.length > 0 && (
                 <div className="flex flex-wrap gap-1 px-2 pt-2">
                   {payloadFiles.map((file, i) => (
-                    <span key={i} className="text-xs bg-slate-700 px-2 py-0.5 rounded flex items-center gap-1">
+                    <span key={i} className="text-xs bg-surface-raised px-2 py-0.5 rounded flex items-center gap-1">
                       📄 {file.name}
                       {isEditingPayload && (
                         <button
@@ -272,11 +272,11 @@ export default function PromptConfig({
                   <textarea
                     value={customTestPayload}
                     onChange={(e) => setCustomTestPayload(e.target.value)}
-                    className="w-full h-full min-h-[8rem] max-h-[8rem] text-xs bg-slate-700 p-2 rounded border border-blue-500 text-orange-300 font-mono resize-none focus:outline-none custom-scroll break-all"
+                    className="w-full h-full min-h-[8rem] max-h-[8rem] text-xs bg-surface-raised p-2 rounded border border-blue-500 text-orange-300 font-mono resize-none focus:outline-none custom-scroll break-all"
                     placeholder="输入用户提示词..."
                   />
                 ) : (
-                  <pre className="text-xs bg-slate-700 p-2 rounded overflow-y-auto overflow-x-hidden max-h-[8rem] custom-scroll text-orange-300 whitespace-pre-wrap break-all">
+                  <pre className="text-xs bg-surface-raised p-2 rounded overflow-y-auto overflow-x-hidden max-h-[8rem] custom-scroll text-orange-300 whitespace-pre-wrap break-all">
                     {getDisplayPayload() || '(无用户提示词)'}
                   </pre>
                 )}

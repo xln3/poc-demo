@@ -81,13 +81,13 @@ export default function ConfigPanel({
 
       {/* Current risk item context */}
       {currentRiskItemData && (
-        <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
+        <div className="bg-surface-muted/50 rounded-lg p-3 border border-edge-strong">
           <div className="flex items-center gap-2 text-sm font-medium mb-1">
-            <span className="text-slate-400">{currentRiskItemData.id}</span>
+            <span className="text-on-muted">{currentRiskItemData.id}</span>
             <span>{currentRiskItemData.name}</span>
           </div>
           {currentRiskItemData.categoryName && (
-            <div className="text-[10px] text-slate-500">{currentRiskItemData.categoryName}</div>
+            <div className="text-[10px] text-on-dim">{currentRiskItemData.categoryName}</div>
           )}
         </div>
       )}
@@ -204,7 +204,7 @@ export default function ConfigPanel({
             disabled={apiStatus === 'loading'}
             className={`flex-1 py-2 rounded text-sm font-medium transition ${
               apiStatus === 'loading'
-                ? 'bg-slate-600 cursor-not-allowed text-slate-400'
+                ? 'bg-surface-hover cursor-not-allowed text-on-muted'
                 : 'bg-blue-600 hover:bg-blue-500 text-white'
             }`}
           >

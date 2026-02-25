@@ -64,7 +64,7 @@ export default function ReportPage({
   return (
     <div className="flex-1 flex min-h-0">
       {/* Left: test results list */}
-      <div className="w-64 flex-shrink-0 border-r border-slate-700 overflow-y-auto custom-scroll p-3">
+      <div className="w-64 flex-shrink-0 border-r border-edge overflow-y-auto custom-scroll p-3">
 
         {/* Eval import section */}
         {!isDemo && (
@@ -93,14 +93,14 @@ export default function ReportPage({
         {evalPreview && (
           <div className="mb-3 p-2 bg-blue-900/30 border border-blue-700/50 rounded text-xs">
             <div className="font-medium text-blue-300 mb-1">预览导入</div>
-            <div className="text-slate-300">{evalPreview.meta?.task_display_name || evalPreview.meta?.task}</div>
-            <div className="text-slate-400 text-[10px] mt-0.5">
+            <div className="text-on-surface">{evalPreview.meta?.task_display_name || evalPreview.meta?.task}</div>
+            <div className="text-on-muted text-[10px] mt-0.5">
               {evalPreview.meta?.model} · {evalPreview.sample_count} 样本
             </div>
             {evalPreview.meta?.scores?.length > 0 && (
               <div className="mt-1 space-y-0.5">
                 {evalPreview.meta.scores.map((s, i) => (
-                  <div key={i} className="text-[10px] text-slate-500">
+                  <div key={i} className="text-[10px] text-on-dim">
                     {s.name}: {Object.entries(s.metrics || {}).map(([k, v]) =>
                       `${k}=${typeof v === 'number' ? v.toFixed(2) : v}`
                     ).join(', ')}
@@ -118,7 +118,7 @@ export default function ReportPage({
               </button>
               <button
                 onClick={() => setEvalPreview(null)}
-                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 text-xs"
+                className="px-2 py-1 bg-surface-raised hover:bg-surface-hover rounded text-on-surface text-xs"
               >
                 取消
               </button>
@@ -129,7 +129,7 @@ export default function ReportPage({
         {/* Eval results section */}
         {evalResults.length > 0 && (
           <>
-            <div className="mb-2 text-xs text-slate-400 font-medium">
+            <div className="mb-2 text-xs text-on-muted font-medium">
               Eval 导入 ({evalResults.length})
             </div>
             <div className="space-y-2 mb-3">
@@ -145,18 +145,18 @@ export default function ReportPage({
                 />
               ))}
             </div>
-            {batchResults.length > 0 && <div className="border-t border-slate-700 mb-3" />}
+            {batchResults.length > 0 && <div className="border-t border-edge mb-3" />}
           </>
         )}
 
         {/* Batch results section */}
-        <div className="mb-2 text-xs text-slate-400 font-medium">
+        <div className="mb-2 text-xs text-on-muted font-medium">
           批量测试报告 ({batchResults.length})
         </div>
         {batchResults.length === 0 ? (
-          <div className="text-xs text-slate-500 text-center py-4">
+          <div className="text-xs text-on-dim text-center py-4">
             暂无测试报告
-            <div className="mt-1 text-slate-600">执行批量测试后可保存</div>
+            <div className="mt-1 text-on-dim">执行批量测试后可保存</div>
           </div>
         ) : (
           <div className="space-y-2">
@@ -179,7 +179,7 @@ export default function ReportPage({
         {selectedTestResult ? (
           <TestResultDetailView {...detailView} />
         ) : (
-          <div className="flex-1 flex items-center justify-center text-slate-500">
+          <div className="flex-1 flex items-center justify-center text-on-dim">
             <div className="text-center">
               <div className="text-4xl mb-4">📊</div>
               <div>选择左侧的测试报告查看详情</div>
@@ -197,7 +197,7 @@ function ResultCard({ item, isSelected, isDemo, isEval, onClick, onDelete }) {
   return (
     <div
       className={`p-2 rounded cursor-pointer transition ${
-        isSelected ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'
+        isSelected ? 'bg-purple-600' : 'bg-surface-raised hover:bg-surface-hover'
       }`}
       onClick={onClick}
     >
@@ -209,18 +209,18 @@ function ResultCard({ item, isSelected, isDemo, isEval, onClick, onDelete }) {
         {!isDemo && (
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="text-xs text-slate-400 hover:text-red-400 ml-1"
+            className="text-xs text-on-muted hover:text-red-400 ml-1"
             title="删除"
           >
             x
           </button>
         )}
       </div>
-      <div className="text-xs text-slate-400 mt-1">
+      <div className="text-xs text-on-muted mt-1">
         {item.meta?.testModel || '未知模型'} · {stats.total || 0} 用例
       </div>
       {isEval && item.meta?.evalScores?.length > 0 && (
-        <div className="text-[10px] text-slate-500 mt-0.5">
+        <div className="text-[10px] text-on-dim mt-0.5">
           {item.meta.evalScores.map(s =>
             Object.entries(s.metrics || {}).map(([k, v]) =>
               `${k}: ${typeof v === 'number' ? v.toFixed(2) : v}`
@@ -233,8 +233,8 @@ function ResultCard({ item, isSelected, isDemo, isEval, onClick, onDelete }) {
         <span className="text-xs text-orange-400" title="中风险">🟠{stats.medium || 0}</span>
         <span className="text-xs text-yellow-400" title="低风险">🟡{stats.low || 0}</span>
         <span className="text-xs text-green-400" title="安全">🟢{stats.safe || 0}</span>
-        <span className="text-xs text-gray-400" title="待定">⚪{stats.pending || 0}</span>
-        <span className="text-xs text-slate-500 ml-auto">
+        <span className="text-xs text-on-muted" title="待定">⚪{stats.pending || 0}</span>
+        <span className="text-xs text-on-dim ml-auto">
           {item.savedAt ? new Date(item.savedAt).toLocaleString('zh-CN') : ''}
         </span>
       </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { FIVE_LEVEL_RISK, calculateRiskStats } from '../config.js';
 
 /**
@@ -15,17 +16,17 @@ export default function TestResultDetailView({
   return (
     <div className="h-full flex flex-col">
       {/* 测试报告标题区 */}
-      <div className="mb-4 pb-3 border-b border-slate-700">
+      <div className="mb-4 pb-3 border-b border-edge">
         <div className="flex items-center gap-3 mb-1">
           <h2 className="text-lg font-bold">{selectedTestResult.name || '未命名测试'}</h2>
           <span className="text-xs px-2 py-0.5 rounded bg-purple-600">
             {selectedTestResult.results?.length || 0} 用例
           </span>
         </div>
-        <div className="text-xs text-slate-400 mt-1">
+        <div className="text-xs text-on-muted mt-1">
           模型: {selectedTestResult.meta?.testModel || '未知'} · 评审模型: {selectedTestResult.meta?.judgeModel || '未知'}
         </div>
-        <div className="text-xs text-slate-500 mt-1">
+        <div className="text-xs text-on-dim mt-1">
           保存时间: {selectedTestResult.savedAt ? new Date(selectedTestResult.savedAt).toLocaleString('zh-CN') : '未知'}
         </div>
         {/* 五态风险统计 */}
@@ -45,7 +46,7 @@ export default function TestResultDetailView({
       <div className="flex-1 flex gap-4 min-h-0">
         {/* 左栏：测试记录 */}
         <div className="w-1/2 flex flex-col min-h-0">
-          <div className="text-sm font-medium text-slate-300 mb-2">测试记录</div>
+          <div className="text-sm font-medium text-on-surface mb-2">测试记录</div>
           <div className="flex-1 overflow-y-auto custom-scroll">
             <div className="space-y-2">
               {(selectedTestResult.results || []).map((result, idx) => {
@@ -54,34 +55,34 @@ export default function TestResultDetailView({
                 return (
                   <div
                     key={idx}
-                    className={`p-3 rounded-lg border bg-slate-800/50 border-slate-700 hover:border-slate-600`}
+                    className={`p-3 rounded-lg border bg-surface/50 border-edge hover:border-edge-strong`}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">#{result.index ?? idx + 1}</span>
+                        <span className="text-xs text-on-dim">#{result.index ?? idx + 1}</span>
                         <span className="text-sm font-medium truncate max-w-[150px]">{result.caseName || '未命名'}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded border ${riskConfig.badgeColor}`}>
                           {riskConfig.icon} {riskConfig.label}
                         </span>
                       </div>
-                      <span className="text-xs text-slate-500">{result.apiTime ? `${(result.apiTime / 1000).toFixed(1)}s` : ''}</span>
+                      <span className="text-xs text-on-dim">{result.apiTime ? `${(result.apiTime / 1000).toFixed(1)}s` : ''}</span>
                     </div>
                     {result.attackType && (
-                      <div className="text-xs text-slate-400 mb-2 truncate">
+                      <div className="text-xs text-on-muted mb-2 truncate">
                         {result.attackType} {result.attackDescription ? `· ${result.attackDescription}` : ''}
                       </div>
                     )}
                     {(result.judgment?.reason || result.review?.llm?.reason || result.review?.human?.reason) && (
-                      <div className="text-xs text-slate-300 p-2 bg-slate-900/50 rounded mb-2 line-clamp-2">
-                        <span className="text-slate-500">判定: </span>
+                      <div className="text-xs text-on-surface p-2 bg-canvas/50 rounded mb-2 line-clamp-2">
+                        <span className="text-on-dim">判定: </span>
                         {result.review?.human?.reason || result.review?.llm?.reason || result.judgment?.reason}
                       </div>
                     )}
                     {/* 操作按钮 */}
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700">
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-edge">
                       <button
                         onClick={() => openDetailModal(result)}
-                        className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded"
+                        className="text-xs px-2 py-1 bg-surface-raised hover:bg-surface-hover rounded"
                       >
                         详情
                       </button>
@@ -106,19 +107,19 @@ export default function TestResultDetailView({
         </div>
 
         {/* 右栏：报告编辑器 */}
-        <div className="w-1/2 flex flex-col min-h-0 border-l border-slate-700 pl-4">
+        <div className="w-1/2 flex flex-col min-h-0 border-l border-edge pl-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm font-medium text-slate-300">文字版报告</div>
+            <div className="text-sm font-medium text-on-surface">文字版报告</div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setReportEditMode('edit')}
-                className={`text-xs px-2 py-1 rounded ${reportEditMode === 'edit' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+                className={`text-xs px-2 py-1 rounded ${reportEditMode === 'edit' ? 'bg-blue-600' : 'bg-surface-raised hover:bg-surface-hover'}`}
               >
                 编辑
               </button>
               <button
                 onClick={() => setReportEditMode('preview')}
-                className={`text-xs px-2 py-1 rounded ${reportEditMode === 'preview' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+                className={`text-xs px-2 py-1 rounded ${reportEditMode === 'preview' ? 'bg-blue-600' : 'bg-surface-raised hover:bg-surface-hover'}`}
               >
                 预览
               </button>
@@ -134,11 +135,11 @@ export default function TestResultDetailView({
 
           {/* 模板选择 */}
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs text-slate-400">模板:</span>
+            <span className="text-xs text-on-muted">模板:</span>
             <select
               value={selectedTemplate}
               onChange={(e) => setSelectedTemplate(e.target.value)}
-              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1"
+              className="text-xs bg-surface-raised border border-edge-strong rounded px-2 py-1"
             >
               {reportTemplates.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
@@ -146,7 +147,7 @@ export default function TestResultDetailView({
             </select>
             <button
               onClick={() => applyReportTemplate(selectedTemplate)}
-              className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded"
+              className="text-xs px-2 py-1 bg-surface-raised hover:bg-surface-hover rounded"
             >
               应用模板
             </button>
@@ -158,23 +159,23 @@ export default function TestResultDetailView({
               <textarea
                 value={reportContent}
                 onChange={(e) => setReportContent(e.target.value)}
-                className="w-full h-full bg-slate-900 border border-slate-700 rounded p-3 text-sm resize-none custom-scroll font-mono"
+                className="w-full h-full bg-canvas border border-edge rounded p-3 text-sm resize-none custom-scroll font-mono"
                 placeholder="在此编辑报告内容（支持 Markdown 格式）..."
               />
             ) : (
-              <div className="w-full h-full bg-slate-900 border border-slate-700 rounded p-3 text-sm overflow-y-auto custom-scroll prose prose-invert prose-sm max-w-none">
+              <div className="w-full h-full bg-canvas border border-edge rounded p-3 text-sm overflow-y-auto custom-scroll prose prose-invert prose-sm max-w-none">
                 <pre className="whitespace-pre-wrap font-sans">{reportContent || '暂无报告内容'}</pre>
               </div>
             )}
           </div>
 
           {/* LLM 生成区 */}
-          <div className="mt-3 pt-3 border-t border-slate-700">
+          <div className="mt-3 pt-3 border-t border-edge">
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 placeholder="输入指令让 LLM 生成/优化报告..."
-                className="flex-1 text-xs bg-slate-800 border border-slate-700 rounded px-2 py-1.5"
+                className="flex-1 text-xs bg-surface border border-edge rounded px-2 py-1.5"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();

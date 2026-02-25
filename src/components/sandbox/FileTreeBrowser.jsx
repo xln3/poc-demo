@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SANDBOX_CONFIG, formatBytes } from '../../sandbox.js';
 
 // 允许的根目录
@@ -23,6 +24,7 @@ export const FileTreeBrowser = ({
   startFileWatch,
   stopFileWatch,
 }) => {
+  const { t } = useTranslation();
   const [currentPath, setCurrentPath] = useState('/workspace');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -158,26 +160,26 @@ export const FileTreeBrowser = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-slate-800 rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col">
+      <div className="bg-surface rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-          <h3 className="text-lg font-semibold text-white">
-            文件浏览器 - {tag}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-edge">
+          <h3 className="text-lg font-semibold text-on-canvas">
+            {t('sandbox.fileBrowser')} - {tag}
           </h3>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-xl leading-none"
+            className="text-on-muted hover:text-on-canvas text-xl leading-none"
           >
             ✕
           </button>
         </div>
 
         {/* 路径导航 */}
-        <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/50">
+        <div className="flex items-center gap-2 px-4 py-2 bg-canvas/50">
           <button
             onClick={goUp}
             disabled={!canGoUp()}
-            className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white"
+            className="px-2 py-1 rounded bg-surface-raised hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed text-white"
           >
             ↑
           </button>
@@ -190,7 +192,7 @@ export const FileTreeBrowser = ({
                 className={`px-2 py-0.5 rounded text-xs ${
                   currentPath.startsWith(root)
                     ? 'bg-cyan-600 text-white'
-                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                    : 'bg-surface-raised hover:bg-surface-hover text-on-surface'
                 }`}
               >
                 {root}
@@ -202,8 +204,8 @@ export const FileTreeBrowser = ({
           </span>
           <button
             onClick={() => loadDirectory(currentPath)}
-            className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white"
-            title="刷新"
+            className="px-2 py-1 rounded bg-surface-raised hover:bg-surface-hover text-white"
+            title={t('sandbox.refresh')}
           >
             🔄
           </button>
@@ -212,17 +214,17 @@ export const FileTreeBrowser = ({
         {/* 文件列表 */}
         <div className="flex-1 overflow-auto p-2 min-h-[200px]">
           {loading ? (
-            <div className="text-center text-slate-400 py-8">加载中...</div>
+            <div className="text-center text-on-muted py-8">{t('batchTest.loading')}</div>
           ) : error ? (
             <div className="text-center text-red-400 py-8">{error}</div>
           ) : files.length === 0 ? (
-            <div className="text-center text-slate-400 py-8">目录为空</div>
+            <div className="text-center text-on-muted py-8">{t('sandbox.emptyDirectory')}</div>
           ) : (
             <div className="space-y-1">
               {files.map((file) => (
                 <div
                   key={file.path}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-700/50 cursor-pointer group"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-muted/50 cursor-pointer group"
                   onClick={() => {
                     if (file.type === 'directory') {
                       enterDir(file.path);
@@ -236,19 +238,19 @@ export const FileTreeBrowser = ({
 
                   {/* 文件名 */}
                   <span
-                    className="flex-1 font-mono text-sm text-white truncate"
+                    className="flex-1 font-mono text-sm text-on-canvas truncate"
                     title={file.name}
                   >
                     {file.name}
                   </span>
 
                   {/* 大小 */}
-                  <span className="text-xs text-slate-400 w-20 text-right flex-shrink-0">
+                  <span className="text-xs text-on-muted w-20 text-right flex-shrink-0">
                     {file.type === 'file' ? formatBytes(file.size) : '-'}
                   </span>
 
                   {/* 权限 */}
-                  <span className="text-xs text-slate-500 w-24 font-mono flex-shrink-0 hidden sm:block">
+                  <span className="text-xs text-on-dim w-24 font-mono flex-shrink-0 hidden sm:block">
                     {file.permissions}
                   </span>
 
@@ -261,7 +263,7 @@ export const FileTreeBrowser = ({
                           onDownload(file.path, file.name);
                         }}
                         className="px-1.5 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-xs text-white"
-                        title="下载"
+                        title={t('buttons.download')}
                       >
                         ⬇
                       </button>
@@ -272,8 +274,8 @@ export const FileTreeBrowser = ({
                           e.stopPropagation();
                           onDownload(file.path, `${file.name}.tar`);
                         }}
-                        className="px-1.5 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-xs text-white"
-                        title="下载为 tar"
+                        className="px-1.5 py-0.5 rounded bg-surface-hover hover:bg-surface-hover text-xs text-white"
+                        title={t('sandbox.downloadAsTar')}
                       >
                         ⬇
                       </button>
@@ -286,15 +288,15 @@ export const FileTreeBrowser = ({
         </div>
 
         {/* 底部操作栏 */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700">
-          <span className="text-sm text-slate-400">
-            {files.length} 个项目
+        <div className="flex items-center justify-between px-4 py-3 border-t border-edge">
+          <span className="text-sm text-on-muted">
+            {t('sandbox.itemCount', { count: files.length })}
           </span>
           <button
             onClick={() => onUpload(currentPath)}
             className="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-sm"
           >
-            上传文件
+            {t('sandbox.uploadFiles')}
           </button>
         </div>
       </div>

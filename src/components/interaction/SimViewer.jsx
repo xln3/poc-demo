@@ -52,7 +52,7 @@ export default function SimViewer({
 
   if (!sessionId && !videoUrl) {
     return (
-      <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+      <div className="flex items-center justify-center h-full text-on-dim text-sm">
         未启动仿真环境
       </div>
     );
@@ -61,15 +61,15 @@ export default function SimViewer({
   return (
     <div className="flex flex-col h-full bg-black rounded overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-800 border-b border-slate-700">
-        <span className="text-xs text-slate-300">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-surface border-b border-edge">
+        <span className="text-xs text-on-surface">
           仿真画面
           {mode === 'live' && (
             <span className={`ml-2 inline-block w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
           )}
         </span>
         {mode === 'live' && (
-          <span className="text-[10px] text-slate-500">LIVE</span>
+          <span className="text-[10px] text-on-dim">LIVE</span>
         )}
       </div>
 

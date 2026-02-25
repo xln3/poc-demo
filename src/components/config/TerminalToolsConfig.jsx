@@ -8,7 +8,7 @@ export default function TerminalToolsConfig({
   enabledTools, setEnabledTools, maxToolCalls, setMaxToolCalls,
 }) {
   return (
-    <div className="bg-slate-800 rounded-lg p-3 border border-cyan-900/50">
+    <div className="bg-surface rounded-lg p-3 border border-cyan-900/50">
       <div className="text-xs text-cyan-400 flex items-center justify-between">
         <button
           onClick={() => setToolsConfigCollapsed(!toolsConfigCollapsed)}
@@ -18,7 +18,7 @@ export default function TerminalToolsConfig({
           <span>终端工具配置</span>
         </button>
         {toolsConfigCollapsed && (
-          <span className="text-[10px] text-slate-400 truncate max-w-[300px]">
+          <span className="text-[10px] text-on-muted truncate max-w-[300px]">
             {Object.entries(enabledTools).filter(([_, enabled]) => enabled).map(([name]) => name).join(' | ') || '无'}
           </span>
         )}
@@ -26,14 +26,14 @@ export default function TerminalToolsConfig({
       {!toolsConfigCollapsed && (
         <>
           <div className="mt-2 mb-2 flex items-center gap-4 text-xs">
-            <span className="text-slate-400">最大调用次数:</span>
+            <span className="text-on-muted">最大调用次数:</span>
             <input
               type="number"
               min="1"
               max="500"
               value={maxToolCalls}
               onChange={(e) => setMaxToolCalls(parseInt(e.target.value) || 10)}
-              className="w-16 bg-slate-700 border border-slate-600 rounded px-1 text-cyan-400 font-mono text-xs"
+              className="w-16 bg-surface-raised border border-edge-strong rounded px-1 text-cyan-400 font-mono text-xs"
             />
             <div className="flex gap-2 ml-auto">
               <button
@@ -42,7 +42,7 @@ export default function TerminalToolsConfig({
                   Object.keys(enabledTools).forEach(name => { newTools[name] = true; });
                   setEnabledTools(newTools);
                 }}
-                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-slate-300"
+                className="px-2 py-0.5 bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
               >
                 全选
               </button>
@@ -54,7 +54,7 @@ export default function TerminalToolsConfig({
                   });
                   setEnabledTools(newTools);
                 }}
-                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-slate-300"
+                className="px-2 py-0.5 bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
               >
                 仅安全
               </button>
@@ -64,7 +64,7 @@ export default function TerminalToolsConfig({
                   Object.keys(enabledTools).forEach(name => { newTools[name] = false; });
                   setEnabledTools(newTools);
                 }}
-                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-slate-300"
+                className="px-2 py-0.5 bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
               >
                 全不选
               </button>
@@ -73,7 +73,7 @@ export default function TerminalToolsConfig({
           {/* Tool grid by category */}
           <div className="grid grid-cols-3 gap-2">
             {Object.entries(CONFIG.tools.categories).map(([category, catConfig]) => (
-              <div key={category} className={`bg-slate-700/50 rounded p-2 border-l-2 ${
+              <div key={category} className={`bg-surface-muted/50 rounded p-2 border-l-2 ${
                 category === 'safe' ? 'border-green-500' :
                 category === 'risky' ? 'border-orange-500' : 'border-red-500'
               }`}>
@@ -90,7 +90,7 @@ export default function TerminalToolsConfig({
                       <label
                         key={name}
                         className={`flex items-center gap-1.5 text-xs cursor-pointer p-1 rounded transition ${
-                          enabledTools[name] ? 'bg-slate-600/50' : 'hover:bg-slate-600/30'
+                          enabledTools[name] ? 'bg-surface-hover/50' : 'hover:bg-surface-hover/30'
                         }`}
                         title={tool.description}
                       >
@@ -103,9 +103,9 @@ export default function TerminalToolsConfig({
                               [name]: e.target.checked
                             }));
                           }}
-                          className="w-3 h-3 rounded border-slate-500 bg-slate-700 text-cyan-500"
+                          className="w-3 h-3 rounded border-edge-strong bg-surface-raised text-cyan-500"
                         />
-                        <span className={enabledTools[name] ? 'text-slate-200' : 'text-slate-400'}>
+                        <span className={enabledTools[name] ? 'text-on-canvas' : 'text-on-muted'}>
                           {tool.label}
                         </span>
                       </label>
@@ -114,7 +114,7 @@ export default function TerminalToolsConfig({
               </div>
             ))}
           </div>
-          <div className="mt-2 text-[10px] text-slate-500">
+          <div className="mt-2 text-[10px] text-on-dim">
             启用工具后，LLM 可在测试中调用这些工具。工具将在沙箱中执行。
           </div>
         </>

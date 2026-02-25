@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CAPABILITY_CONFIG } from '../hooks/useDatasets.js';
 import { CaseBrowser } from './CaseBrowser.jsx';
 
@@ -18,6 +19,7 @@ export const DatasetDetailModal = ({
   onDeleteDataset,
   formatSize,
 }) => {
+  const { t } = useTranslation();
   const [currentCaseIndex, setCurrentCaseIndex] = useState(0);
 
   if (!isOpen || !dataset) return null;
@@ -38,46 +40,43 @@ export const DatasetDetailModal = ({
   };
 
   const getSourceTypeLabel = (type) => {
-    const labels = {
-      paper: '学术论文',
-      business: '业务场景',
-      manual: '手工创建',
-      generated: '自动生成',
-    };
-    return labels[type] || type || '-';
+    if (!type) return '-';
+    const key = `datasetDetail.sourceTypes.${type}`;
+    const translated = t(key);
+    return translated !== key ? translated : (type || '-');
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-gray-900 rounded-lg shadow-xl w-[800px] max-w-[90vw] h-[80vh] flex flex-col overflow-hidden border border-gray-700">
+      <div className="bg-canvas rounded-lg shadow-xl w-[800px] max-w-[90vw] h-[80vh] flex flex-col overflow-hidden border border-edge">
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 bg-gray-800">
-          <h3 className="text-lg font-medium text-gray-200">
-            {meta.name || '数据集详情'}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-edge bg-surface">
+          <h3 className="text-lg font-medium text-on-canvas">
+            {meta.name || t('datasetDetail.title')}
           </h3>
           <div className="flex items-center gap-2">
             <button
               onClick={() => onExportDataset(meta.datasetId || dataset.id)}
-              className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 rounded text-gray-300"
+              className="px-3 py-1 text-sm bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
             >
-              导出数据集
+              {t('datasetDetail.exportDataset')}
             </button>
             {onDeleteDataset && (
               <button
                 onClick={() => {
-                  if (confirm('确定要删除这个数据集吗？')) {
+                  if (confirm(t('datasetDetail.deleteConfirm'))) {
                     onDeleteDataset(meta.datasetId || dataset.id);
                     onClose();
                   }
                 }}
                 className="px-3 py-1 text-sm bg-red-600/20 hover:bg-red-600/30 rounded text-red-400"
               >
-                删除
+                {t('datasetDetail.deleteDataset')}
               </button>
             )}
             <button
               onClick={onClose}
-              className="px-2 py-1 text-gray-400 hover:text-white"
+              className="px-2 py-1 text-on-muted hover:text-on-canvas"
             >
               ✕
             </button>
@@ -85,36 +84,36 @@ export const DatasetDetailModal = ({
         </div>
 
         {/* 上半部分：基本信息 (2/8 = 25%) */}
-        <div className="px-4 py-3 border-b border-gray-700 bg-gray-850" style={{ height: '25%' }}>
+        <div className="px-4 py-3 border-b border-edge bg-surface" style={{ height: '25%' }}>
           <div className="grid grid-cols-3 gap-4 h-full">
             {/* 左列：基本属性 */}
             <div className="space-y-2">
               <div className="flex">
-                <span className="text-gray-500 text-sm w-20">名称:</span>
-                <span className="text-gray-200 text-sm">{meta.name || '-'}</span>
+                <span className="text-on-dim text-sm w-20">{t('datasetDetail.name')}</span>
+                <span className="text-on-canvas text-sm">{meta.name || '-'}</span>
               </div>
               <div className="flex">
-                <span className="text-gray-500 text-sm w-20">上传时间:</span>
-                <span className="text-gray-300 text-sm">{formatDate(meta.createdAt)}</span>
+                <span className="text-on-dim text-sm w-20">{t('datasetDetail.uploadTime')}</span>
+                <span className="text-on-surface text-sm">{formatDate(meta.createdAt)}</span>
               </div>
               <div className="flex">
-                <span className="text-gray-500 text-sm w-20">更新时间:</span>
-                <span className="text-gray-300 text-sm">{formatDate(meta.updatedAt)}</span>
+                <span className="text-on-dim text-sm w-20">{t('datasetDetail.updateTime')}</span>
+                <span className="text-on-surface text-sm">{formatDate(meta.updatedAt)}</span>
               </div>
               <div className="flex">
-                <span className="text-gray-500 text-sm w-20">用例数量:</span>
-                <span className="text-gray-200 text-sm">{meta.caseCount || cases.length}</span>
+                <span className="text-on-dim text-sm w-20">{t('datasetDetail.caseCount')}</span>
+                <span className="text-on-canvas text-sm">{meta.caseCount || cases.length}</span>
               </div>
               <div className="flex">
-                <span className="text-gray-500 text-sm w-20">数据体积:</span>
-                <span className="text-gray-300 text-sm">{formatSize(meta.totalSize || 0)}</span>
+                <span className="text-on-dim text-sm w-20">{t('datasetDetail.dataSize')}</span>
+                <span className="text-on-surface text-sm">{formatSize(meta.totalSize || 0)}</span>
               </div>
             </div>
 
             {/* 中列：能力范围和来源 */}
             <div className="space-y-2">
               <div>
-                <span className="text-gray-500 text-sm">涵盖能力:</span>
+                <span className="text-on-dim text-sm">{t('datasetDetail.coverCapabilities')}</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {(meta.capabilities || []).length > 0 ? (
                     meta.capabilities.map(cap => {
@@ -123,35 +122,35 @@ export const DatasetDetailModal = ({
                       return (
                         <span
                           key={cap}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-700 rounded text-xs text-gray-300"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-raised rounded text-xs text-on-surface"
                         >
                           {config.icon} {config.label}
                         </span>
                       );
                     })
                   ) : (
-                    <span className="text-gray-500 text-xs">未指定</span>
+                    <span className="text-on-dim text-xs">{t('labels.unspecified')}</span>
                   )}
                 </div>
               </div>
               <div className="flex">
-                <span className="text-gray-500 text-sm w-20">来源类型:</span>
-                <span className="text-gray-300 text-sm">{getSourceTypeLabel(meta.source?.type)}</span>
+                <span className="text-on-dim text-sm w-20">{t('datasetDetail.sourceType')}</span>
+                <span className="text-on-surface text-sm">{getSourceTypeLabel(meta.source?.type)}</span>
               </div>
               {meta.source?.reference && (
                 <div className="flex">
-                  <span className="text-gray-500 text-sm w-20">来源引用:</span>
-                  <span className="text-gray-300 text-sm truncate">{meta.source.reference}</span>
+                  <span className="text-on-dim text-sm w-20">{t('datasetDetail.sourceReference')}</span>
+                  <span className="text-on-surface text-sm truncate">{meta.source.reference}</span>
                 </div>
               )}
               {(meta.tags || []).length > 0 && (
                 <div>
-                  <span className="text-gray-500 text-sm">标签:</span>
+                  <span className="text-on-dim text-sm">{t('datasetDetail.tags')}</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {meta.tags.map(tag => (
                       <span
                         key={tag}
-                        className="px-1.5 py-0.5 bg-gray-700 rounded text-xs text-gray-400"
+                        className="px-1.5 py-0.5 bg-surface-raised rounded text-xs text-on-muted"
                       >
                         {tag}
                       </span>
@@ -163,9 +162,9 @@ export const DatasetDetailModal = ({
 
             {/* 右列：描述 */}
             <div>
-              <span className="text-gray-500 text-sm">描述:</span>
-              <div className="mt-1 text-sm text-gray-300 max-h-24 overflow-auto">
-                {meta.description || '无描述'}
+              <span className="text-on-dim text-sm">{t('datasetDetail.description')}</span>
+              <div className="mt-1 text-sm text-on-surface max-h-24 overflow-auto">
+                {meta.description || t('labels.noDescription')}
               </div>
             </div>
           </div>

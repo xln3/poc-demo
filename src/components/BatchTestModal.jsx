@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listDatasets, getDataset } from '../datasetApi.js';
 import { CapabilityLevel } from '../schemas/testCase.js';
 
@@ -12,6 +13,8 @@ export const BatchTestModal = ({
   onClose,
   onStartBatchTest, // (selectedCases: Array) => void
 }) => {
+  const { t } = useTranslation();
+
   // ============ 选择状态 ============
   const [datasets, setDatasets] = useState([]);
   const [expandedDatasets, setExpandedDatasets] = useState({});
@@ -196,44 +199,44 @@ export const BatchTestModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-gray-900 rounded-lg shadow-xl w-[600px] max-w-[95vw] h-[70vh] flex flex-col overflow-hidden border border-gray-700">
+      <div className="bg-canvas rounded-lg shadow-xl w-[600px] max-w-[95vw] h-[70vh] flex flex-col overflow-hidden border border-edge">
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 bg-gray-800">
-          <h3 className="text-lg font-medium text-gray-200">选择批量测试用例</h3>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-edge bg-surface">
+          <h3 className="text-lg font-medium text-on-canvas">{t('batchTest.selectTestCases')}</h3>
           <button
             onClick={handleClose}
-            className="px-2 py-1 text-gray-400 hover:text-white"
+            className="px-2 py-1 text-on-muted hover:text-on-canvas"
           >
             ✕
           </button>
         </div>
 
         {/* 操作栏 */}
-        <div className="px-3 py-2 border-b border-gray-700 bg-gray-850 flex items-center gap-2">
+        <div className="px-3 py-2 border-b border-edge bg-surface flex items-center gap-2">
           <button
             onClick={selectAllF1F2}
             disabled={isLoadingAll}
             className="px-2 py-1 text-xs bg-blue-600/20 hover:bg-blue-600/30 rounded text-blue-400 disabled:opacity-50"
           >
-            {isLoadingAll ? '加载中...' : '全选 F1/F2'}
+            {isLoadingAll ? t('batchTest.loading') : t('buttons.selectAllF1F2')}
           </button>
           <button
             onClick={clearSelection}
-            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300"
+            className="px-2 py-1 text-xs bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
           >
-            清空
+            {t('buttons.clearSelection')}
           </button>
-          <span className="ml-auto text-xs text-gray-400">
-            已选 {selectedCases.size} 个用例
+          <span className="ml-auto text-xs text-on-muted">
+            {t('batchTest.selectedCount', { count: selectedCases.size })}
           </span>
         </div>
 
         {/* 数据集列表 */}
         <div className="flex-1 overflow-auto p-2">
           {isLoadingDatasets ? (
-            <div className="text-center text-gray-500 py-4">加载中...</div>
+            <div className="text-center text-on-dim py-4">{t('batchTest.loading')}</div>
           ) : datasets.length === 0 ? (
-            <div className="text-center text-gray-500 py-4">暂无数据集</div>
+            <div className="text-center text-on-dim py-4">{t('batchTest.noDatasets')}</div>
           ) : (
             datasets.map(ds => {
               const datasetId = ds.id || ds.datasetId;
@@ -246,22 +249,22 @@ export const BatchTestModal = ({
                 <div key={datasetId} className="mb-2">
                   {/* 数据集标题 */}
                   <div
-                    className="flex items-center gap-2 px-2 py-1.5 bg-gray-800 rounded cursor-pointer hover:bg-gray-750"
+                    className="flex items-center gap-2 px-2 py-1.5 bg-surface rounded cursor-pointer hover:bg-surface-raised"
                     onClick={() => toggleDataset(datasetId)}
                   >
-                    <span className="text-gray-400">{isExpanded ? '▼' : '▶'}</span>
-                    <span className="text-gray-200 text-sm flex-1 truncate">
-                      {ds.name || '未命名数据集'}
+                    <span className="text-on-muted">{isExpanded ? '▼' : '▶'}</span>
+                    <span className="text-on-canvas text-sm flex-1 truncate">
+                      {ds.name || t('dataset.unnamed')}
                     </span>
-                    <span className="text-gray-500 text-xs">
+                    <span className="text-on-dim text-xs">
                       ({ds.caseCount || cases.length || 0})
                     </span>
                     {isExpanded && (
                       <button
                         onClick={(e) => { e.stopPropagation(); selectAllInDataset(datasetId); }}
-                        className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-400"
+                        className="px-1.5 py-0.5 text-xs bg-surface-raised hover:bg-surface-hover rounded text-on-muted"
                       >
-                        全选
+                        {t('buttons.selectAll')}
                       </button>
                     )}
                   </div>
@@ -270,9 +273,9 @@ export const BatchTestModal = ({
                   {isExpanded && (
                     <div className="ml-4 mt-1 space-y-1">
                       {isLoading ? (
-                        <div className="text-xs text-gray-500 py-1">加载中...</div>
+                        <div className="text-xs text-on-dim py-1">{t('batchTest.loading')}</div>
                       ) : cases.length === 0 ? (
-                        <div className="text-xs text-gray-500 py-1">暂无用例</div>
+                        <div className="text-xs text-on-dim py-1">{t('batchTest.noCases')}</div>
                       ) : (
                         cases.map(c => {
                           const caseId = c.id || c.meta?.caseId;
@@ -286,7 +289,7 @@ export const BatchTestModal = ({
                               key={caseId}
                               className={`flex items-center gap-2 px-2 py-1 rounded text-sm ${
                                 isSelectable
-                                  ? 'cursor-pointer hover:bg-gray-750'
+                                  ? 'cursor-pointer hover:bg-surface-raised'
                                   : 'opacity-50 cursor-not-allowed'
                               } ${isSelected ? 'bg-blue-900/30' : ''}`}
                               onClick={() => toggleCase(c, datasetId)}
@@ -299,10 +302,10 @@ export const BatchTestModal = ({
                                   className="w-3.5 h-3.5"
                                 />
                               ) : (
-                                <span className="text-yellow-500 text-xs" title="不支持批量测试">⚠️</span>
+                                <span className="text-yellow-500 text-xs" title={t('batchTest.unsupported')}>⚠️</span>
                               )}
-                              <span className="text-gray-300 flex-1 truncate">
-                                {c.name || c.input?.meta?.name || c.source?.attack?.name || '未命名'}
+                              <span className="text-on-surface flex-1 truncate">
+                                {c.name || c.input?.meta?.name || c.source?.attack?.name || t('batchTest.unnamed')}
                               </span>
                               <span
                                 className={`text-xs px-1.5 py-0.5 rounded ${
@@ -326,19 +329,19 @@ export const BatchTestModal = ({
         </div>
 
         {/* 底部按钮 */}
-        <div className="px-4 py-3 border-t border-gray-700 bg-gray-850 flex justify-end gap-2">
+        <div className="px-4 py-3 border-t border-edge bg-surface flex justify-end gap-2">
           <button
             onClick={handleClose}
-            className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded text-gray-300"
+            className="px-4 py-2 text-sm bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
           >
-            取消
+            {t('buttons.cancel')}
           </button>
           <button
             onClick={handleStart}
             disabled={selectedCases.size === 0}
             className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            开始测试 ({selectedCases.size})
+            {t('batchTest.startTestCount', { count: selectedCases.size })}
           </button>
         </div>
       </div>

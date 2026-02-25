@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import i18n from '../i18n/index.js';
 import { saveCaseToServer, listSavedCases, getCaseDetail, deleteCase } from '../caseApi.js';
 import {
   // v1 兼容
@@ -177,7 +178,7 @@ export const useCases = ({
    */
   const buildCurrentTestInput = useCallback(() => {
     if (!currentScenario || !currentAttack) {
-      throw new Error('缺少场景或攻击信息');
+      throw new Error(i18n.t('errors.missingScenarioOrAttack'));
     }
 
     const capabilityLevel = getCapabilityLevel();
@@ -256,7 +257,7 @@ export const useCases = ({
    */
   const buildCurrentTestCase = useCallback(async () => {
     if (!currentScenario || !currentAttack) {
-      throw new Error('缺少场景或攻击信息');
+      throw new Error(i18n.t('errors.missingScenarioOrAttack'));
     }
 
     const capabilityLevel = getCapabilityLevel();
@@ -385,7 +386,7 @@ export const useCases = ({
    */
   const buildCurrentPlaybackSequence = useCallback(async () => {
     if (!stateCollector) {
-      throw new Error('状态收集器未初始化');
+      throw new Error(i18n.t('errors.stateCollectorNotInit'));
     }
 
     const input = buildCurrentTestInput();
@@ -417,7 +418,7 @@ export const useCases = ({
    */
   const saveToServer = async () => {
     if (apiStatus !== 'success') {
-      alert('暂无测试结果，请先执行真实测试');
+      alert(i18n.t('errors.noTestResults'));
       return;
     }
 
@@ -426,10 +427,10 @@ export const useCases = ({
       const testCase = await buildCurrentTestCase();
       const saved = await saveCaseToServer(testCase);
       const caseId = saved.meta?.caseId || saved.id;
-      alert(`保存成功！用例 ID: ${caseId}`);
+      alert(i18n.t('success.caseSaved', { id: caseId }));
       loadSavedCases();
     } catch (error) {
-      alert(`保存失败: ${error.message}`);
+      alert(i18n.t('errors.saveFailed', { message: error.message }));
     } finally {
       setIsSaving(false);
     }
@@ -440,7 +441,7 @@ export const useCases = ({
    */
   const exportCurrentCase = async () => {
     if (apiStatus !== 'success') {
-      alert('暂无测试结果，请先执行真实测试');
+      alert(i18n.t('errors.noTestResults'));
       return;
     }
 
@@ -458,7 +459,7 @@ export const useCases = ({
    */
   const exportPlaybackSequence = async () => {
     if (apiStatus !== 'success') {
-      alert('暂无测试结果，请先执行真实测试');
+      alert(i18n.t('errors.noTestResults'));
       return;
     }
 

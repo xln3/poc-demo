@@ -10,7 +10,7 @@ export default function PlaybackControlBar({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-cyan-400 font-medium">▶️ 回放模式</span>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-on-muted">
             {playbackCase?.meta?.name || playbackCase?.source?.attack?.name || '未命名用例'}
           </span>
           {isPlaybackPlaying && (
@@ -39,7 +39,7 @@ export default function PlaybackControlBar({
               )}
               <button
                 onClick={skipToEnd}
-                className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded"
+                className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded"
               >
                 ⏭️ 跳过
               </button>
@@ -63,7 +63,7 @@ export default function PlaybackControlBar({
       </div>
       {playbackTotal > 0 && (
         <div className="mt-2">
-          <div className="w-full bg-slate-700 rounded-full h-1.5">
+          <div className="w-full bg-surface-raised rounded-full h-1.5">
             <div
               className="bg-cyan-500 h-1.5 rounded-full transition-all duration-200"
               style={{ width: `${(playbackProgress / playbackTotal) * 100}%` }}

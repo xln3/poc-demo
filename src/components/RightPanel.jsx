@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const RightPanel = forwardRef(function RightPanel({
   rightPanelTab, setRightPanelTab, rightSubTab, setRightSubTab,
@@ -10,55 +11,56 @@ const RightPanel = forwardRef(function RightPanel({
   // Review tab
   judgeConfig, setJudgeConfig, humanJudgment, setHumanJudgment, submitHumanJudgment,
 }, logRef) {
+  const { t } = useTranslation();
 
   return (
-    <div className="bg-slate-800 rounded-lg p-3 flex flex-col min-h-0">
+    <div className="bg-surface rounded-lg p-3 flex flex-col min-h-0">
       {/* Tab 切换 */}
-      <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 flex-shrink-0">
+      <div className="flex items-center justify-between mb-2 pb-2 border-b border-edge flex-shrink-0">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setRightPanelTab('records')}
             className={`text-xs px-2 py-1 rounded transition ${
-              rightPanelTab === 'records' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+              rightPanelTab === 'records' ? 'bg-blue-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
             }`}
           >
-            执行日志
+            {t('tabs.executionLogs')}
             {testRecords.length > 0 && (
-              <span className="ml-1 text-slate-400">({testRecords.length})</span>
+              <span className="ml-1 text-on-muted">{t('records.recordCount', { count: testRecords.length })}</span>
             )}
           </button>
           <button
             onClick={() => setRightPanelTab('review')}
             className={`text-xs px-2 py-1 rounded transition ${
-              rightPanelTab === 'review' ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+              rightPanelTab === 'review' ? 'bg-cyan-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
             }`}
           >
-            测试评审
+            {t('tabs.testReview')}
           </button>
           <button
             onClick={() => setRightPanelTab('examples')}
             className={`text-xs px-2 py-1 rounded transition ${
-              rightPanelTab === 'examples' ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+              rightPanelTab === 'examples' ? 'bg-amber-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
             }`}
           >
-            样例编写
+            {t('tabs.exampleWriting')}
           </button>
           <button
             onClick={() => setRightPanelTab('report')}
             className={`text-xs px-2 py-1 rounded transition ${
-              rightPanelTab === 'report' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+              rightPanelTab === 'report' ? 'bg-emerald-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
             }`}
           >
-            报告生成
+            {t('tabs.reportGeneration')}
           </button>
         </div>
         {/* 清空按钮 - 仅执行日志时显示 */}
         {rightPanelTab === 'records' && (
           <button
             onClick={() => { setTestRecords([]); setExpandedRecords(new Set()); thinkingIndexRef.current = 0; }}
-            className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded transition"
+            className="text-xs px-2 py-0.5 bg-surface-raised hover:bg-surface-hover rounded transition"
           >
-            清空
+            {t('buttons.clear')}
           </button>
         )}
       </div>
@@ -67,8 +69,8 @@ const RightPanel = forwardRef(function RightPanel({
       {rightPanelTab === 'records' && (
         <div ref={logRef} className="flex-1 overflow-y-auto custom-scroll space-y-1 font-mono text-xs pr-1">
           {testRecords.length === 0 && (
-            <div className="text-slate-500 text-center py-4">
-              暂无执行日志
+            <div className="text-on-dim text-center py-4">
+              {t('records.noRecords')}
             </div>
           )}
           {testRecords.map((record) => {
@@ -90,7 +92,7 @@ const RightPanel = forwardRef(function RightPanel({
                 case 'judge': return ['high', 'medium'].includes(record.meta?.riskLevel) ? 'bg-red-900/30 border-red-500' : record.meta?.riskLevel === 'safe' ? 'bg-green-900/30 border-green-500' : 'bg-yellow-900/30 border-yellow-500';
                 case 'timing': return 'bg-amber-900/20 border-amber-500';
                 case 'error': return 'bg-red-900/30 border-red-500';
-                default: return 'bg-slate-700/50 border-slate-500';
+                default: return 'bg-surface-muted/50 border-edge-strong';
               }
             };
 
@@ -131,43 +133,43 @@ const RightPanel = forwardRef(function RightPanel({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start flex-1 min-w-0">
-                    <span className="inline-block w-6 flex-shrink-0 text-slate-500 text-[10px]">#{record.seq + 1}</span>
+                    <span className="inline-block w-6 flex-shrink-0 text-on-dim text-[10px]">#{record.seq + 1}</span>
                     <span className="inline-block w-6 flex-shrink-0 text-center">{getRecordIcon()}</span>
                     <div className="flex-1 min-w-0">
                       {hasFullContent ? (
                         <span
                           onClick={toggleExpand}
-                          className="text-slate-300 cursor-pointer hover:text-white transition"
+                          className="text-on-surface cursor-pointer hover:text-on-canvas transition"
                         >
-                          <span className="text-slate-400 mr-1">{isExpanded ? '▼' : '▶'}</span>
+                          <span className="text-on-muted mr-1">{isExpanded ? '▼' : '▶'}</span>
                           {record.summary}
                           {record.meta?.chars && (
-                            <span className="text-slate-500 ml-1">({record.meta.chars}字)</span>
+                            <span className="text-on-dim ml-1">{t('records.charCount', { chars: record.meta.chars })}</span>
                           )}
                         </span>
                       ) : (
-                        <span className="text-slate-300 break-all">{record.summary}</span>
+                        <span className="text-on-surface break-all">{record.summary}</span>
                       )}
                       {record.type === 'thinking' && record.meta?.thinkingIndex !== undefined && !record.meta?.isStreaming && (
                         <button
                           onClick={(e) => { e.stopPropagation(); jumpToThinking(); }}
                           className="ml-2 text-pink-400 hover:text-pink-300 text-[10px]"
-                          title="跳转到思考面板"
+                          title={t('records.jumpToThinking')}
                         >
-                          [查看]
+                          {t('records.viewLink')}
                         </button>
                       )}
                       {record.type === 'response' && !record.meta?.isStreaming && (
                         <button
                           onClick={(e) => { e.stopPropagation(); jumpToResponse(); }}
                           className="ml-2 text-blue-400 hover:text-blue-300 text-[10px]"
-                          title="跳转到对话"
+                          title={t('records.jumpToConversation')}
                         >
-                          [查看]
+                          {t('records.viewLink')}
                         </button>
                       )}
                       {hasFullContent && isExpanded && (
-                        <pre className="mt-2 p-2 bg-slate-900/50 rounded text-slate-400 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
+                        <pre className="mt-2 p-2 bg-canvas/50 rounded text-on-muted text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
                           {record.fullContent}
                         </pre>
                       )}
@@ -178,14 +180,14 @@ const RightPanel = forwardRef(function RightPanel({
                               <span className={ann.source === 'llm' ? 'text-cyan-400' : 'text-yellow-400'}>
                                 [{ann.source === 'llm' ? 'LLM' : ann.author}]
                               </span>
-                              <span className="text-slate-400 flex-1">{ann.content}</span>
+                              <span className="text-on-muted flex-1">{ann.content}</span>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   removeAnnotation(record.id, ann.id);
                                 }}
                                 className="text-red-400 hover:text-red-300 opacity-0 group-hover/ann:opacity-100 transition"
-                                title="删除批注"
+                                title={t('buttons.deleteAnnotation')}
                               >
                                 ×
                               </button>
@@ -201,7 +203,7 @@ const RightPanel = forwardRef(function RightPanel({
                       setAnnotationModal({ open: true, recordId: record.id });
                     }}
                     className="text-xs hover:text-yellow-300 transition opacity-60 hover:opacity-100"
-                    title="添加批注"
+                    title={t('buttons.addAnnotation')}
                   >
                     🧐
                   </button>
@@ -220,18 +222,18 @@ const RightPanel = forwardRef(function RightPanel({
             <button
               onClick={() => setRightSubTab('llm')}
               className={`text-xs px-2 py-0.5 rounded transition ${
-                rightSubTab === 'llm' ? 'bg-cyan-600/30 text-cyan-400 border border-cyan-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                rightSubTab === 'llm' ? 'bg-cyan-600/30 text-cyan-400 border border-cyan-500/50' : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover/50'
               }`}
             >
-              🤖 LLM 辅助
+              {t('tabs.llmAssisted')}
             </button>
             <button
               onClick={() => setRightSubTab('human')}
               className={`text-xs px-2 py-0.5 rounded transition ${
-                rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover/50'
               }`}
             >
-              👤 人工修改
+              {t('tabs.humanRevision')}
             </button>
           </div>
           {/* 子 Tab 内容 */}
@@ -239,29 +241,29 @@ const RightPanel = forwardRef(function RightPanel({
             {rightSubTab === 'llm' && (
               <div className="space-y-3 p-1">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-500 w-16">模型:</label>
+                  <label className="text-xs text-on-dim w-16">{t('review.modelLabel')}</label>
                   <input
                     type="text"
                     value={judgeConfig.model}
                     onChange={(e) => setJudgeConfig(prev => ({ ...prev, model: e.target.value }))}
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-cyan-500 font-mono"
                   />
                 </div>
                 <div className="flex items-start gap-2">
-                  <label className="text-xs text-slate-500 w-16 pt-1">提示词:</label>
+                  <label className="text-xs text-on-dim w-16 pt-1">{t('review.promptTemplate')}</label>
                   <textarea
                     value={judgeConfig.systemPrompt}
                     onChange={(e) => setJudgeConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
                     rows={6}
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-cyan-500 resize-none font-mono"
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-cyan-500 resize-none font-mono"
                   />
                 </div>
-                <div className="text-slate-500 text-xs">
-                  LLM 将基于执行日志自动生成评审意见
+                <div className="text-on-dim text-xs">
+                  {t('review.llmWillGenerate')}
                 </div>
                 <div className="flex justify-end">
                   <button className="text-xs px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 transition">
-                    生成评审
+                    {t('buttons.generateReview')}
                   </button>
                 </div>
               </div>
@@ -269,24 +271,24 @@ const RightPanel = forwardRef(function RightPanel({
             {rightSubTab === 'human' && (
               <div className="space-y-3 p-1">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-500 w-16">评审员:</label>
+                  <label className="text-xs text-on-dim w-16">{t('review.reviewer')}</label>
                   <input
                     type="text"
                     value={humanJudgment.auditorCode}
                     onChange={(e) => setHumanJudgment(prev => ({ ...prev, auditorCode: e.target.value }))}
-                    placeholder="代号"
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-yellow-500"
+                    placeholder={t('review.auditorCode')}
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-yellow-500"
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-500 w-16">评分:</label>
+                  <label className="text-xs text-on-dim w-16">{t('review.riskScore')}</label>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
                         key={star}
                         onClick={() => setHumanJudgment(prev => ({ ...prev, score: star }))}
                         className={`text-lg transition ${
-                          humanJudgment.score >= star ? 'text-yellow-400' : 'text-slate-600'
+                          humanJudgment.score >= star ? 'text-yellow-400' : 'text-on-dim'
                         } hover:text-yellow-300`}
                       >
                         ★
@@ -295,13 +297,13 @@ const RightPanel = forwardRef(function RightPanel({
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <label className="text-xs text-slate-500 w-16 pt-1">总结:</label>
+                  <label className="text-xs text-on-dim w-16 pt-1">{t('review.notes')}</label>
                   <textarea
                     value={humanJudgment.summary}
                     onChange={(e) => setHumanJudgment(prev => ({ ...prev, summary: e.target.value }))}
-                    placeholder="评审总结（可基于 LLM 建议修改）..."
+                    placeholder={t('review.summaryPlaceholder')}
                     rows={6}
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-yellow-500 resize-none"
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-yellow-500 resize-none"
                   />
                 </div>
                 <div className="flex justify-end">
@@ -311,10 +313,10 @@ const RightPanel = forwardRef(function RightPanel({
                     className={`text-xs px-3 py-1 rounded transition ${
                       humanJudgment.auditorCode && humanJudgment.score
                         ? 'bg-yellow-600 hover:bg-yellow-500'
-                        : 'bg-slate-700 cursor-not-allowed text-slate-500'
+                        : 'bg-surface-raised cursor-not-allowed text-on-dim'
                     }`}
                   >
-                    提交评审
+                    {t('buttons.submitReview')}
                   </button>
                 </div>
               </div>
@@ -331,18 +333,18 @@ const RightPanel = forwardRef(function RightPanel({
             <button
               onClick={() => setRightSubTab('llm')}
               className={`text-xs px-2 py-0.5 rounded transition ${
-                rightSubTab === 'llm' ? 'bg-amber-600/30 text-amber-400 border border-amber-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                rightSubTab === 'llm' ? 'bg-amber-600/30 text-amber-400 border border-amber-500/50' : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover/50'
               }`}
             >
-              🤖 LLM 辅助
+              {t('tabs.llmAssisted')}
             </button>
             <button
               onClick={() => setRightSubTab('human')}
               className={`text-xs px-2 py-0.5 rounded transition ${
-                rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover/50'
               }`}
             >
-              👤 人工修改
+              {t('tabs.humanRevision')}
             </button>
           </div>
           {/* 子 Tab 内容 */}
@@ -350,27 +352,27 @@ const RightPanel = forwardRef(function RightPanel({
             {rightSubTab === 'llm' && (
               <div className="space-y-3 p-1">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-500 w-16">模型:</label>
+                  <label className="text-xs text-on-dim w-16">{t('review.modelLabel')}</label>
                   <input
                     type="text"
-                    placeholder="样例生成模型"
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-amber-500 font-mono"
+                    placeholder={t('examples.modelPlaceholder')}
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
                 <div className="flex items-start gap-2">
-                  <label className="text-xs text-slate-500 w-16 pt-1">提示词:</label>
+                  <label className="text-xs text-on-dim w-16 pt-1">{t('review.promptTemplate')}</label>
                   <textarea
-                    placeholder="描述需要生成的样例类型..."
+                    placeholder={t('examples.promptPlaceholder')}
                     rows={6}
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-amber-500 resize-none font-mono"
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-amber-500 resize-none font-mono"
                   />
                 </div>
-                <div className="text-slate-500 text-xs">
-                  LLM 将基于当前测试场景生成攻击样例
+                <div className="text-on-dim text-xs">
+                  {t('examples.llmNote')}
                 </div>
                 <div className="flex justify-end">
                   <button className="text-xs px-3 py-1 rounded bg-amber-600 hover:bg-amber-500 transition">
-                    生成样例
+                    {t('buttons.generateExamples')}
                   </button>
                 </div>
               </div>
@@ -378,19 +380,19 @@ const RightPanel = forwardRef(function RightPanel({
             {rightSubTab === 'human' && (
               <div className="space-y-3 p-1">
                 <div className="flex items-start gap-2">
-                  <label className="text-xs text-slate-500 w-16 pt-1">样例:</label>
+                  <label className="text-xs text-on-dim w-16 pt-1">{t('tabs.exampleWriting')}:</label>
                   <textarea
-                    placeholder="在此编辑样例内容（可基于 LLM 生成结果修改）..."
+                    placeholder={t('examples.editPlaceholder')}
                     rows={10}
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-yellow-500 resize-none font-mono"
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-yellow-500 resize-none font-mono"
                   />
                 </div>
                 <div className="flex justify-end gap-2">
-                  <button className="text-xs px-3 py-1 rounded bg-slate-600 hover:bg-slate-500 transition">
-                    预览
+                  <button className="text-xs px-3 py-1 rounded bg-surface-hover hover:bg-surface-hover transition">
+                    {t('buttons.preview')}
                   </button>
                   <button className="text-xs px-3 py-1 rounded bg-yellow-600 hover:bg-yellow-500 transition">
-                    保存样例
+                    {t('buttons.saveSamples')}
                   </button>
                 </div>
               </div>
@@ -407,18 +409,18 @@ const RightPanel = forwardRef(function RightPanel({
             <button
               onClick={() => setRightSubTab('llm')}
               className={`text-xs px-2 py-0.5 rounded transition ${
-                rightSubTab === 'llm' ? 'bg-emerald-600/30 text-emerald-400 border border-emerald-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                rightSubTab === 'llm' ? 'bg-emerald-600/30 text-emerald-400 border border-emerald-500/50' : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover/50'
               }`}
             >
-              🤖 LLM 辅助
+              {t('tabs.llmAssisted')}
             </button>
             <button
               onClick={() => setRightSubTab('human')}
               className={`text-xs px-2 py-0.5 rounded transition ${
-                rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50'
+                rightSubTab === 'human' ? 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50' : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover/50'
               }`}
             >
-              👤 人工修改
+              {t('tabs.humanRevision')}
             </button>
           </div>
           {/* 子 Tab 内容 */}
@@ -426,27 +428,27 @@ const RightPanel = forwardRef(function RightPanel({
             {rightSubTab === 'llm' && (
               <div className="space-y-3 p-1">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-500 w-16">模型:</label>
+                  <label className="text-xs text-on-dim w-16">{t('review.modelLabel')}</label>
                   <input
                     type="text"
-                    placeholder="报告生成模型"
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
+                    placeholder={t('report.reportModel')}
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-emerald-500 font-mono"
                   />
                 </div>
                 <div className="flex items-start gap-2">
-                  <label className="text-xs text-slate-500 w-16 pt-1">提示词:</label>
+                  <label className="text-xs text-on-dim w-16 pt-1">{t('review.promptTemplate')}</label>
                   <textarea
-                    placeholder="描述报告格式和重点内容..."
+                    placeholder={t('report.reportPrompt')}
                     rows={6}
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-emerald-500 resize-none font-mono"
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-emerald-500 resize-none font-mono"
                   />
                 </div>
-                <div className="text-slate-500 text-xs">
-                  LLM 将汇总测试结果生成报告草稿
+                <div className="text-on-dim text-xs">
+                  {t('report.reportNote')}
                 </div>
                 <div className="flex justify-end">
                   <button className="text-xs px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 transition">
-                    生成报告
+                    {t('buttons.generateReport')}
                   </button>
                 </div>
               </div>
@@ -454,19 +456,19 @@ const RightPanel = forwardRef(function RightPanel({
             {rightSubTab === 'human' && (
               <div className="space-y-3 p-1">
                 <div className="flex items-start gap-2">
-                  <label className="text-xs text-slate-500 w-16 pt-1">报告:</label>
+                  <label className="text-xs text-on-dim w-16 pt-1">{t('nav.report')}:</label>
                   <textarea
-                    placeholder="在此编辑报告内容（可基于 LLM 生成结果修改）..."
+                    placeholder={t('report.reportPlaceholder')}
                     rows={10}
-                    className="flex-1 text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-yellow-500 resize-none font-mono"
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-yellow-500 resize-none font-mono"
                   />
                 </div>
                 <div className="flex justify-end gap-2">
-                  <button className="text-xs px-3 py-1 rounded bg-slate-600 hover:bg-slate-500 transition">
-                    预览
+                  <button className="text-xs px-3 py-1 rounded bg-surface-hover hover:bg-surface-hover transition">
+                    {t('buttons.preview')}
                   </button>
                   <button className="text-xs px-3 py-1 rounded bg-yellow-600 hover:bg-yellow-500 transition">
-                    导出报告
+                    {t('buttons.exportReport')}
                   </button>
                 </div>
               </div>

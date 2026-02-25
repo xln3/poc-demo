@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { CAPABILITY_CONFIG } from '../hooks/useDatasets.js';
 import { CapabilityLevel } from '../schemas/testCase.js';
 
@@ -12,6 +13,7 @@ export const CapabilityTabs = ({
   onToggleCapability,
   onClearFilter,
 }) => {
+  const { t } = useTranslation();
   const capabilities = [
     CapabilityLevel.F1_CONVERSATION,
     CapabilityLevel.F2_FILE_INJECTION,
@@ -37,7 +39,7 @@ export const CapabilityTabs = ({
                 flex items-center gap-1
                 ${isSelected
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-surface-raised text-on-surface hover:bg-surface-hover'
                 }
               `}
               title={`${config.label} (${config.shortLabel})`}
@@ -51,8 +53,8 @@ export const CapabilityTabs = ({
         {selectedCapabilities.length > 0 && (
           <button
             onClick={onClearFilter}
-            className="px-2 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-gray-600 transition-colors"
-            title="清除筛选"
+            className="px-2 py-1 rounded text-xs text-on-muted hover:text-on-canvas hover:bg-surface-hover transition-colors"
+            title={t('capabilityTabs.clearFilter')}
           >
             ✕
           </button>
@@ -60,8 +62,8 @@ export const CapabilityTabs = ({
       </div>
 
       {selectedCapabilities.length > 0 && (
-        <div className="mt-1.5 text-xs text-gray-500">
-          筛选: {selectedCapabilities.map(cap => CAPABILITY_CONFIG[cap]?.label).join(', ')}
+        <div className="mt-1.5 text-xs text-on-dim">
+          {t('capabilityTabs.filter')} {selectedCapabilities.map(cap => CAPABILITY_CONFIG[cap]?.label).join(', ')}
         </div>
       )}
     </div>

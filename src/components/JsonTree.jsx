@@ -48,19 +48,19 @@ export default function JsonTree({ data }) {
     const comma = isLast ? '' : ',';
 
     if (keys.length === 0) {
-      return <span className="text-slate-400">{'{}'}{comma}</span>;
+      return <span className="text-on-muted">{'{}'}{comma}</span>;
     }
 
     return (
       <span>
         <span
-          className="cursor-pointer hover:bg-slate-700/50 select-none"
+          className="cursor-pointer hover:bg-surface-muted/50 select-none"
           onClick={() => toggle(path)}
         >
-          <span className="text-slate-500 text-[10px] mr-1">{isCollapsed ? '▶' : '▼'}</span>
-          <span className="text-slate-400">{'{'}</span>
-          {isCollapsed && <span className="text-slate-500">...{keys.length}</span>}
-          {isCollapsed && <span className="text-slate-400">{'}'}{comma}</span>}
+          <span className="text-on-dim text-[10px] mr-1">{isCollapsed ? '▶' : '▼'}</span>
+          <span className="text-on-muted">{'{'}</span>
+          {isCollapsed && <span className="text-on-dim">...{keys.length}</span>}
+          {isCollapsed && <span className="text-on-muted">{'}'}{comma}</span>}
         </span>
         {!isCollapsed && (
           <>
@@ -68,12 +68,12 @@ export default function JsonTree({ data }) {
               {keys.map((key, i) => (
                 <div key={key}>
                   <span className="text-sky-300">"{key}"</span>
-                  <span className="text-slate-400">: </span>
+                  <span className="text-on-muted">: </span>
                   {renderValue(obj[key], `${path}.${key}`, i === keys.length - 1)}
                 </div>
               ))}
             </div>
-            <span className="text-slate-400">{'}'}{comma}</span>
+            <span className="text-on-muted">{'}'}{comma}</span>
           </>
         )}
       </span>
@@ -85,19 +85,19 @@ export default function JsonTree({ data }) {
     const comma = isLast ? '' : ',';
 
     if (arr.length === 0) {
-      return <span className="text-slate-400">{'[]'}{comma}</span>;
+      return <span className="text-on-muted">{'[]'}{comma}</span>;
     }
 
     return (
       <span>
         <span
-          className="cursor-pointer hover:bg-slate-700/50 select-none"
+          className="cursor-pointer hover:bg-surface-muted/50 select-none"
           onClick={() => toggle(path)}
         >
-          <span className="text-slate-500 text-[10px] mr-1">{isCollapsed ? '▶' : '▼'}</span>
-          <span className="text-slate-400">{'['}</span>
-          {isCollapsed && <span className="text-slate-500">{arr.length}</span>}
-          {isCollapsed && <span className="text-slate-400">{']'}{comma}</span>}
+          <span className="text-on-dim text-[10px] mr-1">{isCollapsed ? '▶' : '▼'}</span>
+          <span className="text-on-muted">{'['}</span>
+          {isCollapsed && <span className="text-on-dim">{arr.length}</span>}
+          {isCollapsed && <span className="text-on-muted">{']'}{comma}</span>}
         </span>
         {!isCollapsed && (
           <>
@@ -108,7 +108,7 @@ export default function JsonTree({ data }) {
                 </div>
               ))}
             </div>
-            <span className="text-slate-400">{']'}{comma}</span>
+            <span className="text-on-muted">{']'}{comma}</span>
           </>
         )}
       </span>
@@ -116,7 +116,7 @@ export default function JsonTree({ data }) {
   };
 
   if (data === null || data === undefined) {
-    return <span className="text-slate-500">null</span>;
+    return <span className="text-on-dim">null</span>;
   }
 
   return (

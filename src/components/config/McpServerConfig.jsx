@@ -11,7 +11,7 @@ export default function McpServerConfig({
   selectedMcpServer, setSelectedMcpServer,
 }) {
   return (
-    <div className="bg-slate-800 rounded-lg p-3 border border-emerald-900/50">
+    <div className="bg-surface rounded-lg p-3 border border-emerald-900/50">
       <div className="text-xs text-emerald-400 flex items-center justify-between">
         <button
           onClick={() => setMcpServerConfigCollapsed(!mcpServerConfigCollapsed)}
@@ -20,14 +20,14 @@ export default function McpServerConfig({
           <span>{mcpServerConfigCollapsed ? '▶' : '▼'}</span>
           <span>MCP Server 配置</span>
         </button>
-        <span className="text-slate-500 text-[10px]">选择并配置外部服务</span>
+        <span className="text-on-dim text-[10px]">选择并配置外部服务</span>
       </div>
       {!mcpServerConfigCollapsed && (
         <div className="mt-2 grid grid-cols-3 gap-3" style={{ minHeight: '200px' }}>
           {/* Left: server list */}
           <div className="flex flex-col">
-            <div className="text-xs text-slate-400 mb-1">可用服务</div>
-            <div className="flex-1 bg-slate-700/50 rounded p-2 space-y-1">
+            <div className="text-xs text-on-muted mb-1">可用服务</div>
+            <div className="flex-1 bg-surface-muted/50 rounded p-2 space-y-1">
               {Object.values(CONFIG.mcpServers.available).map((server) => {
                 const config = mcpServerConfigs[server.id];
                 const isEnabled = config?.enabled;
@@ -39,7 +39,7 @@ export default function McpServerConfig({
                     className={`w-full text-left px-2 py-1.5 rounded text-xs transition flex items-center justify-between ${
                       selectedMcpServer === server.id
                         ? 'bg-emerald-600 text-white'
-                        : 'bg-slate-600/50 hover:bg-slate-600 text-slate-300'
+                        : 'bg-surface-hover/50 hover:bg-surface-hover text-on-surface'
                     }`}
                   >
                     <div className="flex items-center gap-2">
@@ -79,14 +79,14 @@ export default function McpServerConfig({
                 selectedMcpServer={selectedMcpServer}
               />
             ) : (
-              <div className="flex-1 flex items-center justify-center text-xs text-slate-500">
+              <div className="flex-1 flex items-center justify-center text-xs text-on-dim">
                 ← 选择一个 MCP 服务进行配置
               </div>
             )}
           </div>
         </div>
       )}
-      <div className="mt-2 text-[10px] text-slate-500">
+      <div className="mt-2 text-[10px] text-on-dim">
         MCP (Model Context Protocol) 服务提供外部工具能力。配置后可在攻击测试中调用这些工具。
       </div>
     </div>
@@ -110,7 +110,7 @@ function ServerConfigForm({
 
   return (
     <>
-      <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
+      <div className="text-xs text-on-muted mb-1 flex items-center justify-between">
         <span>{server.icon} {server.name} 配置</span>
         <div className="flex gap-2">
           <button
@@ -148,12 +148,12 @@ function ServerConfigForm({
           </button>
         </div>
       </div>
-      <div className="text-xs text-slate-500 mb-2">{server.description}</div>
-      <div className="flex-1 bg-slate-700/50 rounded p-2 overflow-auto">
+      <div className="text-xs text-on-dim mb-2">{server.description}</div>
+      <div className="flex-1 bg-surface-muted/50 rounded p-2 overflow-auto">
         <div className="space-y-2">
           {server.fields.map((field) => (
             <div key={field.key} className="flex flex-col gap-1">
-              <label className="text-xs text-slate-400 flex items-center gap-1">
+              <label className="text-xs text-on-muted flex items-center gap-1">
                 {field.label}
                 {field.required && <span className="text-red-400">*</span>}
               </label>
@@ -163,9 +163,9 @@ function ServerConfigForm({
                     type="checkbox"
                     checked={config[field.key] ?? field.default ?? false}
                     onChange={(e) => updateConfig({ [field.key]: e.target.checked })}
-                    className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-emerald-500"
+                    className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-emerald-500"
                   />
-                  <span className="text-xs text-slate-300">
+                  <span className="text-xs text-on-surface">
                     {config[field.key] ? '是' : '否'}
                   </span>
                 </label>
@@ -178,20 +178,20 @@ function ServerConfigForm({
                     const value = field.type === 'number' ? Number(e.target.value) : e.target.value;
                     updateConfig({ [field.key]: value });
                   }}
-                  className="w-full px-2 py-1 text-xs bg-slate-600 border border-slate-500 rounded text-slate-200 focus:border-emerald-500 focus:outline-none"
+                  className="w-full px-2 py-1 text-xs bg-surface-hover border border-edge-strong rounded text-on-canvas focus:border-emerald-500 focus:outline-none"
                 />
               )}
             </div>
           ))}
         </div>
         {/* Available tools list */}
-        <div className="mt-3 pt-2 border-t border-slate-600">
-          <div className="text-xs text-slate-400 mb-1">提供的工具</div>
+        <div className="mt-3 pt-2 border-t border-edge-strong">
+          <div className="text-xs text-on-muted mb-1">提供的工具</div>
           <div className="flex flex-wrap gap-1">
             {server.tools.map((tool) => (
               <span
                 key={tool}
-                className="px-1.5 py-0.5 bg-slate-600 rounded text-[10px] text-slate-300"
+                className="px-1.5 py-0.5 bg-surface-hover rounded text-[10px] text-on-surface"
               >
                 {tool}
               </span>

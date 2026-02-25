@@ -101,12 +101,12 @@ export default function SimulationEnvConfig({
           {/* Engine status */}
           <div className="space-y-1.5">
             <div className="flex items-center gap-3 text-xs">
-              <span className="text-slate-400">AI2-THOR 引擎</span>
+              <span className="text-on-muted">AI2-THOR 引擎</span>
               {simulator?.sessionId ? (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-400" />
                   <span className="text-green-400">运行中</span>
-                  <span className="text-slate-500">({simulator.engineName})</span>
+                  <span className="text-on-dim">({simulator.engineName})</span>
                   <button
                     onClick={() => simulator.stopSession()}
                     disabled={isDemo}
@@ -129,7 +129,7 @@ export default function SimulationEnvConfig({
               ) : (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-slate-500" />
-                  <span className="text-slate-500">未启动</span>
+                  <span className="text-on-dim">未启动</span>
                   <button
                     onClick={() => simulator.startSession('ai2thor', {})}
                     disabled={isDemo}
@@ -146,13 +146,13 @@ export default function SimulationEnvConfig({
             {/* Progress bar during startup */}
             {simulator?.loading && (
               <div className="space-y-1">
-                <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-surface-raised rounded-full overflow-hidden">
                   <div
                     className="h-full bg-blue-500 rounded-full transition-all duration-500"
                     style={{ width: `${simulator.startProgress || 0}%` }}
                   />
                 </div>
-                <div className="text-[10px] text-slate-400">
+                <div className="text-[10px] text-on-muted">
                   {simulator.startMessage || '准备中...'} ({simulator.startProgress || 0}%)
                 </div>
               </div>
@@ -168,7 +168,7 @@ export default function SimulationEnvConfig({
                 className={`px-2 py-1 rounded text-[10px] transition ${
                   activeDataset === tab.key
                     ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                    : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
                 }`}
               >
                 {tab.label} ({meta?.datasets?.[tab.key]?.count || tab.count})
@@ -182,7 +182,7 @@ export default function SimulationEnvConfig({
               <button
                 onClick={() => setRiskFilter('')}
                 className={`px-1.5 py-0.5 rounded text-[10px] transition ${
-                  !riskFilter ? 'bg-slate-600 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600'
+                  !riskFilter ? 'bg-surface-hover text-white' : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover'
                 }`}
               >
                 全部
@@ -194,7 +194,7 @@ export default function SimulationEnvConfig({
                   className={`px-1.5 py-0.5 rounded text-[10px] transition ${
                     riskFilter === cat
                       ? `${getRiskColor(cat)} text-white`
-                      : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600'
+                      : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover'
                   }`}
                 >
                   {cat}
@@ -207,10 +207,10 @@ export default function SimulationEnvConfig({
           <div className="grid grid-cols-2 gap-3" style={{ minHeight: '240px' }}>
             {/* Left: case list */}
             <div className="flex flex-col">
-              <div className="text-[10px] text-slate-500 mb-1">
+              <div className="text-[10px] text-on-dim mb-1">
                 {casesLoading ? '加载中...' : `${cases.length} 条测例`}
               </div>
-              <div className="flex-1 bg-slate-700/50 rounded p-1 overflow-y-auto space-y-0.5" style={{ maxHeight: '300px' }}>
+              <div className="flex-1 bg-surface-muted/50 rounded p-1 overflow-y-auto space-y-0.5" style={{ maxHeight: '300px' }}>
                 {cases.map((c) => (
                   <button
                     key={c.id}
@@ -218,12 +218,12 @@ export default function SimulationEnvConfig({
                     className={`w-full text-left px-2 py-1.5 rounded text-xs transition ${
                       selectedCase?.id === c.id
                         ? 'bg-blue-600/30 border border-blue-500/50'
-                        : 'hover:bg-slate-600/50'
+                        : 'hover:bg-surface-hover/50'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-slate-500 text-[10px] font-mono w-8 shrink-0">{c.id}</span>
-                      <span className="text-slate-300 truncate flex-1">
+                      <span className="text-on-dim text-[10px] font-mono w-8 shrink-0">{c.id}</span>
+                      <span className="text-on-surface truncate flex-1">
                         {typeof c.instruction === 'string' ? c.instruction : c.instruction?.[0]}
                       </span>
                       {c.risk_category && (
@@ -235,7 +235,7 @@ export default function SimulationEnvConfig({
                   </button>
                 ))}
                 {cases.length === 0 && !casesLoading && (
-                  <div className="text-xs text-slate-500 text-center py-4">无匹配测例</div>
+                  <div className="text-xs text-on-dim text-center py-4">无匹配测例</div>
                 )}
               </div>
               {/* Pagination */}
@@ -243,15 +243,15 @@ export default function SimulationEnvConfig({
                 <button
                   onClick={() => setOffset(Math.max(0, offset - LIMIT))}
                   disabled={offset === 0}
-                  className="px-2 py-0.5 bg-slate-700 rounded text-slate-400 disabled:opacity-30"
+                  className="px-2 py-0.5 bg-surface-raised rounded text-on-muted disabled:opacity-30"
                 >
                   上一页
                 </button>
-                <span className="text-slate-500">{offset + 1} - {offset + cases.length}</span>
+                <span className="text-on-dim">{offset + 1} - {offset + cases.length}</span>
                 <button
                   onClick={() => setOffset(offset + LIMIT)}
                   disabled={cases.length < LIMIT}
-                  className="px-2 py-0.5 bg-slate-700 rounded text-slate-400 disabled:opacity-30"
+                  className="px-2 py-0.5 bg-surface-raised rounded text-on-muted disabled:opacity-30"
                 >
                   下一页
                 </button>
@@ -261,15 +261,15 @@ export default function SimulationEnvConfig({
             {/* Right: case detail */}
             <div className="flex flex-col">
               {selectedCase ? (
-                <div className="flex-1 bg-slate-700/50 rounded p-2 overflow-y-auto space-y-2" style={{ maxHeight: '340px' }}>
+                <div className="flex-1 bg-surface-muted/50 rounded p-2 overflow-y-auto space-y-2" style={{ maxHeight: '340px' }}>
                   {/* Instruction */}
                   <div>
-                    <div className="text-[10px] text-slate-500 mb-0.5">Instruction</div>
-                    <div className="text-xs text-slate-200">
+                    <div className="text-[10px] text-on-dim mb-0.5">Instruction</div>
+                    <div className="text-xs text-on-canvas">
                       {typeof selectedCase.instruction === 'string'
                         ? selectedCase.instruction
                         : selectedCase.instruction?.map((inst, i) => (
-                            <div key={i} className={i === 0 ? 'font-medium' : 'text-slate-400 ml-2'}>
+                            <div key={i} className={i === 0 ? 'font-medium' : 'text-on-muted ml-2'}>
                               {i === 0 ? inst : `- ${inst}`}
                             </div>
                           ))
@@ -286,7 +286,7 @@ export default function SimulationEnvConfig({
                   {/* Risk category */}
                   {selectedCase.risk_category && (
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-slate-500">Risk:</span>
+                      <span className="text-[10px] text-on-dim">Risk:</span>
                       <span className={`${getRiskColor(selectedCase.risk_category)} text-white px-1.5 py-0.5 rounded text-[10px]`}>
                         {selectedCase.risk_category}
                       </span>
@@ -295,18 +295,18 @@ export default function SimulationEnvConfig({
                   {/* Scene */}
                   {selectedCase.scene_name && (
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-slate-500">Scene:</span>
+                      <span className="text-[10px] text-on-dim">Scene:</span>
                       <span className="text-xs text-cyan-400 font-mono">{selectedCase.scene_name}</span>
                     </div>
                   )}
                   {/* Steps */}
                   {selectedCase.step && selectedCase.step.length > 0 && (
                     <div>
-                      <div className="text-[10px] text-slate-500 mb-0.5">Steps ({selectedCase.step.length})</div>
+                      <div className="text-[10px] text-on-dim mb-0.5">Steps ({selectedCase.step.length})</div>
                       <div className="space-y-0.5">
                         {selectedCase.step.map((s, i) => (
-                          <div key={i} className="text-xs text-slate-300 flex gap-2">
-                            <span className="text-slate-500 font-mono w-4">{i + 1}</span>
+                          <div key={i} className="text-xs text-on-surface flex gap-2">
+                            <span className="text-on-dim font-mono w-4">{i + 1}</span>
                             <span>{s}</span>
                           </div>
                         ))}
@@ -316,10 +316,10 @@ export default function SimulationEnvConfig({
                   {/* Objects */}
                   {selectedCase.objects && selectedCase.objects.length > 0 && (
                     <div>
-                      <div className="text-[10px] text-slate-500 mb-0.5">Objects</div>
+                      <div className="text-[10px] text-on-dim mb-0.5">Objects</div>
                       <div className="flex flex-wrap gap-1">
                         {selectedCase.objects.map((obj, i) => (
-                          <span key={i} className="px-1.5 py-0.5 bg-slate-600 rounded text-[10px] text-slate-300">{obj}</span>
+                          <span key={i} className="px-1.5 py-0.5 bg-surface-hover rounded text-[10px] text-on-surface">{obj}</span>
                         ))}
                       </div>
                     </div>
@@ -327,8 +327,8 @@ export default function SimulationEnvConfig({
                   {/* Final state */}
                   {selectedCase.final_state && (
                     <div>
-                      <div className="text-[10px] text-slate-500 mb-0.5">Final State</div>
-                      <pre className="text-[10px] text-green-400 bg-slate-800 rounded p-1.5 overflow-auto max-h-24 font-mono">
+                      <div className="text-[10px] text-on-dim mb-0.5">Final State</div>
+                      <pre className="text-[10px] text-green-400 bg-surface rounded p-1.5 overflow-auto max-h-24 font-mono">
                         {JSON.stringify(selectedCase.final_state, null, 2)}
                       </pre>
                     </div>
@@ -346,7 +346,7 @@ export default function SimulationEnvConfig({
                   </button>
                 </div>
               ) : (
-                <div className="flex-1 flex items-center justify-center text-xs text-slate-500">
+                <div className="flex-1 flex items-center justify-center text-xs text-on-dim">
                   ← 选择一个测例查看详情
                 </div>
               )}

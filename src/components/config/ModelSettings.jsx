@@ -31,7 +31,7 @@ export default function ModelSettings({
             value={selectedProviderId || ''}
             onChange={(e) => setSelectedProviderId(e.target.value)}
             disabled={isDemo}
-            className="bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+            className="bg-surface-raised text-white text-xs px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-blue-500 disabled:opacity-50"
           >
             <option value="">默认</option>
             {providers.map(p => (
@@ -45,7 +45,7 @@ export default function ModelSettings({
           value={selectedModel}
           onChange={(e) => setSelectedModel(e.target.value)}
           disabled={isDemo}
-          className="bg-slate-700 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500 disabled:opacity-50 max-w-[180px]"
+          className="bg-surface-raised text-white text-xs px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-blue-500 disabled:opacity-50 max-w-[180px]"
         >
           {(providerModels.length > 0 ? providerModels : CONFIG.models.map(m => m.id)).map((modelId) => {
             const id = modelId.id || modelId;
@@ -54,47 +54,47 @@ export default function ModelSettings({
           })}
         </select>
 
-        <span className="w-px h-4 bg-slate-600" />
+        <span className="w-px h-4 bg-surface-hover" />
 
         {/* Temp */}
-        <span className="text-slate-500 text-[10px]">Temp</span>
+        <span className="text-on-dim text-[10px]">Temp</span>
         <input
           type="number" min="0" max="2" step="0.1"
           value={llmTemperature}
           onChange={(e) => setLlmTemperature(parseFloat(e.target.value) || 0)}
           disabled={isDemo}
-          className="w-12 bg-slate-700 border border-slate-600 rounded px-1 text-cyan-400 font-mono text-xs disabled:opacity-50"
+          className="w-12 bg-surface-raised border border-edge-strong rounded px-1 text-cyan-400 font-mono text-xs disabled:opacity-50"
         />
 
         {/* MaxTok */}
-        <span className="text-slate-500 text-[10px]">MaxTok</span>
+        <span className="text-on-dim text-[10px]">MaxTok</span>
         <input
           type="number" min="256" max="131072" step="1024"
           value={llmMaxTokens}
           onChange={(e) => setLlmMaxTokens(parseInt(e.target.value) || 256)}
           disabled={isDemo}
-          className="w-16 bg-slate-700 border border-slate-600 rounded px-1 text-cyan-400 font-mono text-xs disabled:opacity-50"
+          className="w-16 bg-surface-raised border border-edge-strong rounded px-1 text-cyan-400 font-mono text-xs disabled:opacity-50"
         />
 
         {/* TopP */}
-        <span className="text-slate-500 text-[10px]">TopP</span>
+        <span className="text-on-dim text-[10px]">TopP</span>
         <input
           type="number" min="0" max="1" step="0.05"
           value={llmTopP}
           onChange={(e) => setLlmTopP(parseFloat(e.target.value) || 0)}
           disabled={isDemo}
-          className="w-12 bg-slate-700 border border-slate-600 rounded px-1 text-cyan-400 font-mono text-xs disabled:opacity-50"
+          className="w-12 bg-surface-raised border border-edge-strong rounded px-1 text-cyan-400 font-mono text-xs disabled:opacity-50"
         />
 
-        <span className="w-px h-4 bg-slate-600" />
+        <span className="w-px h-4 bg-surface-hover" />
 
         {/* Thinking */}
-        <label className="flex items-center gap-1 cursor-pointer text-xs text-slate-400">
+        <label className="flex items-center gap-1 cursor-pointer text-xs text-on-muted">
           <input
             type="checkbox" checked={thinkingEnabled}
             onChange={(e) => setThinkingEnabled(e.target.checked)}
             disabled={isDemo}
-            className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
+            className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
           />
           思考
         </label>
@@ -104,19 +104,19 @@ export default function ModelSettings({
             value={thinkingBudget}
             onChange={(e) => setThinkingBudget(parseInt(e.target.value) || 10000)}
             disabled={isDemo}
-            className="w-16 bg-slate-700 border border-slate-600 rounded px-1 text-pink-400 font-mono text-[10px] disabled:opacity-50"
+            className="w-16 bg-surface-raised border border-edge-strong rounded px-1 text-pink-400 font-mono text-[10px] disabled:opacity-50"
           />
         )}
 
-        <span className="w-px h-4 bg-slate-600" />
+        <span className="w-px h-4 bg-surface-hover" />
 
         {/* Dialog mode */}
-        <div className="flex items-center gap-0.5 bg-slate-700 rounded p-0.5">
+        <div className="flex items-center gap-0.5 bg-surface-raised rounded p-0.5">
           <button
             onClick={() => setDialogMode('single')}
             disabled={conversationMode !== 'idle' || isDemo}
             className={`px-2 py-0.5 rounded text-[10px] transition ${
-              dialogMode === 'single' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              dialogMode === 'single' ? 'bg-surface-hover text-white' : 'text-on-muted hover:text-on-canvas'
             } ${(conversationMode !== 'idle' || isDemo) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             单轮
@@ -125,7 +125,7 @@ export default function ModelSettings({
             onClick={() => setDialogMode('multi')}
             disabled={conversationMode !== 'idle' || isDemo}
             className={`px-2 py-0.5 rounded text-[10px] transition ${
-              dialogMode === 'multi' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              dialogMode === 'multi' ? 'bg-blue-600 text-white' : 'text-on-muted hover:text-on-canvas'
             } ${(conversationMode !== 'idle' || isDemo) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             多轮
@@ -136,17 +136,17 @@ export default function ModelSettings({
         {!isDemo && (
           <button
             onClick={() => setProviderSettingsOpen(true)}
-            className="ml-auto text-slate-400 hover:text-white text-sm px-1"
+            className="ml-auto text-on-muted hover:text-on-canvas text-sm px-1"
             title="LLM 供应商配置"
           >&#9881;</button>
         )}
       </div>
 
       {/* Row 2: System prompt (collapsible) */}
-      <div className="mt-2 border border-slate-600 rounded">
-        <div className="flex items-center justify-between px-2 py-1 bg-slate-700/30">
+      <div className="mt-2 border border-edge-strong rounded">
+        <div className="flex items-center justify-between px-2 py-1 bg-surface-raised/30">
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400">系统提示词</span>
+            <span className="text-on-muted">系统提示词</span>
             {sysPromptModified && <span className="text-yellow-400 text-[10px]">(已修改)</span>}
           </div>
           <div className="flex items-center gap-1">
@@ -155,14 +155,14 @@ export default function ModelSettings({
                 <button onClick={() => setIsEditingSystemPrompt(false)}
                   className="px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-500 rounded transition">保存</button>
                 <button onClick={() => { setCustomSystemPrompt(currentScenario?.systemPrompt || ''); setIsEditingSystemPrompt(false); }}
-                  className="px-2 py-0.5 text-[10px] bg-slate-600 hover:bg-slate-500 rounded transition">取消</button>
+                  className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition">取消</button>
               </>
             ) : (
               <>
                 <button onClick={() => setIsEditingSystemPrompt(true)}
-                  className="px-2 py-0.5 text-[10px] bg-slate-600 hover:bg-slate-500 rounded transition">编辑</button>
+                  className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition">编辑</button>
                 <button onClick={() => setCustomSystemPrompt(currentScenario?.systemPrompt || '')}
-                  className="px-2 py-0.5 text-[10px] bg-slate-700 hover:bg-slate-600 rounded transition">重置</button>
+                  className="px-2 py-0.5 text-[10px] bg-surface-raised hover:bg-surface-hover rounded transition">重置</button>
               </>
             )}
           </div>
@@ -171,11 +171,11 @@ export default function ModelSettings({
           <textarea
             value={customSystemPrompt}
             onChange={(e) => setCustomSystemPrompt(e.target.value)}
-            className="w-full min-h-[6rem] max-h-[12rem] text-xs bg-slate-700/50 p-2 border-t border-slate-600 text-cyan-300 font-mono resize-y focus:outline-none custom-scroll"
+            className="w-full min-h-[6rem] max-h-[12rem] text-xs bg-surface-muted/50 p-2 border-t border-edge-strong text-cyan-300 font-mono resize-y focus:outline-none custom-scroll"
             placeholder="输入系统提示词..."
           />
         ) : (
-          <pre className="text-xs bg-slate-700/30 p-2 border-t border-slate-600 overflow-auto max-h-[8rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
+          <pre className="text-xs bg-surface-raised/30 p-2 border-t border-edge-strong overflow-auto max-h-[8rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
             {customSystemPrompt || '(无系统提示词)'}
           </pre>
         )}

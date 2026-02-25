@@ -41,7 +41,7 @@ const ToastItem = ({ toast, onClose }) => {
       <span className="text-white text-sm flex-1">{toast.message}</span>
       <button
         onClick={handleClose}
-        className="text-white/70 hover:text-white transition-colors ml-2"
+        className="text-white/70 hover:text-on-canvas transition-colors ml-2"
       >
         ✕
       </button>

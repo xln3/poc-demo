@@ -22,16 +22,16 @@ export default function FeatureToggles({
               checked={mcpEnabled}
               onChange={(e) => setMcpEnabled(e.target.checked)}
               disabled={isDemo}
-              className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+              className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
             />
-            <span className="text-xs text-slate-400">文件解析</span>
+            <span className="text-xs text-on-muted">文件解析</span>
           </label>
           <span className={`text-xs px-1.5 py-0.5 rounded ${
             isParsingFile
               ? 'bg-yellow-600 text-white'
               : mcpParserServiceAvailable
                 ? 'bg-green-600 text-white'
-                : 'bg-slate-600 text-slate-400'
+                : 'bg-surface-hover text-on-muted'
           }`}>
             {isParsingFile ? '解析中' : mcpParserServiceAvailable ? '运行中' : '未运行'}
           </span>
@@ -45,9 +45,9 @@ export default function FeatureToggles({
               checked={toolsEnabled}
               onChange={(e) => setToolsEnabled(e.target.checked)}
               disabled={isDemo}
-              className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
+              className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
             />
-            <span className="text-xs text-slate-400">工具调用</span>
+            <span className="text-xs text-on-muted">工具调用</span>
           </label>
           {toolsEnabled && (
             sandboxStatus === 'running' ? (
@@ -70,9 +70,9 @@ export default function FeatureToggles({
               checked={ragEnabled}
               onChange={(e) => setRagEnabled(e.target.checked)}
               disabled={isDemo}
-              className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+              className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
             />
-            <span className="text-xs text-slate-400">RAG</span>
+            <span className="text-xs text-on-muted">RAG</span>
           </label>
           {ragEnabled && ragKnowledge && (
             <span className="text-xs text-amber-400">
@@ -89,9 +89,9 @@ export default function FeatureToggles({
               checked={mcpServerEnabled}
               onChange={(e) => setMcpServerEnabled(e.target.checked)}
               disabled={isDemo}
-              className="w-3.5 h-3.5 rounded border-slate-500 bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+              className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
             />
-            <span className="text-xs text-slate-400">MCP</span>
+            <span className="text-xs text-on-muted">MCP</span>
           </label>
           {mcpServerEnabled && (
             <span className="text-xs text-emerald-400">

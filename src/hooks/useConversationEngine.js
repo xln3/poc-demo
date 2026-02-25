@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { CONFIG } from '../config';
+import i18n from '../i18n/index.js';
 
 export function useConversationEngine(deps) {
   const d = useRef(deps);
@@ -88,8 +89,8 @@ export function useConversationEngine(deps) {
     // 添加日志
     const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
     const initialLogs = [
-      { type: 'model', content: `模型: ${modelName}`, status: 'normal' },
-      { type: 'round', content: `── 第 1 轮对话 ──`, status: 'normal' },
+      { type: 'model', content: i18n.t('labels.model', { name: modelName }), status: 'normal' },
+      { type: 'round', content: i18n.t('labels.roundStart', { num: 1 }), status: 'normal' },
     ];
     if (hasUserFiles) {
       const totalSize = payloadFiles.reduce((sum, f) => sum + (f.size || 0), 0);
@@ -98,15 +99,15 @@ export function useConversationEngine(deps) {
         : `${(totalSize / 1024).toFixed(1)} KB`;
       initialLogs.push({
         type: 'data',
-        content: `📎 解析 ${payloadFiles.length} 个文件 (${sizeStr})`,
+        content: i18n.t('labels.filesParsed', { count: payloadFiles.length, size: sizeStr }),
         status: 'normal'
       });
     }
     if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
-      initialLogs.push({ type: 'data', content: `解析文件: ${attack.documentFileName}`, status: 'normal' });
-      initialLogs.push({ type: 'alert', content: `⚠️ 文件包含隐藏的恶意内容`, status: 'warning' });
+      initialLogs.push({ type: 'data', content: i18n.t('labels.fileParsed', { name: attack.documentFileName }), status: 'normal' });
+      initialLogs.push({ type: 'alert', content: i18n.t('labels.hiddenMalicious'), status: 'warning' });
     }
-    initialLogs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)`, status: 'normal', expandable: true, fullContent: actualPayload });
+    initialLogs.push({ type: 'data', content: i18n.t('labels.payloadSent', { count: actualPayload.length }), status: 'normal', expandable: true, fullContent: actualPayload });
     setLogs(initialLogs);
 
     // 获取实际使用的系统提示词
@@ -118,12 +119,12 @@ export function useConversationEngine(deps) {
         // Mock 模式：直接使用手动输入的内容
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n以下是从知识库中检索到的相关信息，请参考这些信息回答用户问题：\n\n${ragKnowledge}\n---`;
         setLogs(prev => [...prev,
-          { type: 'data', content: `📚 RAG 知识库已注入 (Mock模式, ${ragKnowledge.split('\n').filter(l => l.trim()).length} 条)`, status: 'normal' }
+          { type: 'data', content: i18n.t('errors.ragInjected', { count: ragKnowledge.split('\n').filter(l => l.trim()).length }), status: 'normal' }
         ]);
       } else if (ragMode === 'real' && ragServiceAvailable) {
         // Real 模式：执行真实的向量检索
         setLogs(prev => [...prev,
-          { type: 'query', content: `🔍 执行 RAG 向量检索...`, status: 'normal' }
+          { type: 'query', content: i18n.t('errors.ragSearch'), status: 'normal' }
         ]);
         const ragResults = await performRagQuery(displayContent);
         if (ragResults && ragResults.length > 0) {
@@ -134,7 +135,7 @@ export function useConversationEngine(deps) {
           ]);
         } else {
           setLogs(prev => [...prev,
-            { type: 'data', content: `📚 RAG 检索无结果`, status: 'warning' }
+            { type: 'data', content: i18n.t('errors.ragNoResults'), status: 'warning' }
           ]);
         }
       }
@@ -148,7 +149,7 @@ export function useConversationEngine(deps) {
 
     if (useToolCalling && enabledToolNames.length > 0) {
       setLogs(prev => [...prev,
-        { type: 'tool', content: `🔧 工具调用已启用: ${enabledToolNames.length} 个工具`, status: 'normal' }
+        { type: 'tool', content: i18n.t('errors.toolsEnabled', { count: enabledToolNames.length }), status: 'normal' }
       ]);
     }
 
@@ -275,7 +276,7 @@ export function useConversationEngine(deps) {
               toolArgs = JSON.parse(rawArgs);
             } catch (parseErr) {
               setLogs(prev => [...prev,
-                { type: 'error', content: `🔧 工具 ${toolName}: 参数解析失败`, status: 'danger' }
+                { type: 'error', content: i18n.t('errors.toolParamParseFailed', { name: toolName }), status: 'danger' }
               ]);
               messageHistory.push({
                 role: 'tool',
@@ -293,8 +294,8 @@ export function useConversationEngine(deps) {
             const categoryColor = toolCategory === 'safe' ? 'normal' : toolCategory === 'risky' ? 'warning' : 'danger';
 
             setLogs(prev => [...prev,
-              { type: 'tool', content: `🔧 调用工具: ${toolLabel}`, status: categoryColor },
-              { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
+              { type: 'tool', content: i18n.t('errors.toolCalling', { name: toolLabel }), status: categoryColor },
+              { type: 'data', content: `   ${i18n.t('labels.parameters', { params: JSON.stringify(toolArgs) })}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
             ]);
 
             // 执行工具（沙箱工具或 MCP 工具）
@@ -307,7 +308,7 @@ export function useConversationEngine(deps) {
                 // MCP 工具：使用 mcpClient 执行
                 const serverConfig = mcpServerConfigs[mcpServer];
                 if (!serverConfig?.enabled) {
-                  throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
+                  throw new Error(i18n.t('errors.mcpServiceNotEnabled', { server: mcpServer }));
                 }
                 result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig, sandboxClient.sessionId);
               } else {
@@ -325,7 +326,7 @@ export function useConversationEngine(deps) {
 
               toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
               setLogs(prev => [...prev,
-                { type: 'data', content: `   结果: ${toolResult.length > 100 ? toolResult.substring(0, 100) + '...' : toolResult}`, status: result.success ? 'normal' : 'warning', expandable: toolResult.length > 100, fullContent: toolResult }
+                { type: 'data', content: `   ${i18n.t('labels.result', { result: toolResult.length > 100 ? toolResult.substring(0, 100) + '...' : toolResult })}`, status: result.success ? 'normal' : 'warning', expandable: toolResult.length > 100, fullContent: toolResult }
               ]);
 
               // 添加测试记录：工具调用
@@ -333,15 +334,15 @@ export function useConversationEngine(deps) {
                 id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
                 type: 'tool_call',
                 timestamp: Date.now(),
-                summary: `工具：${toolName}(${JSON.stringify(toolArgs).slice(0, 20)}...)`,
-                fullContent: `调用: ${toolName}(${JSON.stringify(toolArgs)})\n结果: ${toolResult}`,
+                summary: i18n.t('labels.toolCallSummary', { name: toolName, args: JSON.stringify(toolArgs).slice(0, 20) }),
+                fullContent: i18n.t('labels.toolCallDetail', { name: toolName, args: JSON.stringify(toolArgs), result: toolResult }),
                 meta: { toolName, args: JSON.stringify(toolArgs), result: toolResult },
                 annotations: []
               });
             } catch (err) {
               toolResult = `Error: ${err.message}`;
               setLogs(prev => [...prev,
-                { type: 'error', content: `   执行失败: ${err.message}`, status: 'danger' }
+                { type: 'error', content: `   ${i18n.t('errors.executionFailed', { message: err.message })}`, status: 'danger' }
               ]);
             }
 
@@ -396,7 +397,7 @@ export function useConversationEngine(deps) {
           return newMsgs;
         });
 
-        finalResponse = response.content || '(无响应)';
+        finalResponse = response.content || i18n.t('labels.noResponse');
         break;
       }
 
@@ -422,9 +423,9 @@ export function useConversationEngine(deps) {
       // 添加日志
       setLogs(prev => [
         ...prev,
-        { type: 'data', content: `收到响应 (${finalResponse.length} 字符)`, status: 'normal', expandable: true, fullContent: finalResponse },
-        { type: 'timing', content: `⏱️ API 耗时: ${totalApiTime}ms`, status: 'normal' },
-        { type: 'info', content: `💬 多轮对话进行中 - 可继续发送消息或点击"停止测试"评判`, status: 'normal' }
+        { type: 'data', content: i18n.t('labels.responseReceived', { count: finalResponse.length }), status: 'normal', expandable: true, fullContent: finalResponse },
+        { type: 'timing', content: i18n.t('labels.apiTiming', { time: totalApiTime }), status: 'normal' },
+        { type: 'info', content: i18n.t('conversation.inProgress'), status: 'normal' }
       ]);
 
       setApiStatus('idle');
@@ -435,7 +436,7 @@ export function useConversationEngine(deps) {
       setConversationMode('idle');
       setLogs(prev => [
         ...prev,
-        { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
+        { type: 'alert', content: i18n.t('errors.apiError', { message: error.message }), status: 'danger' }
       ]);
     }
   }, []);
@@ -468,7 +469,7 @@ export function useConversationEngine(deps) {
 
     // 添加轮次日志
     const roundNum = conversationHistory.filter(m => m.role === 'user').length + 1;
-    setLogs(prev => [...prev, { type: 'round', content: `── 第 ${roundNum} 轮对话 ──`, status: 'normal' }]);
+    setLogs(prev => [...prev, { type: 'round', content: i18n.t('labels.roundStart', { num: roundNum }), status: 'normal' }]);
 
     // 显示用户消息
     setMessages(prev => [...prev, { role: 'user', content }]);
@@ -648,7 +649,7 @@ export function useConversationEngine(deps) {
                 // MCP 工具：使用 mcpClient 执行
                 const serverConfig = mcpServerConfigs[mcpServer];
                 if (!serverConfig?.enabled) {
-                  throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
+                  throw new Error(i18n.t('errors.mcpServiceNotEnabled', { server: mcpServer }));
                 }
                 result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig, sandboxClient.sessionId);
               } else {
@@ -671,8 +672,8 @@ export function useConversationEngine(deps) {
                 id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
                 type: 'tool_call',
                 timestamp: Date.now(),
-                summary: `工具：${toolName}(${JSON.stringify(toolArgs).slice(0, 20)}...)`,
-                fullContent: `调用: ${toolName}(${JSON.stringify(toolArgs)})\n结果: ${toolResult}`,
+                summary: i18n.t('labels.toolCallSummary', { name: toolName, args: JSON.stringify(toolArgs).slice(0, 20) }),
+                fullContent: i18n.t('labels.toolCallDetail', { name: toolName, args: JSON.stringify(toolArgs), result: toolResult }),
                 meta: { toolName, args: JSON.stringify(toolArgs), result: toolResult },
                 annotations: []
               });
@@ -730,7 +731,7 @@ export function useConversationEngine(deps) {
           return newMsgs;
         });
 
-        finalResponse = response.content || '(无响应)';
+        finalResponse = response.content || i18n.t('labels.noResponse');
         break;
       }
 
@@ -749,13 +750,13 @@ export function useConversationEngine(deps) {
       setConversationHistory(prev => [...prev, { role: 'user', content }, { role: 'assistant', content: finalResponse }]);
 
       setLogs(prev => [...prev,
-        { type: 'data', content: `收到响应 (${finalResponse.length} 字符)`, status: 'normal', expandable: true, fullContent: finalResponse },
-        { type: 'timing', content: `⏱️ API 耗时: ${totalApiTime}ms`, status: 'normal' }
+        { type: 'data', content: i18n.t('labels.responseReceived', { count: finalResponse.length }), status: 'normal', expandable: true, fullContent: finalResponse },
+        { type: 'timing', content: i18n.t('labels.apiTiming', { time: totalApiTime }), status: 'normal' }
       ]);
 
     } catch (error) {
       setLogs(prev => [...prev,
-        { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
+        { type: 'alert', content: i18n.t('errors.apiError', { message: error.message }), status: 'danger' }
       ]);
     } finally {
       setApiStatus('idle');
@@ -776,9 +777,9 @@ export function useConversationEngine(deps) {
 
     // 构建完整对话摘要
     const fullConversation = conversationHistory.map((msg) => {
-      if (msg.role === 'user') return `[用户]: ${msg.content}`;
-      if (msg.role === 'assistant') return `[模型]: ${msg.content}`;
-      if (msg.role === 'tool') return `[工具结果]: ${msg.content}`;
+      if (msg.role === 'user') return `${i18n.t('labels.roleUser')}: ${msg.content}`;
+      if (msg.role === 'assistant') return `${i18n.t('labels.roleModel')}: ${msg.content}`;
+      if (msg.role === 'tool') return `${i18n.t('labels.roleToolResult')}: ${msg.content}`;
       return '';
     }).filter(Boolean).join('\n\n');
 
@@ -786,7 +787,7 @@ export function useConversationEngine(deps) {
 
     setLogs(prev => [...prev, {
       type: 'judge',
-      content: `正在评判 ${roundCount} 轮对话...`,
+      content: i18n.t('errors.judgingConversation', { count: roundCount }),
       status: 'normal'
     }]);
 
@@ -824,7 +825,7 @@ export function useConversationEngine(deps) {
     if (mcpRiskLevel === 'high') {
       setLogs(prev => [
         ...prev,
-        { type: 'success', content: `🔴 高风险！${judgeResult.reason}`, status: 'danger' }
+        { type: 'success', content: i18n.t('risk.highResult', { reason: judgeResult.reason }), status: 'danger' }
       ]);
       // 标记最后一条响应为危险
       setMessages(prev => prev.map((msg, idx) =>
@@ -833,22 +834,22 @@ export function useConversationEngine(deps) {
     } else if (mcpRiskLevel === 'medium') {
       setLogs(prev => [
         ...prev,
-        { type: 'warning', content: `🟠 中风险：${judgeResult.reason}`, status: 'warning' }
+        { type: 'warning', content: i18n.t('risk.mediumResult', { reason: judgeResult.reason }), status: 'warning' }
       ]);
     } else if (mcpRiskLevel === 'low') {
       setLogs(prev => [
         ...prev,
-        { type: 'warning', content: `🟡 低风险：${judgeResult.reason}`, status: 'warning' }
+        { type: 'warning', content: i18n.t('risk.lowResult', { reason: judgeResult.reason }), status: 'warning' }
       ]);
     } else if (mcpRiskLevel === 'safe') {
       setLogs(prev => [
         ...prev,
-        { type: 'failure', content: `🟢 安全：${judgeResult.reason}`, status: 'normal' }
+        { type: 'failure', content: i18n.t('risk.safeResult', { reason: judgeResult.reason }), status: 'normal' }
       ]);
     } else {
       setLogs(prev => [
         ...prev,
-        { type: 'judge', content: `⚪ 待定：${judgeResult.reason}`, status: 'warning' }
+        { type: 'judge', content: i18n.t('risk.pendingResult', { reason: judgeResult.reason }), status: 'warning' }
       ]);
     }
 

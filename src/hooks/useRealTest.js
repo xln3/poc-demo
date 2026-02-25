@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { CONFIG, FIVE_LEVEL_RISK } from '../config';
+import i18n from '../i18n/index.js';
 
 export function useRealTest(deps) {
   const d = useRef(deps);
@@ -86,7 +87,7 @@ export function useRealTest(deps) {
     // 添加日志
     const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
     const initialLogs = [
-      { type: 'model', content: `模型: ${modelName}`, status: 'normal' },
+      { type: 'model', content: i18n.t('labels.model', { name: modelName }), status: 'normal' },
     ];
     if (hasUserFiles) {
       // 计算文件总大小
@@ -98,7 +99,7 @@ export function useRealTest(deps) {
       // 显示文件列表和总大小
       initialLogs.push({
         type: 'data',
-        content: `📎 解析 ${payloadFiles.length} 个文件 (${sizeStr})`,
+        content: i18n.t('labels.filesParsed', { count: payloadFiles.length, size: sizeStr }),
         status: 'normal'
       });
 
@@ -108,12 +109,12 @@ export function useRealTest(deps) {
           // 解析失败
           initialLogs.push({
             type: 'alert',
-            content: `  ✗ ${file.name}: 解析失败 - ${file.parseError}`,
+            content: `  ✗ ${file.name}: ${i18n.t('errors.parsingFailed', { status: file.parseError })}`,
             status: 'warning'
           });
         } else if (file.parsedWith && file.parsedWith !== 'fallback (原始文本)') {
           // 解析成功
-          const locationText = file.runLocation === 'sandbox' ? '[沙箱]' : '[后端]';
+          const locationText = file.runLocation === 'sandbox' ? '[sandbox]' : '[backend]';
           initialLogs.push({
             type: 'data',
             content: `  ✓ ${file.name}: 使用 ${file.parsedWith} ${locationText}`,
@@ -123,10 +124,10 @@ export function useRealTest(deps) {
       });
     }
     if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
-      initialLogs.push({ type: 'data', content: `解析文件: ${attack.documentFileName}`, status: 'normal' });
-      initialLogs.push({ type: 'alert', content: `⚠️ 文件包含隐藏的恶意内容`, status: 'warning' });
+      initialLogs.push({ type: 'data', content: i18n.t('labels.fileParsed', { name: attack.documentFileName }), status: 'normal' });
+      initialLogs.push({ type: 'alert', content: i18n.t('labels.hiddenMalicious'), status: 'warning' });
     }
-    initialLogs.push({ type: 'data', content: `发送 Payload (${actualPayload.length} 字符)`, status: 'normal', expandable: true, fullContent: actualPayload });
+    initialLogs.push({ type: 'data', content: i18n.t('labels.payloadSent', { count: actualPayload.length }), status: 'normal', expandable: true, fullContent: actualPayload });
     setLogs(initialLogs);
 
     // 获取实际使用的系统提示词（自定义或默认）
@@ -138,12 +139,12 @@ export function useRealTest(deps) {
         // Mock 模式：直接使用手动输入的内容
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n以下是从知识库中检索到的相关信息，请参考这些信息回答用户问题：\n\n${ragKnowledge}\n---`;
         setLogs(prev => [...prev,
-          { type: 'data', content: `📚 RAG 知识库已注入 (Mock模式, ${ragKnowledge.split('\n').filter(l => l.trim()).length} 条)`, status: 'normal' }
+          { type: 'data', content: i18n.t('errors.ragInjected', { count: ragKnowledge.split('\n').filter(l => l.trim()).length }), status: 'normal' }
         ]);
       } else if (ragMode === 'real' && ragServiceAvailable) {
         // Real 模式：执行真实的向量检索
         setLogs(prev => [...prev,
-          { type: 'query', content: `🔍 执行 RAG 向量检索...`, status: 'normal' }
+          { type: 'query', content: i18n.t('errors.ragSearch'), status: 'normal' }
         ]);
         const ragResults = await performRagQuery(displayContent);
         if (ragResults && ragResults.length > 0) {
@@ -154,7 +155,7 @@ export function useRealTest(deps) {
           ]);
         } else {
           setLogs(prev => [...prev,
-            { type: 'data', content: `📚 RAG 检索无结果`, status: 'warning' }
+            { type: 'data', content: i18n.t('errors.ragNoResults'), status: 'warning' }
           ]);
         }
       }
@@ -168,7 +169,7 @@ export function useRealTest(deps) {
 
     if (useToolCalling && enabledToolNames.length > 0) {
       setLogs(prev => [...prev,
-        { type: 'tool', content: `🔧 工具调用已启用: ${enabledToolNames.length} 个工具`, status: 'normal' }
+        { type: 'tool', content: i18n.t('errors.toolsEnabled', { count: enabledToolNames.length }), status: 'normal' }
       ]);
     }
 
@@ -216,9 +217,9 @@ export function useRealTest(deps) {
           // 检查是否超过最大调用次数
           if (toolCallCount > maxToolCalls) {
             setLogs(prev => [...prev,
-              { type: 'alert', content: `⚠️ 达到最大工具调用次数 (${maxToolCalls})`, status: 'warning' }
+              { type: 'alert', content: i18n.t('errors.maxToolCallsReached', { max: maxToolCalls }), status: 'warning' }
             ]);
-            finalResponse = response.content || '(工具调用被中断)';
+            finalResponse = response.content || i18n.t('labels.toolCallsInterrupted');
             break;
           }
 
@@ -240,10 +241,10 @@ export function useRealTest(deps) {
             try {
               toolArgs = JSON.parse(rawArgs);
             } catch (parseErr) {
-              console.error('工具参数 JSON 解析失败:', parseErr, 'Raw:', rawArgs);
+              console.error('Tool args JSON parse failed:', parseErr, 'Raw:', rawArgs);
               setLogs(prev => [...prev,
-                { type: 'error', content: `🔧 工具 ${toolName}: 参数解析失败`, status: 'danger' },
-                { type: 'data', content: `   原始参数: ${rawArgs.substring(0, 200)}...`, status: 'warning', expandable: true, fullContent: rawArgs }
+                { type: 'error', content: i18n.t('errors.toolParamParseFailed', { name: toolName }), status: 'danger' },
+                { type: 'data', content: `   ${i18n.t('labels.rawParameters', { params: rawArgs.substring(0, 200) })}`, status: 'warning', expandable: true, fullContent: rawArgs }
               ]);
               // 将解析错误作为工具结果返回给 LLM
               messageHistory.push({
@@ -264,8 +265,8 @@ export function useRealTest(deps) {
             const categoryColor = toolCategory === 'safe' ? 'normal' : toolCategory === 'risky' ? 'warning' : 'danger';
 
             setLogs(prev => [...prev,
-              { type: 'tool', content: `🔧 调用工具: ${toolLabel}`, status: categoryColor },
-              { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
+              { type: 'tool', content: i18n.t('errors.toolCalling', { name: toolLabel }), status: categoryColor },
+              { type: 'data', content: `   ${i18n.t('labels.parameters', { params: JSON.stringify(toolArgs) })}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
             ]);
 
             // 执行工具（沙箱工具或 MCP 工具）
@@ -278,7 +279,7 @@ export function useRealTest(deps) {
                 // MCP 工具：使用 mcpClient 执行
                 const serverConfig = mcpServerConfigs[mcpServer];
                 if (!serverConfig?.enabled) {
-                  throw new Error(`MCP 服务 ${mcpServer} 未启用，请先在 MCP 配置中启用并测试连接`);
+                  throw new Error(i18n.t('errors.mcpServiceNotEnabled', { server: mcpServer }));
                 }
                 result = await mcpClient.executeTool(mcpServer, toolName, toolArgs, serverConfig, sandboxClient.sessionId);
               } else {
@@ -297,7 +298,7 @@ export function useRealTest(deps) {
               toolResult = result.success ? JSON.stringify(result.result) : `Error: ${result.error}`;
 
               setLogs(prev => [...prev,
-                { type: 'data', content: `   结果: ${toolResult.length > 100 ? toolResult.substring(0, 100) + '...' : toolResult}`, status: result.success ? 'normal' : 'warning', expandable: toolResult.length > 100, fullContent: toolResult }
+                { type: 'data', content: `   ${i18n.t('labels.result', { result: toolResult.length > 100 ? toolResult.substring(0, 100) + '...' : toolResult })}`, status: result.success ? 'normal' : 'warning', expandable: toolResult.length > 100, fullContent: toolResult }
               ]);
 
               // 添加测试记录：工具调用
@@ -305,15 +306,15 @@ export function useRealTest(deps) {
                 id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
                 type: 'tool_call',
                 timestamp: Date.now(),
-                summary: `工具：${toolName}(${JSON.stringify(toolArgs).slice(0, 20)}...)`,
-                fullContent: `调用: ${toolName}(${JSON.stringify(toolArgs)})\n结果: ${toolResult}`,
+                summary: i18n.t('labels.toolCallSummary', { name: toolName, args: JSON.stringify(toolArgs).slice(0, 20) }),
+                fullContent: i18n.t('labels.toolCallDetail', { name: toolName, args: JSON.stringify(toolArgs), result: toolResult }),
                 meta: { toolName, args: JSON.stringify(toolArgs), result: toolResult },
                 annotations: []
               });
             } catch (err) {
               toolResult = `Error: ${err.message}`;
               setLogs(prev => [...prev,
-                { type: 'error', content: `   执行失败: ${err.message}`, status: 'danger' }
+                { type: 'error', content: `   ${i18n.t('errors.executionFailed', { message: err.message })}`, status: 'danger' }
               ]);
             }
 
@@ -335,7 +336,7 @@ export function useRealTest(deps) {
         }
 
         // 没有工具调用，获取最终响应
-        finalResponse = response.content || '(无响应)';
+        finalResponse = response.content || i18n.t('labels.noResponse');
         break;
       }
 
@@ -346,12 +347,12 @@ export function useRealTest(deps) {
       setMessages(prev => [...prev.filter(m => !m.isToolThinking), agentMsg]);
 
       // 添加日志：收到响应 + timing
-      const toolCallSummary = toolCallCount > 0 ? ` (${toolCallCount} 次工具调用)` : '';
+      const toolCallSummary = toolCallCount > 0 ? ` (${toolCallCount} ${i18n.t('labels.apiCallCount', { count: toolCallCount })})` : '';
       setLogs(prev => [
         ...prev,
-        { type: 'data', content: `收到最终响应 (${finalResponse.length} 字符)${toolCallSummary}`, status: 'normal', expandable: true, fullContent: finalResponse },
-        { type: 'timing', content: `⏱️ 总 API 耗时: ${totalApiTime}ms`, status: 'normal' },
-        { type: 'judge', content: `正在使用 ${CONFIG.judgeModel} 评判攻击结果...`, status: 'normal' }
+        { type: 'data', content: i18n.t('labels.finalResponseReceived', { count: finalResponse.length, summary: toolCallSummary }), status: 'normal', expandable: true, fullContent: finalResponse },
+        { type: 'timing', content: i18n.t('labels.totalApiTiming', { time: totalApiTime }), status: 'normal' },
+        { type: 'judge', content: i18n.t('errors.judgingResults', { model: CONFIG.judgeModel }), status: 'normal' }
       ]);
 
       // 添加回答记录
@@ -362,15 +363,15 @@ export function useRealTest(deps) {
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         type: 'timing',
         timestamp: Date.now(),
-        summary: `耗时：API 响应 ${totalApiTime}ms`,
-        fullContent: `总 API 耗时: ${totalApiTime}ms`,
+        summary: i18n.t('labels.apiResponseTiming', { time: totalApiTime }),
+        fullContent: i18n.t('labels.totalApiTiming', { time: totalApiTime }),
         meta: { totalMs: totalApiTime },
         annotations: []
       });
 
       // 调用评判模型（传入实际发送的 payload 和工具调用历史）
       const judgeContext = toolCallCount > 0
-        ? `${actualPayload}\n\n[工具调用记录]\n${allToolCalls.map(tc => `- ${tc.name}: ${JSON.stringify(tc.args)}`).join('\n')}`
+        ? `${actualPayload}\n\n[Tool Call Records]\n${allToolCalls.map(tc => `- ${tc.name}: ${JSON.stringify(tc.args)}`).join('\n')}`
         : actualPayload;
       const judgeResult = await CONFIG.judgeAttackSuccess(
         attack, activeSystemPrompt, finalResponse, judgeContext,
@@ -407,7 +408,7 @@ export function useRealTest(deps) {
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         type: 'judge',
         timestamp: Date.now(),
-        summary: `评判：${judgeStatusText} - ${(judgeResult.reason || '').slice(0, 20)}...`,
+        summary: i18n.t('labels.judgmentSummary', { status: judgeStatusText, reason: (judgeResult.reason || '').slice(0, 20) }),
         fullContent: judgeResult.reason || '',
         meta: { model: judgeConfig.model, riskLevel: judgeRiskLevel, reason: judgeResult.reason },
         annotations: []
@@ -417,7 +418,7 @@ export function useRealTest(deps) {
       if (judgeRiskLevel === 'high') {
         setLogs(prev => [
           ...prev,
-          { type: 'success', content: `🔴 高风险！${judgeResult.reason}`, status: 'danger' }
+          { type: 'success', content: i18n.t('risk.highResult', { reason: judgeResult.reason }), status: 'danger' }
         ]);
         // 标记响应为危险
         setMessages(prev => prev.map((msg, idx) =>
@@ -426,22 +427,22 @@ export function useRealTest(deps) {
       } else if (judgeRiskLevel === 'medium') {
         setLogs(prev => [
           ...prev,
-          { type: 'warning', content: `🟠 中风险：${judgeResult.reason}`, status: 'warning' }
+          { type: 'warning', content: i18n.t('risk.mediumResult', { reason: judgeResult.reason }), status: 'warning' }
         ]);
       } else if (judgeRiskLevel === 'low') {
         setLogs(prev => [
           ...prev,
-          { type: 'warning', content: `🟡 低风险：${judgeResult.reason}`, status: 'warning' }
+          { type: 'warning', content: i18n.t('risk.lowResult', { reason: judgeResult.reason }), status: 'warning' }
         ]);
       } else if (judgeRiskLevel === 'safe') {
         setLogs(prev => [
           ...prev,
-          { type: 'failure', content: `🟢 安全：${judgeResult.reason}`, status: 'normal' }
+          { type: 'failure', content: i18n.t('risk.safeResult', { reason: judgeResult.reason }), status: 'normal' }
         ]);
       } else {
         setLogs(prev => [
           ...prev,
-          { type: 'judge', content: `⚪ 待定：${judgeResult.reason}`, status: 'warning' }
+          { type: 'judge', content: i18n.t('risk.pendingResult', { reason: judgeResult.reason }), status: 'warning' }
         ]);
       }
 
@@ -450,14 +451,14 @@ export function useRealTest(deps) {
       setApiError(error.message);
       setLogs(prev => [
         ...prev,
-        { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
+        { type: 'alert', content: i18n.t('errors.apiError', { message: error.message }), status: 'danger' }
       ]);
       // 添加测试记录：错误
       addTestRecord({
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         type: 'error',
         timestamp: Date.now(),
-        summary: `错误：${error.message.slice(0, 30)}...`,
+        summary: i18n.t('labels.errorSummary', { msg: error.message.slice(0, 30) }),
         fullContent: error.message,
         meta: { message: error.message },
         annotations: []

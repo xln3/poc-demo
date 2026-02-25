@@ -13,7 +13,7 @@ export default function RagConfig({
   ragQueryResults,
 }) {
   return (
-    <div className="bg-slate-800 rounded-lg p-3 border border-amber-900/50">
+    <div className="bg-surface rounded-lg p-3 border border-amber-900/50">
       <div className="text-xs text-amber-400 flex items-center justify-between">
         <button
           onClick={() => setRagConfigCollapsed(!ragConfigCollapsed)}
@@ -30,7 +30,7 @@ export default function RagConfig({
               className={`px-2 py-0.5 rounded transition ${
                 ragMode === 'mock'
                   ? 'bg-amber-600 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
               }`}
             >
               Mock
@@ -40,7 +40,7 @@ export default function RagConfig({
               className={`px-2 py-0.5 rounded transition ${
                 ragMode === 'real'
                   ? 'bg-green-600 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
               }`}
               disabled={!ragServiceAvailable}
               title={ragServiceAvailable ? '使用真实 RAG 服务' : 'RAG 服务不可用，请启动后端'}
@@ -57,26 +57,26 @@ export default function RagConfig({
             <div className="mt-2 grid grid-cols-2 gap-3">
               {/* Left: display knowledge */}
               <div className="flex flex-col">
-                <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
+                <div className="text-xs text-on-muted mb-1 flex items-center justify-between">
                   <span>当前知识库</span>
-                  <span className="text-slate-500">
+                  <span className="text-on-dim">
                     {ragKnowledge ? `${ragKnowledge.split('\n').filter(l => l.trim()).length} 条` : '空'}
                   </span>
                 </div>
                 <div
-                  className="flex-1 bg-slate-700/50 rounded p-2 text-xs text-slate-300 font-mono overflow-auto border border-slate-600"
+                  className="flex-1 bg-surface-muted/50 rounded p-2 text-xs text-on-surface font-mono overflow-auto border border-edge-strong"
                   style={{ maxHeight: '300px', minHeight: '120px' }}
                 >
                   {ragKnowledge ? (
                     <pre className="whitespace-pre-wrap">{ragKnowledge}</pre>
                   ) : (
-                    <span className="text-slate-500 italic">暂无知识库内容，请在右侧编辑区添加</span>
+                    <span className="text-on-dim italic">暂无知识库内容，请在右侧编辑区添加</span>
                   )}
                 </div>
               </div>
               {/* Right: edit knowledge */}
               <div className="flex flex-col">
-                <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
+                <div className="text-xs text-on-muted mb-1 flex items-center justify-between">
                   <span>编辑知识库</span>
                   <div className="flex gap-2">
                     <button
@@ -87,7 +87,7 @@ export default function RagConfig({
                     </button>
                     <button
                       onClick={() => setRagKnowledgeEdit(ragKnowledge)}
-                      className="px-2 py-0.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-[10px]"
+                      className="px-2 py-0.5 bg-surface-hover hover:bg-surface-hover rounded text-white text-[10px]"
                     >
                       重置
                     </button>
@@ -106,7 +106,7 @@ export default function RagConfig({
                   value={ragKnowledgeEdit}
                   onChange={(e) => setRagKnowledgeEdit(e.target.value)}
                   placeholder={"每行输入一条知识条目，例如：\n- 用户张三的账号余额为 10000 元\n- 最新促销活动：满 1000 减 200\n- 公司内部通讯录：CEO 手机 138xxxx\n\n也可以输入恶意内容测试 RAG 投毒攻击"}
-                  className="flex-1 bg-slate-700/50 rounded p-2 text-xs text-slate-300 font-mono border border-slate-600 focus:border-amber-500 focus:outline-none resize-none"
+                  className="flex-1 bg-surface-muted/50 rounded p-2 text-xs text-on-surface font-mono border border-edge-strong focus:border-amber-500 focus:outline-none resize-none"
                   style={{ maxHeight: '300px', minHeight: '120px' }}
                 />
               </div>
@@ -116,10 +116,10 @@ export default function RagConfig({
             <div className="mt-2 grid grid-cols-2 gap-3">
               {/* Left: document list */}
               <div className="flex flex-col">
-                <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
+                <div className="text-xs text-on-muted mb-1 flex items-center justify-between">
                   <span>知识库文档</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-500">{ragDocuments.length} 个</span>
+                    <span className="text-on-dim">{ragDocuments.length} 个</span>
                     <button
                       onClick={handleRagReset}
                       className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-[10px]"
@@ -137,7 +137,7 @@ export default function RagConfig({
                   </div>
                 </div>
                 <div
-                  className="flex-1 bg-slate-700/50 rounded p-2 text-xs text-slate-300 overflow-auto border border-slate-600"
+                  className="flex-1 bg-surface-muted/50 rounded p-2 text-xs text-on-surface overflow-auto border border-edge-strong"
                   style={{ maxHeight: '300px', minHeight: '120px' }}
                 >
                   {ragDocuments.length > 0 ? (
@@ -145,12 +145,12 @@ export default function RagConfig({
                       {ragDocuments.map((doc) => (
                         <div
                           key={doc.document_id}
-                          className="flex items-center justify-between p-1.5 bg-slate-600/50 rounded hover:bg-slate-600 transition"
+                          className="flex items-center justify-between p-1.5 bg-surface-hover/50 rounded hover:bg-surface-hover transition"
                         >
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <span>{ragClient.getDocumentTypeIcon(doc.document_type)}</span>
                             <span className="truncate">{doc.source_name}</span>
-                            <span className="text-slate-500 text-[10px]">({doc.chunk_count} 块)</span>
+                            <span className="text-on-dim text-[10px]">({doc.chunk_count} 块)</span>
                           </div>
                           <button
                             onClick={() => handleRagDelete(doc.document_id)}
@@ -163,18 +163,18 @@ export default function RagConfig({
                       ))}
                     </div>
                   ) : (
-                    <span className="text-slate-500 italic">暂无文档，请上传文件</span>
+                    <span className="text-on-dim italic">暂无文档，请上传文件</span>
                   )}
                 </div>
               </div>
               {/* Right: upload & search results */}
               <div className="flex flex-col gap-2">
-                <div className="text-xs text-slate-400 mb-1">上传文档</div>
+                <div className="text-xs text-on-muted mb-1">上传文档</div>
                 <label
-                  className={`flex-1 flex flex-col items-center justify-center p-4 bg-slate-700/50 rounded border-2 border-dashed cursor-pointer transition ${
+                  className={`flex-1 flex flex-col items-center justify-center p-4 bg-surface-muted/50 rounded border-2 border-dashed cursor-pointer transition ${
                     ragUploading
                       ? 'border-amber-500 bg-amber-900/20'
-                      : 'border-slate-600 hover:border-amber-500'
+                      : 'border-edge-strong hover:border-amber-500'
                   }`}
                   style={{ minHeight: '80px' }}
                 >
@@ -193,8 +193,8 @@ export default function RagConfig({
                   ) : (
                     <>
                       <span className="text-2xl mb-1">📤</span>
-                      <span className="text-slate-400">拖拽上传</span>
-                      <span className="text-slate-500 text-[10px] mt-1">
+                      <span className="text-on-muted">拖拽上传</span>
+                      <span className="text-on-dim text-[10px] mt-1">
                         支持 PDF, DOCX, XLSX, TXT, 图片
                       </span>
                     </>
@@ -203,10 +203,10 @@ export default function RagConfig({
                 {/* Recent search results */}
                 {ragQueryResults && ragQueryResults.results && ragQueryResults.results.length > 0 && (
                   <div className="mt-2">
-                    <div className="text-xs text-slate-400 mb-1">最近检索结果</div>
-                    <div className="bg-slate-700/50 rounded p-2 text-xs space-y-1 max-h-32 overflow-auto">
+                    <div className="text-xs text-on-muted mb-1">最近检索结果</div>
+                    <div className="bg-surface-muted/50 rounded p-2 text-xs space-y-1 max-h-32 overflow-auto">
                       {ragQueryResults.results.slice(0, 3).map((result, i) => (
-                        <div key={i} className="flex items-start gap-2 text-slate-300">
+                        <div key={i} className="flex items-start gap-2 text-on-surface">
                           <span className="text-green-400 font-mono">
                             {ragClient.formatScore(result.score)}
                           </span>
@@ -221,7 +221,7 @@ export default function RagConfig({
           )}
         </>
       )}
-      <div className="mt-2 text-[10px] text-slate-500">
+      <div className="mt-2 text-[10px] text-on-dim">
         {ragMode === 'mock'
           ? 'Mock 模式：手动输入内容作为检索结果注入。可用于测试知识库投毒、数据泄露等攻击场景。'
           : 'Real 模式：使用真实向量检索。上传文档后，系统将自动分块、嵌入，并在测试时执行语义检索。'

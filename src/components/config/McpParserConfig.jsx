@@ -8,7 +8,7 @@ export default function McpParserConfig({
   mcpParsers, setMcpParsers, payloadFiles,
 }) {
   return (
-    <div className="bg-slate-800 rounded-lg p-3 border border-purple-900/50">
+    <div className="bg-surface rounded-lg p-3 border border-purple-900/50">
       <div className="text-xs text-purple-400 flex items-center justify-between">
         <button
           onClick={() => setMcpConfigCollapsed(!mcpConfigCollapsed)}
@@ -22,7 +22,7 @@ export default function McpParserConfig({
             <span className="text-yellow-500 text-[10px]">修改后需重新上传文件</span>
           )}
           {mcpConfigCollapsed && (
-            <span className="text-[10px] text-slate-400 truncate max-w-[300px]">
+            <span className="text-[10px] text-on-muted truncate max-w-[300px]">
               {(() => {
                 const enabledByType = Object.entries(mcpParsers)
                   .filter(([_, ids]) => ids && ids.length > 0)
@@ -46,8 +46,8 @@ export default function McpParserConfig({
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2">
             {Object.entries(CONFIG.mcp.parsers).map(([fileType, config]) => (
-              <div key={fileType} className="bg-slate-700/50 rounded p-2">
-                <div className="text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1">
+              <div key={fileType} className="bg-surface-muted/50 rounded p-2">
+                <div className="text-xs font-medium text-on-surface mb-1.5 flex items-center gap-1">
                   <span>{fileType === 'pdf' ? '📄' : fileType === 'docx' ? '📝' : fileType === 'xlsx' ? '📊' : '🖼️'}</span>
                   <span>{config.label}</span>
                 </div>
@@ -59,7 +59,7 @@ export default function McpParserConfig({
                       <label
                         key={tool.id}
                         className={`flex items-center gap-1.5 text-xs cursor-pointer p-1 rounded transition ${
-                          isSelected ? 'bg-purple-900/30' : 'hover:bg-slate-600'
+                          isSelected ? 'bg-purple-900/30' : 'hover:bg-surface-hover'
                         }`}
                       >
                         <input
@@ -76,9 +76,9 @@ export default function McpParserConfig({
                               return updated;
                             });
                           }}
-                          className="w-3 h-3 rounded border-slate-500 bg-slate-700 text-purple-500"
+                          className="w-3 h-3 rounded border-edge-strong bg-surface-raised text-purple-500"
                         />
-                        <span className={isSelected ? 'text-slate-200' : 'text-slate-400'}>
+                        <span className={isSelected ? 'text-on-canvas' : 'text-on-muted'}>
                           {tool.name}
                         </span>
                         {isSelected && priority >= 0 && (
@@ -92,7 +92,7 @@ export default function McpParserConfig({
               </div>
             ))}
           </div>
-          <div className="mt-2 text-[10px] text-slate-500">
+          <div className="mt-2 text-[10px] text-on-dim">
             <span>数字 = 解析优先级</span>
           </div>
         </>

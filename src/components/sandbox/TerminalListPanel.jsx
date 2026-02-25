@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { TerminalItem } from './TerminalItem.jsx';
 import { TerminalImage } from '../../sandbox.js';
 
@@ -23,6 +24,8 @@ export const TerminalListPanel = ({
   onDestroyTerminal,
   onShowFiles,
 }) => {
+  const { t } = useTranslation();
+
   const handleCreate = () => {
     if (newTerminalTag.trim()) {
       onCreateTerminal(newTerminalTag.trim(), newTerminalImage);
@@ -45,14 +48,14 @@ export const TerminalListPanel = ({
             value={newTerminalTag}
             onChange={(e) => setNewTerminalTag(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="终端标识 (tag)"
-            className="flex-1 px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-sm text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+            placeholder={t('sandbox.terminalTagPlaceholder')}
+            className="flex-1 px-2 py-1.5 bg-surface-raised border border-edge-strong rounded text-sm text-on-canvas placeholder-on-muted focus:outline-none focus:border-cyan-500"
             disabled={creatingTerminal}
           />
           <button
             onClick={handleCreate}
             disabled={!newTerminalTag.trim() || creatingTerminal}
-            className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-sm text-white transition-colors"
+            className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-surface-hover disabled:cursor-not-allowed rounded text-sm text-white transition-colors"
           >
             {creatingTerminal ? '...' : '+'}
           </button>
@@ -62,7 +65,7 @@ export const TerminalListPanel = ({
         <select
           value={newTerminalImage}
           onChange={(e) => setNewTerminalImage(e.target.value)}
-          className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-sm text-white focus:outline-none focus:border-cyan-500"
+          className="w-full px-2 py-1.5 bg-surface-raised border border-edge-strong rounded text-sm text-on-canvas focus:outline-none focus:border-cyan-500"
           disabled={creatingTerminal}
         >
           {IMAGE_OPTIONS.map(opt => (
@@ -76,8 +79,8 @@ export const TerminalListPanel = ({
       {/* 终端列表 */}
       <div className="space-y-1">
         {terminals.length === 0 ? (
-          <div className="text-sm text-slate-400 text-center py-4">
-            暂无运行中的终端
+          <div className="text-sm text-on-muted text-center py-4">
+            {t('sandbox.noRunningTerminals')}
           </div>
         ) : (
           terminals.map(terminal => (

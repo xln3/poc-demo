@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../config.js';
 
 /**
@@ -34,6 +35,7 @@ export default function RealTestControlPanel({
   // Error
   apiError,
 }) {
+  const { t } = useTranslation();
   const isDemo = appMode === 'demo';
 
   // Provider display name
@@ -41,11 +43,11 @@ export default function RealTestControlPanel({
   const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
 
   return (
-    <div className="mb-4 p-3 bg-slate-800 rounded-lg">
+    <div className="mb-4 p-3 bg-surface rounded-lg">
       {/* Demo mode banner */}
       {isDemo && (
         <div className="mb-3 py-1.5 px-3 bg-amber-900/30 border border-amber-700/50 rounded text-xs text-amber-400 text-center">
-          演示模式 — 测试控制已禁用
+          {t('modes.demoBanner')}
         </div>
       )}
 
@@ -54,7 +56,7 @@ export default function RealTestControlPanel({
         {/* Left: config summary badges */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Model badge */}
-          <span className="text-xs px-2 py-0.5 bg-slate-700 rounded text-slate-300">
+          <span className="text-xs px-2 py-0.5 bg-surface-raised rounded text-on-surface">
             {providerName ? `${providerName} / ` : ''}{modelName}
           </span>
           {/* Feature badges */}
@@ -62,31 +64,31 @@ export default function RealTestControlPanel({
             <span className={`text-xs px-1.5 py-0.5 rounded ${
               isParsingFile ? 'bg-yellow-600 text-white' :
               mcpParserServiceAvailable ? 'bg-purple-600/30 text-purple-400' :
-              'bg-slate-700 text-slate-500'
+              'bg-surface-raised text-on-dim'
             }`}>
-              {isParsingFile ? '解析中' : '解析'}
+              {isParsingFile ? t('realTestControl.parsingLabel') : t('realTestControl.parsingShort')}
             </span>
           )}
           {toolsEnabled && (
             <span className={`text-xs px-1.5 py-0.5 rounded ${
-              sandboxStatus === 'running' ? 'bg-cyan-600/30 text-cyan-400' : 'bg-slate-700 text-yellow-400'
+              sandboxStatus === 'running' ? 'bg-cyan-600/30 text-cyan-400' : 'bg-surface-raised text-yellow-400'
             }`}>
-              工具({Object.values(enabledTools).filter(Boolean).length})
+              {t('realTestControl.toolsLabel', { count: Object.values(enabledTools).filter(Boolean).length })}
             </span>
           )}
           {ragEnabled && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-amber-600/30 text-amber-400">
-              RAG{ragKnowledge ? `(${ragKnowledge.split('\n').filter(l => l.trim()).length})` : ''}
+              {t('realTestControl.ragLabel', { count: ragKnowledge ? `(${ragKnowledge.split('\n').filter(l => l.trim()).length})` : '' })}
             </span>
           )}
           {mcpServerEnabled && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-600/30 text-emerald-400">
-              MCP({Object.values(mcpServerConfigs).filter(c => c?.enabled).length})
+              {t('realTestControl.mcpLabel', { count: Object.values(mcpServerConfigs).filter(c => c?.enabled).length })}
             </span>
           )}
           {thinkingEnabled && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-pink-600/30 text-pink-400">
-              思考
+              {t('realTestControl.thinkingLabel')}
             </span>
           )}
           {simEngine && (
@@ -102,18 +104,18 @@ export default function RealTestControlPanel({
           {isBatchTesting && (
             <div className="flex items-center gap-2 px-3 py-1 bg-blue-900/30 rounded border border-blue-700/50">
               <span className="text-xs text-blue-300">
-                批量测试 {batchTestIndex + 1}/{batchTestQueue.length}
+                {t('batchTest.progress', { current: batchTestIndex + 1, total: batchTestQueue.length })}
               </span>
-              <div className="w-24 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+              <div className="w-24 h-1.5 bg-surface-raised rounded-full overflow-hidden">
                 <div
                   className="h-full bg-blue-500 transition-all duration-300"
                   style={{ width: `${((batchTestIndex + 1) / batchTestQueue.length) * 100}%` }}
                 />
               </div>
-              <span className="text-xs text-red-400" title="高风险">
+              <span className="text-xs text-red-400" title={t('batchTest.highRisk')}>
                 {batchTestResults.filter(r => r.riskLevel === 'high').length}
               </span>
-              <span className="text-xs text-green-400" title="安全">
+              <span className="text-xs text-green-400" title={t('batchTest.safe')}>
                 {batchTestResults.filter(r => r.riskLevel === 'safe').length}
               </span>
               <button
@@ -135,34 +137,34 @@ export default function RealTestControlPanel({
 
           {/* Batch test results (after completion) */}
           {!isBatchTesting && batchTestResults.length > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1 bg-slate-700/50 rounded">
-              <span className="text-xs text-slate-300">
-                已完成 {batchTestResults.length} 个
+            <div className="flex items-center gap-2 px-3 py-1 bg-surface-muted/50 rounded">
+              <span className="text-xs text-on-surface">
+                {t('batchTest.completed', { count: batchTestResults.length })}
               </span>
-              <span className="text-xs text-red-400" title="高风险">
+              <span className="text-xs text-red-400" title={t('batchTest.highRisk')}>
                 {batchTestResults.filter(r => r.riskLevel === 'high').length}
               </span>
-              <span className="text-xs text-green-400" title="安全">
+              <span className="text-xs text-green-400" title={t('batchTest.safe')}>
                 {batchTestResults.filter(r => r.riskLevel === 'safe').length}
               </span>
               <button
                 onClick={exportBatchTestReport}
-                className="text-xs px-1.5 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-slate-300"
+                className="text-xs px-1.5 py-0.5 rounded bg-surface-hover hover:bg-surface-hover text-on-surface"
               >
-                导出
+                {t('buttons.export')}
               </button>
               <button
                 onClick={() => {
-                  const name = prompt('请输入测试报告名称', `测试报告_${new Date().toLocaleDateString('zh-CN')}`);
+                  const name = prompt(t('testResult.saveReportPrompt'), t('testResult.saveReportDefault', { date: new Date().toLocaleDateString('zh-CN') }));
                   if (name) saveBatchTestToServer(name);
                 }}
                 className="text-xs px-1.5 py-0.5 rounded bg-purple-600 hover:bg-purple-500 text-white"
               >
-                保存
+                {t('buttons.save')}
               </button>
               <button
                 onClick={() => setBatchTestResults([])}
-                className="text-xs px-1.5 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-slate-400"
+                className="text-xs px-1.5 py-0.5 rounded bg-surface-hover hover:bg-surface-hover text-on-muted"
               >
                 x
               </button>
@@ -173,31 +175,31 @@ export default function RealTestControlPanel({
           <div className="relative">
             <button
               onClick={() => setShowImportMenu(!showImportMenu)}
-              className="px-3 py-1.5 rounded text-xs font-medium transition bg-slate-600 hover:bg-slate-500 flex items-center gap-1"
+              className="px-3 py-1.5 rounded text-xs font-medium transition bg-surface-hover hover:bg-surface-hover flex items-center gap-1"
             >
-              导入测试
+              {t('buttons.importTest')}
               <span className="text-[10px]">▼</span>
             </button>
             {showImportMenu && (
-              <div className="absolute top-full left-0 mt-1 bg-slate-700 rounded shadow-lg border border-slate-600 z-50 min-w-[140px]">
+              <div className="absolute top-full left-0 mt-1 bg-surface-raised rounded shadow-lg border border-edge-strong z-50 min-w-[140px]">
                 <button
                   onClick={() => { importTestFromFile(); setShowImportMenu(false); }}
-                  className="w-full px-3 py-2 text-xs text-left hover:bg-slate-600 transition"
+                  className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover transition"
                 >
-                  导入文件...
+                  {t('buttons.importFromFile')}
                 </button>
                 <button
                   onClick={() => { setShowBatchTestModal(true); setShowImportMenu(false); }}
-                  className="w-full px-3 py-2 text-xs text-left hover:bg-slate-600 transition"
+                  className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover transition"
                 >
-                  批量测试
+                  {t('buttons.batchTest')}
                 </button>
-                <hr className="border-slate-600" />
+                <hr className="border-edge-strong" />
                 <button
                   onClick={() => { handleDownloadTemplate(); setShowImportMenu(false); }}
-                  className="w-full px-3 py-2 text-xs text-left hover:bg-slate-600 text-slate-400 transition"
+                  className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover text-on-muted transition"
                 >
-                  下载模板
+                  {t('buttons.downloadTemplate')}
                 </button>
               </div>
             )}
@@ -206,12 +208,12 @@ export default function RealTestControlPanel({
           {/* Export */}
           <button
             onClick={exportCurrentTest}
-            className="px-3 py-1.5 rounded text-xs font-medium transition bg-slate-600 hover:bg-slate-500"
+            className="px-3 py-1.5 rounded text-xs font-medium transition bg-surface-hover hover:bg-surface-hover"
           >
-            导出测试
+            {t('buttons.export')}
           </button>
 
-          <div className="w-px h-6 bg-slate-600 mx-1" />
+          <div className="w-px h-6 bg-surface-hover mx-1" />
 
           {/* Execution buttons */}
           {lastRecording ? (
@@ -220,32 +222,32 @@ export default function RealTestControlPanel({
                 onClick={() => setShowSaveDialog(true)}
                 className="px-3 py-1.5 rounded text-xs font-medium transition bg-blue-600 hover:bg-blue-500"
               >
-                保存测试
+                {t('buttons.saveTest')}
               </button>
               <button
                 onClick={() => startPlayback(lastRecording)}
                 className="px-3 py-1.5 rounded text-xs font-medium transition bg-violet-600 hover:bg-violet-500"
               >
-                演示回放
+                {t('buttons.replayDemo')}
               </button>
               <button
                 onClick={() => { setLastRecording(null); setMessages([]); setLogs([]); }}
-                className="px-3 py-1.5 rounded text-xs font-medium transition bg-slate-600 hover:bg-slate-500"
+                className="px-3 py-1.5 rounded text-xs font-medium transition bg-surface-hover hover:bg-surface-hover"
               >
-                新测试
+                {t('buttons.newTest')}
               </button>
             </div>
           ) : isRecording ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-red-400 animate-pulse">录制中...</span>
+              <span className="text-xs text-red-400 animate-pulse">{t('realTestControl.recordingDot')}</span>
               <button
                 onClick={async () => { await stopRecording(); await stopConversation(); }}
                 className="px-4 py-1.5 rounded text-xs font-medium transition bg-red-600 hover:bg-red-500"
               >
-                结束测试
+                {t('buttons.endTest')}
               </button>
               {apiStatus === 'loading' && (
-                <span className="text-xs text-slate-400 animate-pulse">处理中...</span>
+                <span className="text-xs text-on-muted animate-pulse">{t('buttons.processing')}</span>
               )}
             </div>
           ) : dialogMode === 'single' ? (
@@ -254,35 +256,35 @@ export default function RealTestControlPanel({
               disabled={apiStatus === 'loading' || isDemo}
               className={`px-4 py-1.5 rounded text-xs font-medium transition ${
                 apiStatus === 'loading' || isDemo
-                  ? 'bg-slate-600 cursor-not-allowed'
+                  ? 'bg-surface-hover cursor-not-allowed'
                   : 'bg-green-600 hover:bg-green-500'
               }`}
             >
-              {apiStatus === 'loading' ? `请求中... ${(apiElapsedTime / 1000).toFixed(1)}s` : '▶ 开始测试'}
+              {apiStatus === 'loading' ? t('realTestControl.requestingIndicator', { time: (apiElapsedTime / 1000).toFixed(1) }) : t('buttons.startTest')}
             </button>
           ) : conversationMode === 'idle' ? (
             <button
               onClick={() => { startRecording(); startConversation(); }}
               disabled={apiStatus === 'loading' || isDemo}
-              className={`px-4 py-1.5 rounded text-xs font-medium transition ${isDemo ? 'bg-slate-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
+              className={`px-4 py-1.5 rounded text-xs font-medium transition ${isDemo ? 'bg-surface-hover cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
             >
-              ▶ 开始测试
+              {t('buttons.startTest')}
             </button>
           ) : conversationMode === 'active' ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-red-400 animate-pulse">录制中</span>
+              <span className="text-xs text-red-400 animate-pulse">{t('labels.recordingIndicator')}</span>
               <button
                 onClick={async () => { await stopRecording(); await stopConversation(); }}
                 className="px-4 py-1.5 rounded text-xs font-medium transition bg-red-600 hover:bg-red-500"
               >
-                结束测试
+                {t('buttons.endTest')}
               </button>
               {apiStatus === 'loading' && (
-                <span className="text-xs text-slate-400 animate-pulse">处理中...</span>
+                <span className="text-xs text-on-muted animate-pulse">{t('buttons.processing')}</span>
               )}
             </div>
           ) : (
-            <span className="px-4 py-1.5 text-xs text-violet-400 animate-pulse">评判中...</span>
+            <span className="px-4 py-1.5 text-xs text-violet-400 animate-pulse">{t('realTestControl.reviewingIndicator')}</span>
           )}
         </div>
       </div>

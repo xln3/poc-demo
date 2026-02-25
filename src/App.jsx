@@ -1373,7 +1373,7 @@ ${reportContent ? `## 当前报告内容（请在此基础上优化）\n${report
 
 
   return (
-    <div className="h-screen bg-slate-900 text-white flex text-sm overflow-hidden">
+    <div className="h-screen bg-canvas text-on-canvas flex text-sm overflow-hidden">
       {/* Toast 通知 */}
       <Toast toasts={toasts} removeToast={removeToast} />
 

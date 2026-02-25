@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '../i18n/LanguageSwitcher';
 
 /**
  * Login page component.
@@ -9,6 +11,7 @@ export default function LoginPage({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -41,31 +44,36 @@ export default function LoginPage({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-8 w-full max-w-sm">
-        <h1 className="text-xl font-bold text-white mb-1">LLM Agent 安全测试平台</h1>
-        <p className="text-slate-400 text-sm mb-6">请登录以继续</p>
+    <div className="min-h-screen bg-canvas-deep flex items-center justify-center relative">
+      {/* Language switcher in top-right */}
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher className="!text-xs !px-3 !py-1.5" />
+      </div>
+
+      <div className="bg-canvas border border-edge rounded-xl p-8 w-full max-w-sm">
+        <h1 className="text-xl font-bold text-on-canvas mb-1">{t('auth.title')}</h1>
+        <p className="text-on-muted text-sm mb-6">{t('auth.subtitle')}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-300 mb-1">用户名</label>
+            <label className="block text-sm text-on-surface mb-1">{t('auth.username')}</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-surface border border-edge-strong rounded-lg text-on-canvas text-sm focus:outline-none focus:border-blue-500"
               required
               autoFocus
             />
           </div>
 
           <div>
-            <label className="block text-sm text-slate-300 mb-1">密码</label>
+            <label className="block text-sm text-on-surface mb-1">{t('auth.password')}</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-surface border border-edge-strong rounded-lg text-on-canvas text-sm focus:outline-none focus:border-blue-500"
               required
             />
           </div>
@@ -79,9 +87,9 @@ export default function LoginPage({ onLogin }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+            className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-surface-hover text-white text-sm font-medium rounded-lg transition-colors"
           >
-            {loading ? '登录中...' : '登录'}
+            {loading ? t('auth.loggingIn') : t('auth.login')}
           </button>
         </form>
       </div>

@@ -104,20 +104,20 @@ export default function LLMProviderSettings({ open, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-        <div className="p-5 border-b border-slate-700 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">LLM 设置</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">&times;</button>
+      <div className="bg-canvas border border-edge rounded-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div className="p-5 border-b border-edge flex items-center justify-between">
+          <h2 className="text-lg font-bold text-on-canvas">LLM 设置</h2>
+          <button onClick={onClose} className="text-on-muted hover:text-on-canvas text-xl">&times;</button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-700">
+        <div className="flex border-b border-edge">
           <button
             onClick={() => setActiveTab('providers')}
             className={`px-5 py-2.5 text-sm font-medium ${
               activeTab === 'providers'
                 ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-slate-400 hover:text-slate-300'
+                : 'text-on-muted hover:text-on-surface'
             }`}
           >供应商配置</button>
           <button
@@ -125,7 +125,7 @@ export default function LLMProviderSettings({ open, onClose }) {
             className={`px-5 py-2.5 text-sm font-medium ${
               activeTab === 'usage'
                 ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-slate-400 hover:text-slate-300'
+                : 'text-on-muted hover:text-on-surface'
             }`}
           >用量统计</button>
         </div>
@@ -139,14 +139,14 @@ export default function LLMProviderSettings({ open, onClose }) {
           {/* Existing providers */}
           {providers.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm text-slate-400 font-medium">已配置的供应商</h3>
+              <h3 className="text-sm text-on-muted font-medium">已配置的供应商</h3>
               {providers.map(p => (
-                <div key={p.id} className="flex items-center justify-between bg-slate-800 rounded-lg px-4 py-2">
+                <div key={p.id} className="flex items-center justify-between bg-surface rounded-lg px-4 py-2">
                   <div>
                     <span className="text-white text-sm font-medium">{p.provider_name}</span>
                     {p.is_default && <span className="ml-2 text-[10px] bg-blue-600 px-1.5 py-0.5 rounded text-white">默认</span>}
-                    <div className="text-slate-400 text-xs">{p.base_url} | Key: {p.api_key_masked}</div>
-                    <div className="text-slate-500 text-xs">模型: {p.models.join(', ') || '未配置'}</div>
+                    <div className="text-on-muted text-xs">{p.base_url} | Key: {p.api_key_masked}</div>
+                    <div className="text-on-dim text-xs">模型: {p.models.join(', ') || '未配置'}</div>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -170,8 +170,8 @@ export default function LLMProviderSettings({ open, onClose }) {
           )}
 
           {/* Form */}
-          <div className="border border-slate-700 rounded-lg p-4 space-y-3">
-            <h3 className="text-sm text-slate-300 font-medium">
+          <div className="border border-edge rounded-lg p-4 space-y-3">
+            <h3 className="text-sm text-on-surface font-medium">
               {editingId ? '编辑供应商' : '添加供应商'}
             </h3>
 
@@ -181,7 +181,7 @@ export default function LLMProviderSettings({ open, onClose }) {
                 <button
                   key={p.name}
                   onClick={() => applyPreset(p)}
-                  className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded"
+                  className="text-xs px-2 py-1 bg-surface-raised hover:bg-surface-hover text-on-surface rounded"
                 >{p.name}</button>
               ))}
             </div>
@@ -191,13 +191,13 @@ export default function LLMProviderSettings({ open, onClose }) {
                 placeholder="供应商名称"
                 value={form.provider_name}
                 onChange={e => setForm({ ...form, provider_name: e.target.value })}
-                className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+                className="px-3 py-1.5 bg-surface border border-edge-strong rounded text-sm text-on-canvas"
               />
               <input
                 placeholder="Base URL"
                 value={form.base_url}
                 onChange={e => setForm({ ...form, base_url: e.target.value })}
-                className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+                className="px-3 py-1.5 bg-surface border border-edge-strong rounded text-sm text-on-canvas"
               />
             </div>
             <input
@@ -205,15 +205,15 @@ export default function LLMProviderSettings({ open, onClose }) {
               placeholder={editingId ? "API Key（留空不修改）" : "API Key"}
               value={form.api_key}
               onChange={e => setForm({ ...form, api_key: e.target.value })}
-              className="w-full px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+              className="w-full px-3 py-1.5 bg-surface border border-edge-strong rounded text-sm text-on-canvas"
             />
             <input
               placeholder="模型列表（逗号分隔）"
               value={form.models}
               onChange={e => setForm({ ...form, models: e.target.value })}
-              className="w-full px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-white"
+              className="w-full px-3 py-1.5 bg-surface border border-edge-strong rounded text-sm text-on-canvas"
             />
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm text-on-surface">
               <input
                 type="checkbox"
                 checked={form.is_default}
@@ -226,10 +226,10 @@ export default function LLMProviderSettings({ open, onClose }) {
               <button
                 onClick={saveProvider}
                 disabled={!form.provider_name || !form.base_url || (!editingId && !form.api_key)}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 text-white text-sm rounded"
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-surface-hover text-white text-sm rounded"
               >{editingId ? '更新' : '添加'}</button>
               {editingId && (
-                <button onClick={resetForm} className="px-4 py-1.5 bg-slate-700 text-slate-300 text-sm rounded">
+                <button onClick={resetForm} className="px-4 py-1.5 bg-surface-raised text-on-surface text-sm rounded">
                   取消
                 </button>
               )}

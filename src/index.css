@@ -1,5 +1,53 @@
 @import "tailwindcss";
 
+/* ========== Semantic color tokens ========== */
+@theme {
+  /* Backgrounds */
+  --color-canvas-deep: #020617;   /* slate-950 */
+  --color-canvas: #0f172a;        /* slate-900 */
+  --color-surface: #1e293b;       /* slate-800 */
+  --color-surface-raised: #334155; /* slate-700 */
+  --color-surface-hover: #475569; /* slate-600 */
+  --color-surface-muted: #334155; /* slate-700 */
+
+  /* Borders */
+  --color-edge: #334155;          /* slate-700 */
+  --color-edge-strong: #475569;   /* slate-600 */
+
+  /* Text */
+  --color-on-canvas: #ffffff;
+  --color-on-surface: #cbd5e1;    /* slate-300 */
+  --color-on-muted: #94a3b8;      /* slate-400 */
+  --color-on-dim: #64748b;        /* slate-500 */
+
+  /* Scrollbar */
+  --color-scroll-track: #1e293b;
+  --color-scroll-thumb: #475569;
+  --color-scroll-thumb-hover: #64748b;
+}
+
+/* Light theme overrides */
+.light {
+  --color-canvas-deep: #ffffff;
+  --color-canvas: #f9fafb;        /* gray-50 */
+  --color-surface: #ffffff;
+  --color-surface-raised: #f3f4f6; /* gray-100 */
+  --color-surface-hover: #e5e7eb; /* gray-200 */
+  --color-surface-muted: #f3f4f6; /* gray-100 */
+
+  --color-edge: #e5e7eb;          /* gray-200 */
+  --color-edge-strong: #d1d5db;   /* gray-300 */
+
+  --color-on-canvas: #111827;     /* gray-900 */
+  --color-on-surface: #4b5563;    /* gray-600 */
+  --color-on-muted: #6b7280;      /* gray-500 */
+  --color-on-dim: #9ca3af;        /* gray-400 */
+
+  --color-scroll-track: #f3f4f6;
+  --color-scroll-thumb: #d1d5db;
+  --color-scroll-thumb-hover: #9ca3af;
+}
+
 /* 自定义滚动条样式 */
 @layer utilities {
   .custom-scroll::-webkit-scrollbar {
@@ -7,15 +55,15 @@
     height: 6px;
   }
   .custom-scroll::-webkit-scrollbar-track {
-    background: #1e293b;
+    background: var(--color-scroll-track);
     border-radius: 3px;
   }
   .custom-scroll::-webkit-scrollbar-thumb {
-    background: #475569;
+    background: var(--color-scroll-thumb);
     border-radius: 3px;
   }
   .custom-scroll::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+    background: var(--color-scroll-thumb-hover);
   }
 }
 

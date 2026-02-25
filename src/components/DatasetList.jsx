@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CAPABILITY_CONFIG } from '../hooks/useDatasets.js';
 
 /**
@@ -20,6 +21,8 @@ export const DatasetList = ({
   onDownloadTemplate,
   formatSize,
 }) => {
+  const { t } = useTranslation();
+
   // 展开状态
   const [expandedDatasets, setExpandedDatasets] = useState({});
 
@@ -41,7 +44,7 @@ export const DatasetList = ({
       return (
         <span
           key={cap}
-          className="inline-flex items-center px-1 py-0.5 rounded text-[10px] bg-gray-700 text-gray-300"
+          className="inline-flex items-center px-1 py-0.5 rounded text-[10px] bg-surface-raised text-on-surface"
           title={config.label}
         >
           {config.icon}
@@ -52,9 +55,9 @@ export const DatasetList = ({
 
   if (isLoading && datasets.length === 0) {
     return (
-      <div className="text-center text-gray-500 py-4">
-        <div className="animate-spin inline-block w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full"></div>
-        <span className="ml-2">加载中...</span>
+      <div className="text-center text-on-dim py-4">
+        <div className="animate-spin inline-block w-4 h-4 border-2 border-edge-strong border-t-transparent rounded-full"></div>
+        <span className="ml-2">{t('batchTest.loading')}</span>
       </div>
     );
   }
@@ -70,25 +73,25 @@ export const DatasetList = ({
               className="flex-1 px-3 py-2 rounded bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 text-sm flex items-center justify-center gap-1.5 transition-colors"
             >
               <span>+</span>
-              <span>导入数据集</span>
+              <span>{t('dataset.importDataset')}</span>
             </button>
           )}
           {onDownloadTemplate && (
             <button
               onClick={onDownloadTemplate}
-              className="px-3 py-2 rounded bg-gray-700/50 hover:bg-gray-600/50 border border-gray-600/50 text-gray-400 hover:text-gray-300 text-sm flex items-center justify-center gap-1.5 transition-colors"
-              title="下载数据集模板文件，了解数据结构"
+              className="px-3 py-2 rounded bg-surface-muted/50 hover:bg-surface-hover/50 border border-edge-strong/50 text-on-muted hover:text-on-surface text-sm flex items-center justify-center gap-1.5 transition-colors"
+              title={t('dataset.downloadTemplate')}
             >
               <span>📄</span>
-              <span>模板</span>
+              <span>{t('dataset.template')}</span>
             </button>
           )}
         </div>
       )}
 
       {datasets.length === 0 ? (
-        <div className="text-center text-gray-500 py-4 text-sm">
-          暂无数据集
+        <div className="text-center text-on-dim py-4 text-sm">
+          {t('dataset.noDatasets')}
         </div>
       ) : (
         datasets.map(dataset => {
@@ -106,7 +109,7 @@ export const DatasetList = ({
                 className={`
                   flex items-center justify-between px-2 py-1.5 cursor-pointer
                   transition-colors
-                  ${isSelected ? 'bg-blue-600/30' : 'bg-gray-800 hover:bg-gray-700'}
+                  ${isSelected ? 'bg-blue-600/30' : 'bg-surface hover:bg-surface-raised'}
                 `}
                 onClick={() => toggleExpand(datasetId)}
                 onMouseEnter={() => setHoveredDataset(datasetId)}
@@ -114,17 +117,17 @@ export const DatasetList = ({
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {/* 展开图标 */}
-                  <span className={`text-gray-500 text-xs transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                  <span className={`text-on-dim text-xs transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
                     ▶
                   </span>
 
                   {/* 数据集名称 */}
-                  <span className="text-sm text-gray-200 truncate">
-                    {dataset.name || '未命名数据集'}
+                  <span className="text-sm text-on-canvas truncate">
+                    {dataset.name || t('dataset.unnamed')}
                   </span>
 
                   {/* 数量标签 */}
-                  <span className="text-xs text-gray-500 flex-shrink-0">
+                  <span className="text-xs text-on-dim flex-shrink-0">
                     ({dataset.caseCount || cases.length})
                   </span>
                 </div>
@@ -142,20 +145,20 @@ export const DatasetList = ({
                         e.stopPropagation();
                         onViewDataset(datasetId);
                       }}
-                      className="px-1.5 py-0.5 text-xs bg-gray-600 hover:bg-gray-500 rounded text-gray-300"
-                      title="查看详情"
+                      className="px-1.5 py-0.5 text-xs bg-surface-hover hover:bg-surface-hover rounded text-on-surface"
+                      title={t('dataset.view')}
                     >
-                      查看
+                      {t('dataset.view')}
                     </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onExportDataset(datasetId);
                       }}
-                      className="px-1.5 py-0.5 text-xs bg-gray-600 hover:bg-gray-500 rounded text-gray-300"
-                      title="下载数据集"
+                      className="px-1.5 py-0.5 text-xs bg-surface-hover hover:bg-surface-hover rounded text-on-surface"
+                      title={t('dataset.download')}
                     >
-                      下载
+                      {t('dataset.download')}
                     </button>
                   </div>
                 )}
@@ -163,10 +166,10 @@ export const DatasetList = ({
 
               {/* 展开的用例列表 */}
               {isExpanded && (
-                <div className="bg-gray-900/50 border-l-2 border-gray-700 ml-4">
+                <div className="bg-canvas/50 border-l-2 border-edge ml-4">
                   {cases.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-gray-500">
-                      暂无用例
+                    <div className="px-3 py-2 text-xs text-on-dim">
+                      {t('dataset.noCases')}
                     </div>
                   ) : (
                     cases.map((caseItem, index) => {
@@ -180,19 +183,19 @@ export const DatasetList = ({
                           className={`
                             px-3 py-1.5 cursor-pointer flex items-center justify-between
                             transition-colors text-sm
-                            ${isCaseSelected ? 'bg-blue-600/20 text-blue-300' : 'hover:bg-gray-800 text-gray-400'}
+                            ${isCaseSelected ? 'bg-blue-600/20 text-blue-300' : 'hover:bg-surface text-on-muted'}
                           `}
                           onClick={() => onSelectCase(dataset, caseItem)}
                           onMouseEnter={() => setHoveredCase(caseId)}
                           onMouseLeave={() => setHoveredCase(null)}
                         >
                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className="text-gray-600">•</span>
+                            <span className="text-on-dim">•</span>
                             <span className="truncate">
-                              {caseItem.name || `用例 ${index + 1}`}
+                              {caseItem.name || t('dataset.caseNumber', { index: index + 1 })}
                             </span>
                             {caseItem.capability && (
-                              <span className="text-[10px] text-gray-500">
+                              <span className="text-[10px] text-on-dim">
                                 {CAPABILITY_CONFIG[caseItem.capability]?.icon}
                               </span>
                             )}
@@ -200,7 +203,7 @@ export const DatasetList = ({
 
                           {/* 用例状态指示 */}
                           {caseItem.recording && (
-                            <span className="text-[10px] text-green-500" title="有录制数据">
+                            <span className="text-[10px] text-green-500" title={t('dataset.hasRecording')}>
                               ●
                             </span>
                           )}
