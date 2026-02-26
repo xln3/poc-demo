@@ -1,11 +1,17 @@
 """SQLAlchemy ORM table definitions."""
 
+import uuid
 from datetime import datetime
+
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, Float, DateTime,
     ForeignKey, JSON, Index,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
+
+
+def _uuid() -> str:
+    return str(uuid.uuid4())
 
 
 class Base(DeclarativeBase):
@@ -44,77 +50,48 @@ class LLMProvider(Base):
 class TestCase(Base):
     __tablename__ = "test_cases"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(String(36), primary_key=True, default=_uuid)
     name = Column(String(256), nullable=False)
     scenario_key = Column(String(64), nullable=True)
     attack_id = Column(String(64), nullable=True)
     attack_type = Column(String(32), nullable=True)
+    capability_level = Column(String(32), nullable=True)  # F1-F6
     payload = Column(Text, nullable=True)
     system_prompt = Column(Text, nullable=True)
     threat_class = Column(String(16), nullable=True)  # T1.1, T2.3, etc.
     risk_item_id = Column(Integer, nullable=True)  # Maps to RISK_ITEMS[id]
-    data_json = Column(JSON, default=dict)  # Full test case schema (v2.x)
+    data_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
 class Dataset(Base):
     __tablename__ = "datasets"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(String(36), primary_key=True, default=_uuid)
     name = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)
     capability_level = Column(String(32), nullable=True)  # F1-F6
-    data_json = Column(JSON, default=dict)
+    case_count = Column(Integer, default=0)
+    total_size = Column(Integer, default=0)
+    data_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-
-    cases = relationship("DatasetCase", back_populates="dataset", cascade="all, delete-orphan")
-
-
-class DatasetCase(Base):
-    __tablename__ = "dataset_cases"
-
-    id = Column(Integer, primary_key=True)
-    dataset_id = Column(Integer, ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
-    test_case_id = Column(Integer, ForeignKey("test_cases.id"), nullable=True)
-    order_index = Column(Integer, default=0)
-
-    dataset = relationship("Dataset", back_populates="cases")
 
 
 class TestResult(Base):
     __tablename__ = "test_results"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(String(36), primary_key=True, default=_uuid)
     name = Column(String(256), nullable=False)
-    dataset_id = Column(Integer, ForeignKey("datasets.id"), nullable=True)
-    status = Column(String(32), default="pending")  # pending | running | completed
-    source_type = Column(String(32), default="manual")  # manual | eval_import | batch
-    solver_type = Column(String(64), nullable=True)  # e.g. "chain_of_thought", "generate"
-    visible_to = Column(JSON, nullable=True)  # User ID list for access control
-    summary_json = Column(JSON, default=dict)
+    status = Column(String(32), default="pending")
+    source_type = Column(String(32), default="manual")
+    data_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-
-    entries = relationship("TestResultEntry", back_populates="test_result", cascade="all, delete-orphan")
-
-
-class TestResultEntry(Base):
-    __tablename__ = "test_result_entries"
-
-    id = Column(Integer, primary_key=True)
-    test_result_id = Column(Integer, ForeignKey("test_results.id", ondelete="CASCADE"), nullable=False)
-    test_case_id = Column(Integer, ForeignKey("test_cases.id"), nullable=True)
-    attack_name = Column(String(256), nullable=True)
-    model_id = Column(String(128), nullable=True)
-    response = Column(Text, nullable=True)
-    judgment = Column(JSON, default=dict)  # {riskLevel, reason, ...}
-    timing_json = Column(JSON, default=dict)
-    token_usage_json = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    test_result = relationship("TestResult", back_populates="entries")
 
 
 class ApiUsage(Base):

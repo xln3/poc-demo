@@ -1,12 +1,13 @@
 """API endpoints for batch test results."""
 from __future__ import annotations
-from typing import List, Optional, Any, Dict, Literal
+from typing import Optional, Any, Dict, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.security import require_auth
-
-from ..services.test_results_storage import test_results_storage
+from ..db.engine import get_db
+from ..services.db_test_results_storage import db_test_results_storage
 
 
 router = APIRouter(prefix="/test-results", tags=["test-results"], dependencies=[Depends(require_auth)])
@@ -38,7 +39,7 @@ class SaveTestResultRequest(BaseModel):
     """Request to save a test result."""
     name: str = "未命名测试"
     meta: TestResultMeta = TestResultMeta()
-    results: List[Dict[str, Any]] = []
+    results: list[Dict[str, Any]] = []
 
 
 class TestResultSummary(BaseModel):
@@ -71,56 +72,61 @@ class GenerateRequest(BaseModel):
 
 
 @router.get("")
-async def list_test_results(offset: int = Query(default=0, ge=0), limit: Optional[int] = Query(default=None, ge=1, le=500)):
+async def list_test_results(
+    db: AsyncSession = Depends(get_db),
+    offset: int = Query(default=0, ge=0),
+    limit: Optional[int] = Query(default=None, ge=1, le=500),
+):
     """List all saved test results with optional pagination."""
-    return test_results_storage.list_results(offset=offset, limit=limit)
+    return await db_test_results_storage.list_results(db, offset=offset, limit=limit)
 
 
 @router.get("/{result_id}")
-async def get_test_result(result_id: str):
+async def get_test_result(result_id: str, db: AsyncSession = Depends(get_db)):
     """Get a specific test result."""
-    result = test_results_storage.get_result(result_id)
+    result = await db_test_results_storage.get_result(db, result_id)
     if not result:
         raise HTTPException(status_code=404, detail="Test result not found")
     return result
 
 
 @router.post("", response_model=TestResultSummary)
-async def save_test_result(request: SaveTestResultRequest):
+async def save_test_result(request: SaveTestResultRequest, db: AsyncSession = Depends(get_db)):
     """Save a new test result."""
     data = {
         "name": request.name,
         "meta": request.meta.model_dump(),
         "results": request.results,
     }
-    return test_results_storage.save_result(data)
+    return await db_test_results_storage.save_result(db, data)
 
 
 @router.delete("/{result_id}")
-async def delete_test_result(result_id: str):
+async def delete_test_result(result_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a test result."""
-    success = test_results_storage.delete_result(result_id)
+    success = await db_test_results_storage.delete_result(db, result_id)
     if not success:
         raise HTTPException(status_code=404, detail="Test result not found")
     return {"success": True}
 
 
 @router.delete("/{result_id}/cases/{case_index}")
-async def delete_test_case(result_id: str, case_index: int):
+async def delete_test_case(result_id: str, case_index: int, db: AsyncSession = Depends(get_db)):
     """Delete a single case from a test result."""
-    result = test_results_storage.delete_case(result_id, case_index)
+    result = await db_test_results_storage.delete_case(db, result_id, case_index)
     if not result:
         raise HTTPException(status_code=404, detail="Test result or case not found")
     return {"success": True, "data": result}
 
 
 @router.patch("/{result_id}/cases/{case_index}/review")
-async def update_case_review(result_id: str, case_index: int, request: UpdateCaseReview):
+async def update_case_review(
+    result_id: str, case_index: int, request: UpdateCaseReview,
+    db: AsyncSession = Depends(get_db),
+):
     """Update the review for a single case."""
-    result = test_results_storage.update_case_review(
-        result_id,
-        case_index,
-        request.model_dump()
+    result = await db_test_results_storage.update_case_review(
+        db, result_id, case_index, request.model_dump()
     )
     if not result:
         raise HTTPException(status_code=404, detail="Test result or case not found")
@@ -128,12 +134,10 @@ async def update_case_review(result_id: str, case_index: int, request: UpdateCas
 
 
 @router.patch("/{result_id}/report")
-async def update_report(result_id: str, request: UpdateReport):
+async def update_report(result_id: str, request: UpdateReport, db: AsyncSession = Depends(get_db)):
     """Update the text report for a test result."""
-    result = test_results_storage.update_report(
-        result_id,
-        request.content,
-        request.editedBy
+    result = await db_test_results_storage.update_report(
+        db, result_id, request.content, request.editedBy
     )
     if not result:
         raise HTTPException(status_code=404, detail="Test result not found")
@@ -141,14 +145,14 @@ async def update_report(result_id: str, request: UpdateReport):
 
 
 @router.post("/{result_id}/report/generate")
-async def generate_report(result_id: str, request: GenerateRequest):
+async def generate_report(result_id: str, request: GenerateRequest, db: AsyncSession = Depends(get_db)):
     """Prepare data for LLM-based report generation.
 
     By design, this endpoint does NOT call the LLM itself. It returns
     the test result data so the frontend can call the LLM via its own
     provider configuration (which includes the user's API key).
     """
-    result = test_results_storage.get_result(result_id)
+    result = await db_test_results_storage.get_result(db, result_id)
     if not result:
         raise HTTPException(status_code=404, detail="Test result not found")
 
@@ -161,9 +165,12 @@ async def generate_report(result_id: str, request: GenerateRequest):
 
 
 @router.post("/{result_id}/cases/{case_index}/review/generate")
-async def generate_case_review(result_id: str, case_index: int, request: GenerateRequest):
+async def generate_case_review(
+    result_id: str, case_index: int, request: GenerateRequest,
+    db: AsyncSession = Depends(get_db),
+):
     """Generate a review for a single case using LLM."""
-    result = test_results_storage.get_result(result_id)
+    result = await db_test_results_storage.get_result(db, result_id)
     if not result:
         raise HTTPException(status_code=404, detail="Test result not found")
 

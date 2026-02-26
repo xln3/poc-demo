@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.security import require_auth
-
-from ..services.dataset_storage import dataset_storage
+from ..db.engine import get_db
+from ..services.db_dataset_storage import db_dataset_storage
 
 
 # ============ Request/Response Models ============
@@ -146,13 +147,17 @@ router = APIRouter(prefix="/datasets", tags=["datasets"], dependencies=[Depends(
 
 
 @router.get("")
-async def list_datasets(offset: int = Query(default=0, ge=0), limit: Optional[int] = Query(default=None, ge=1, le=500)):
+async def list_datasets(
+    db: AsyncSession = Depends(get_db),
+    offset: int = Query(default=0, ge=0),
+    limit: Optional[int] = Query(default=None, ge=1, le=500),
+):
     """List all saved datasets with optional pagination."""
-    return dataset_storage.list_datasets(offset=offset, limit=limit)
+    return await db_dataset_storage.list_datasets(db, offset=offset, limit=limit)
 
 
 @router.post("")
-async def save_dataset(request: SaveDatasetRequest):
+async def save_dataset(request: SaveDatasetRequest, db: AsyncSession = Depends(get_db)):
     """Save a new dataset."""
     if len(request.cases) > MAX_CASES_PER_DATASET:
         raise HTTPException(
@@ -160,33 +165,33 @@ async def save_dataset(request: SaveDatasetRequest):
             detail=f"Too many cases ({len(request.cases)}), max {MAX_CASES_PER_DATASET}",
         )
     dataset_data = request.model_dump()
-    saved = dataset_storage.save_dataset(dataset_data)
+    saved = await db_dataset_storage.save_dataset(db, dataset_data)
     return saved
 
 
 @router.get("/{dataset_id}")
-async def get_dataset(dataset_id: str):
+async def get_dataset(dataset_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single dataset by ID."""
-    dataset_data = dataset_storage.get_dataset(dataset_id)
+    dataset_data = await db_dataset_storage.get_dataset(db, dataset_id)
     if dataset_data is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return dataset_data
 
 
 @router.put("/{dataset_id}")
-async def update_dataset(dataset_id: str, request: UpdateDatasetRequest):
+async def update_dataset(dataset_id: str, request: UpdateDatasetRequest, db: AsyncSession = Depends(get_db)):
     """Update a dataset (name, description, tags, capabilities, source)."""
     updates = request.model_dump(exclude_unset=True)
-    updated = dataset_storage.update_dataset(dataset_id, updates)
+    updated = await db_dataset_storage.update_dataset(db, dataset_id, updates)
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return updated
 
 
 @router.delete("/{dataset_id}")
-async def delete_dataset(dataset_id: str):
+async def delete_dataset(dataset_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a dataset."""
-    success = dataset_storage.delete_dataset(dataset_id)
+    success = await db_dataset_storage.delete_dataset(db, dataset_id)
     if not success:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return {"success": True, "message": f"Dataset {dataset_id} deleted"}
@@ -195,37 +200,37 @@ async def delete_dataset(dataset_id: str):
 # ============ Case Management ============
 
 @router.get("/{dataset_id}/cases")
-async def list_cases_in_dataset(dataset_id: str):
+async def list_cases_in_dataset(dataset_id: str, db: AsyncSession = Depends(get_db)):
     """List all cases in a dataset."""
-    dataset_data = dataset_storage.get_dataset(dataset_id)
+    dataset_data = await db_dataset_storage.get_dataset(db, dataset_id)
     if dataset_data is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return dataset_data.get("cases", [])
 
 
 @router.post("/{dataset_id}/cases")
-async def add_case_to_dataset(dataset_id: str, request: AddCaseRequest):
+async def add_case_to_dataset(dataset_id: str, request: AddCaseRequest, db: AsyncSession = Depends(get_db)):
     """Add a test case to a dataset."""
     case_data = request.model_dump()
-    updated = dataset_storage.add_case_to_dataset(dataset_id, case_data)
+    updated = await db_dataset_storage.add_case_to_dataset(db, dataset_id, case_data)
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return {"success": True, "caseId": case_data.get("id"), "caseCount": updated["meta"]["caseCount"]}
 
 
 @router.get("/{dataset_id}/cases/{case_id}")
-async def get_case_from_dataset(dataset_id: str, case_id: str):
+async def get_case_from_dataset(dataset_id: str, case_id: str, db: AsyncSession = Depends(get_db)):
     """Get a specific test case from a dataset."""
-    case_data = dataset_storage.get_case_from_dataset(dataset_id, case_id)
+    case_data = await db_dataset_storage.get_case_from_dataset(db, dataset_id, case_id)
     if case_data is None:
         raise HTTPException(status_code=404, detail="Case not found")
     return case_data
 
 
 @router.delete("/{dataset_id}/cases/{case_id}")
-async def remove_case_from_dataset(dataset_id: str, case_id: str):
+async def remove_case_from_dataset(dataset_id: str, case_id: str, db: AsyncSession = Depends(get_db)):
     """Remove a test case from a dataset."""
-    updated = dataset_storage.remove_case_from_dataset(dataset_id, case_id)
+    updated = await db_dataset_storage.remove_case_from_dataset(db, dataset_id, case_id)
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset or case not found")
     return {"success": True, "caseCount": updated["meta"]["caseCount"]}

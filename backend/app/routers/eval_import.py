@@ -2,14 +2,16 @@
 .eval file import endpoints.
 
 Accepts inspect-ai .eval files (ZIP format), parses them,
-and stores results via the same test_results_storage used by batch tests.
+and stores results via the DB test results storage.
 """
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.security import require_auth
+from ..db.engine import get_db
 from ..services.eval_importer import parse_eval_zip, eval_to_test_result
-from ..services.test_results_storage import test_results_storage
+from ..services.db_test_results_storage import db_test_results_storage
 
 router = APIRouter(
     prefix="/eval-import",
@@ -51,7 +53,7 @@ async def preview_eval(file: UploadFile = File(...)):
 
 
 @router.post("/upload")
-async def upload_eval(file: UploadFile = File(...)):
+async def upload_eval(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     """Parse .eval ZIP, convert to test result format, and save."""
     content = await file.read()
     if len(content) > MAX_EVAL_FILE_SIZE:
@@ -63,7 +65,7 @@ async def upload_eval(file: UploadFile = File(...)):
         raise HTTPException(400, f"Failed to parse .eval file: {e}")
 
     test_result_data = eval_to_test_result(parsed)
-    saved = test_results_storage.save_result(test_result_data)
+    saved = await db_test_results_storage.save_result(db, test_result_data)
 
     return {
         "id": saved["id"],
