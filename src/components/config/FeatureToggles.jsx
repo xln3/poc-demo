@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Section from './Section.jsx';
 
 /**
@@ -11,8 +12,10 @@ export default function FeatureToggles({
   ragEnabled, setRagEnabled, ragKnowledge,
   mcpServerEnabled, setMcpServerEnabled, mcpServerConfigs,
 }) {
+  const { t } = useTranslation();
+
   return (
-    <Section title="功能开关">
+    <Section title={t('configPage.featureToggles')}>
       <div className="flex flex-wrap items-center gap-4">
         {/* 文件解析 */}
         <div className="flex items-center gap-2">
@@ -24,7 +27,7 @@ export default function FeatureToggles({
               disabled={isDemo}
               className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
             />
-            <span className="text-xs text-on-muted">文件解析</span>
+            <span className="text-xs text-on-muted">{t('configPage.fileParsing')}</span>
           </label>
           <span className={`text-xs px-1.5 py-0.5 rounded ${
             isParsingFile
@@ -33,7 +36,7 @@ export default function FeatureToggles({
                 ? 'bg-green-600 text-white'
                 : 'bg-surface-hover text-on-muted'
           }`}>
-            {isParsingFile ? '解析中' : mcpParserServiceAvailable ? '运行中' : '未运行'}
+            {isParsingFile ? t('configPage.parsing') : mcpParserServiceAvailable ? t('configPage.running') : t('configPage.notRunning')}
           </span>
         </div>
 
@@ -47,16 +50,16 @@ export default function FeatureToggles({
               disabled={isDemo}
               className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
             />
-            <span className="text-xs text-on-muted">工具调用</span>
+            <span className="text-xs text-on-muted">{t('configPage.toolCalling')}</span>
           </label>
           {toolsEnabled && (
             sandboxStatus === 'running' ? (
               <span className="text-xs text-cyan-400">
-                ({Object.values(enabledTools).filter(Boolean).length} 个)
+                ({Object.values(enabledTools).filter(Boolean).length})
               </span>
             ) : (
               <span className="text-xs text-yellow-400 animate-pulse">
-                需启动沙箱
+                {t('configPage.needSandbox')}
               </span>
             )
           )}
@@ -76,7 +79,7 @@ export default function FeatureToggles({
           </label>
           {ragEnabled && ragKnowledge && (
             <span className="text-xs text-amber-400">
-              ({ragKnowledge.split('\n').filter(l => l.trim()).length} 条)
+              ({ragKnowledge.split('\n').filter(l => l.trim()).length})
             </span>
           )}
         </div>
@@ -95,7 +98,7 @@ export default function FeatureToggles({
           </label>
           {mcpServerEnabled && (
             <span className="text-xs text-emerald-400">
-              ({Object.values(mcpServerConfigs).filter(c => c?.enabled).length} 已连接)
+              ({Object.values(mcpServerConfigs).filter(c => c?.enabled).length} {t('configPage.connected')})
             </span>
           )}
         </div>

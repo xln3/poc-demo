@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import Section from './Section.jsx';
 import { benchmarkApi } from '../../benchmarkApi.js';
 
@@ -41,6 +42,7 @@ export default function SimulationEnvConfig({
   safeAgentBenchCase, setSafeAgentBenchCase,
   onApplyTestCase,    // callback: (testCase) => void — fills systemPrompt + payload
 }) {
+  const { t } = useTranslation();
   const [meta, setMeta] = useState(null);
   const [activeDataset, setActiveDataset] = useState('unsafe_detailed');
   const [cases, setCases] = useState([]);
@@ -89,53 +91,53 @@ export default function SimulationEnvConfig({
   const riskCategories = meta?.risk_categories || [];
 
   return (
-    <Section title="仿真环境">
+    <Section title={t('configPage.simulationEnv')}>
       {loadError && !meta ? (
         <div className="text-xs text-yellow-500 py-2">
-          SafeAgentBench 数据加载失败 — {loadError}
+          {t('configPage.safeAgentBenchLoadFailed')} — {loadError}
           <button onClick={() => { setLoadError(null); benchmarkApi.getMeta().then(data => { setMeta(data); setLoadError(null); }).catch(e => setLoadError(e.message)); }}
-            className="ml-2 text-blue-400 hover:text-blue-300 underline">重试</button>
+            className="ml-2 text-blue-400 hover:text-blue-300 underline">{t('configPage.retry')}</button>
         </div>
       ) : (
         <div className="space-y-3">
           {/* Engine status */}
           <div className="space-y-1.5">
             <div className="flex items-center gap-3 text-xs">
-              <span className="text-on-muted">AI2-THOR 引擎</span>
+              <span className="text-on-muted">{t('configPage.ai2thorEngine')}</span>
               {simulator?.sessionId ? (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-400" />
-                  <span className="text-green-400">运行中</span>
+                  <span className="text-green-400">{t('configPage.running')}</span>
                   <span className="text-on-dim">({simulator.engineName})</span>
                   <button
                     onClick={() => simulator.stopSession()}
                     disabled={isDemo}
                     className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px] disabled:opacity-50"
                   >
-                    停止
+                    {t('buttons.stopButton')}
                   </button>
                 </div>
               ) : simulator?.loading ? (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                  <span className="text-yellow-400">启动中</span>
+                  <span className="text-yellow-400">{t('configPage.starting')}</span>
                   <button
                     onClick={() => simulator.cancelStart()}
                     className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px]"
                   >
-                    取消
+                    {t('buttons.cancel')}
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-slate-500" />
-                  <span className="text-on-dim">未启动</span>
+                  <span className="text-on-dim">{t('configPage.notStarted')}</span>
                   <button
                     onClick={() => simulator.startSession('ai2thor', {})}
                     disabled={isDemo}
                     className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-[10px] disabled:opacity-50"
                   >
-                    启动
+                    {t('configPage.start')}
                   </button>
                 </div>
               )}
@@ -153,7 +155,7 @@ export default function SimulationEnvConfig({
                   />
                 </div>
                 <div className="text-[10px] text-on-muted">
-                  {simulator.startMessage || '准备中...'} ({simulator.startProgress || 0}%)
+                  {simulator.startMessage || t('messages.preparing')} ({simulator.startProgress || 0}%)
                 </div>
               </div>
             )}
@@ -185,7 +187,7 @@ export default function SimulationEnvConfig({
                   !riskFilter ? 'bg-surface-hover text-white' : 'bg-surface-muted/50 text-on-muted hover:bg-surface-hover'
                 }`}
               >
-                全部
+                {t('configPage.all')}
               </button>
               {riskCategories.slice(0, 12).map(cat => (
                 <button
@@ -208,7 +210,7 @@ export default function SimulationEnvConfig({
             {/* Left: case list */}
             <div className="flex flex-col">
               <div className="text-[10px] text-on-dim mb-1">
-                {casesLoading ? '加载中...' : `${cases.length} 条测例`}
+                {casesLoading ? t('batchTest.loading') : t('configPage.caseCount', { count: cases.length })}
               </div>
               <div className="flex-1 bg-surface-muted/50 rounded p-1 overflow-y-auto space-y-0.5" style={{ maxHeight: '300px' }}>
                 {cases.map((c) => (
@@ -235,7 +237,7 @@ export default function SimulationEnvConfig({
                   </button>
                 ))}
                 {cases.length === 0 && !casesLoading && (
-                  <div className="text-xs text-on-dim text-center py-4">无匹配测例</div>
+                  <div className="text-xs text-on-dim text-center py-4">{t('configPage.noMatchingCases')}</div>
                 )}
               </div>
               {/* Pagination */}
@@ -245,7 +247,7 @@ export default function SimulationEnvConfig({
                   disabled={offset === 0}
                   className="px-2 py-0.5 bg-surface-raised rounded text-on-muted disabled:opacity-30"
                 >
-                  上一页
+                  {t('configPage.prevPage')}
                 </button>
                 <span className="text-on-dim">{offset + 1} - {offset + cases.length}</span>
                 <button
@@ -253,7 +255,7 @@ export default function SimulationEnvConfig({
                   disabled={cases.length < LIMIT}
                   className="px-2 py-0.5 bg-surface-raised rounded text-on-muted disabled:opacity-30"
                 >
-                  下一页
+                  {t('configPage.nextPage')}
                 </button>
               </div>
             </div>
@@ -342,12 +344,12 @@ export default function SimulationEnvConfig({
                     disabled={isDemo}
                     className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white font-medium transition disabled:opacity-50"
                   >
-                    加载为测试用例
+                    {t('configPage.loadAsTestCase')}
                   </button>
                 </div>
               ) : (
                 <div className="flex-1 flex items-center justify-center text-xs text-on-dim">
-                  ← 选择一个测例查看详情
+                  {t('configPage.selectCaseHint')}
                 </div>
               )}
             </div>

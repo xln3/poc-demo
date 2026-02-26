@@ -450,7 +450,7 @@ export const useCases = ({
       const filename = `${currentAttack?.name || 'test-case'}-${new Date().toISOString().slice(0, 10)}.json`;
       downloadTestCaseAsJSON(testCase, filename);
     } catch (error) {
-      alert(`导出失败: ${error.message}`);
+      alert(i18n.t('errors.exportFailed', { message: error.message }));
     }
   };
 
@@ -474,7 +474,7 @@ export const useCases = ({
       const filename = `playback-${currentAttack?.name || 'sequence'}-${new Date().toISOString().slice(0, 10)}.json`;
       downloadPlaybackSequenceAsJSON(sequence, filename);
     } catch (error) {
-      alert(`导出失败: ${error.message}`);
+      alert(i18n.t('errors.exportFailed', { message: error.message }));
     }
   };
 
@@ -485,7 +485,7 @@ export const useCases = ({
     const result = await importTestCaseFromFile();
 
     if (result.error) {
-      alert(`导入失败: ${result.error}`);
+      alert(i18n.t('errors.saveFailed', { message: result.error }));
       return null;
     }
 
@@ -500,7 +500,7 @@ export const useCases = ({
       const cases = await listSavedCases();
       setSavedCases(cases);
     } catch (error) {
-      console.error('加载已保存用例失败:', error);
+      console.error('Failed to load saved cases:', error);
     } finally {
       setLoadingSavedCases(false);
     }
@@ -512,13 +512,13 @@ export const useCases = ({
       const detail = await getCaseDetail(caseId);
       setSelectedCase(detail);
     } catch (error) {
-      alert(`获取详情失败: ${error.message}`);
+      alert(i18n.t('errors.getDetailFailed', { message: error.message }));
     }
   };
 
   // Delete case
   const handleDeleteCase = async (caseId) => {
-    if (!confirm('确定要删除这个用例吗？')) return;
+    if (!confirm(i18n.t('errors.deleteConfirmCase'))) return;
     try {
       await deleteCase(caseId);
       setSavedCases(prev => prev.filter(c => c.id !== caseId));
@@ -526,7 +526,7 @@ export const useCases = ({
         setSelectedCase(null);
       }
     } catch (error) {
-      alert(`删除失败: ${error.message}`);
+      alert(i18n.t('errors.deleteFailed', { message: error.message }));
     }
   };
 

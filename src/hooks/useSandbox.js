@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { sandboxClient, TerminalImage, formatBytes, formatTimeAgo } from '../sandbox.js';
+import i18n from '../i18n/index.js';
 
 /**
  * Custom hook for multi-terminal sandbox management
@@ -151,7 +152,7 @@ export const useSandbox = ({ addLog }) => {
     if (!tag || tag.trim() === '') {
       addLog({
         type: 'error',
-        content: '请输入终端标识（tag）',
+        content: i18n.t('errors.terminalTagRequired'),
         status: 'danger',
       });
       return null;
@@ -179,7 +180,7 @@ export const useSandbox = ({ addLog }) => {
 
       addLog({
         type: 'container',
-        content: `终端已创建: ${info.tag} (${info.image})`,
+        content: i18n.t('success.terminalCreated', { tag: info.tag, image: info.image }),
         status: 'success',
       });
 
@@ -213,7 +214,7 @@ export const useSandbox = ({ addLog }) => {
     } catch (error) {
       addLog({
         type: 'error',
-        content: `创建终端失败: ${error.message}`,
+        content: i18n.t('errors.createTerminalFailed', { message: error.message }),
         status: 'danger',
       });
       return null;
@@ -252,7 +253,7 @@ export const useSandbox = ({ addLog }) => {
         // Lock lost, clear state
         addLog({
           type: 'error',
-          content: `终端 ${tag} 的锁已丢失`,
+          content: i18n.t('errors.terminalLockLost', { tag }),
           status: 'danger',
         });
       }
@@ -267,7 +268,7 @@ export const useSandbox = ({ addLog }) => {
     if (!terminal) {
       addLog({
         type: 'error',
-        content: `终端 '${tag}' 不存在`,
+        content: i18n.t('errors.terminalNotFound', { tag }),
         status: 'danger',
       });
       return;
@@ -279,7 +280,7 @@ export const useSandbox = ({ addLog }) => {
       if (!lockResult.success) {
         addLog({
           type: 'error',
-          content: `无法选中终端: ${lockResult.message}`,
+          content: i18n.t('errors.cannotSelectTerminal', { message: lockResult.message }),
           status: 'danger',
         });
         return;
@@ -287,7 +288,7 @@ export const useSandbox = ({ addLog }) => {
     } catch (error) {
       addLog({
         type: 'error',
-        content: `获取终端锁失败: ${error.message}`,
+        content: i18n.t('errors.getLockFailed', { message: error.message }),
         status: 'danger',
       });
       return;
@@ -318,7 +319,7 @@ export const useSandbox = ({ addLog }) => {
 
     addLog({
       type: 'container',
-      content: `已切换到终端: ${tag}`,
+      content: i18n.t('success.switchedToTerminal', { tag }),
       status: 'normal',
     });
 
@@ -339,7 +340,7 @@ export const useSandbox = ({ addLog }) => {
 
       addLog({
         type: 'container',
-        content: `终端已销毁: ${tag}`,
+        content: i18n.t('success.terminalDestroyed', { tag }),
         status: 'warning',
       });
 
@@ -356,7 +357,7 @@ export const useSandbox = ({ addLog }) => {
     } catch (error) {
       addLog({
         type: 'error',
-        content: `销毁终端失败: ${error.message}`,
+        content: i18n.t('errors.destroyTerminalFailed', { message: error.message }),
         status: 'danger',
       });
     }
@@ -369,7 +370,7 @@ export const useSandbox = ({ addLog }) => {
 
       addLog({
         type: 'container',
-        content: `已清理: ${name} (释放 ${formatBytes(result.freed_bytes)})`,
+        content: i18n.t('success.cleanupCompleted', { name, size: formatBytes(result.freed_bytes) }),
         status: 'success',
       });
 
@@ -377,7 +378,7 @@ export const useSandbox = ({ addLog }) => {
     } catch (error) {
       addLog({
         type: 'error',
-        content: `清理失败: ${error.message}`,
+        content: i18n.t('errors.cleanupFailed', { message: error.message }),
         status: 'danger',
       });
     }
@@ -390,7 +391,7 @@ export const useSandbox = ({ addLog }) => {
 
       addLog({
         type: 'container',
-        content: `已清理 ${result.cleaned_count} 个终端 (释放 ${formatBytes(result.freed_bytes)})`,
+        content: i18n.t('success.bulkCleanupCompleted', { count: result.cleaned_count, size: formatBytes(result.freed_bytes) }),
         status: 'success',
       });
 
@@ -409,7 +410,7 @@ export const useSandbox = ({ addLog }) => {
     } catch (error) {
       addLog({
         type: 'error',
-        content: `清理失败: ${error.message}`,
+        content: i18n.t('errors.cleanupFailed', { message: error.message }),
         status: 'danger',
       });
     }
@@ -446,21 +447,21 @@ export const useSandbox = ({ addLog }) => {
         });
 
         if (!response.ok) {
-          throw new Error(`上传失败: ${response.status}`);
+          throw new Error(i18n.t('errors.uploadFailed', { status: response.status }));
         }
 
         setSandboxFiles(prev => [...prev, { name: file.name, path, size: file.size }]);
 
         addLog({
           type: 'data',
-          content: `文件已上传到沙箱: ${path}`,
+          content: i18n.t('success.fileUploaded', { path }),
           status: 'normal'
         });
       }
     } catch (error) {
       addLog({
         type: 'error',
-        content: `文件上传失败: ${error.message}`,
+        content: i18n.t('errors.fileUploadFailed', { message: error.message }),
         status: 'danger'
       });
     } finally {
@@ -476,13 +477,13 @@ export const useSandbox = ({ addLog }) => {
       setSandboxFiles(prev => prev.filter(f => f.path !== path));
       addLog({
         type: 'toast_tester',
-        content: `删除文件: ${path}`,
+        content: i18n.t('success.fileDeleted', { path }),
         status: 'success'
       });
     } catch (error) {
       addLog({
         type: 'error',
-        content: `删除失败: ${error.message}`,
+        content: i18n.t('errors.fileDeleteFailed', { message: error.message }),
         status: 'danger'
       });
     }
@@ -504,13 +505,13 @@ export const useSandbox = ({ addLog }) => {
         }]);
         addLog({
           type: 'data',
-          content: `预置文件: ${path}`,
+          content: i18n.t('success.presetFile', { path }),
           status: 'normal'
         });
       } catch (error) {
         addLog({
           type: 'error',
-          content: `预置文件失败 ${path}: ${error.message}`,
+          content: i18n.t('errors.presetFileFailed', { path, message: error.message }),
           status: 'danger'
         });
       }
@@ -551,7 +552,7 @@ export const useSandbox = ({ addLog }) => {
       }
       setSandboxFiles(files);
     } catch (error) {
-      console.error('刷新文件列表失败:', error);
+      console.error('Failed to refresh file list:', error);
     }
   };
 
@@ -562,7 +563,7 @@ export const useSandbox = ({ addLog }) => {
     try {
       const result = await sandboxClient.readFile(filePath);
       if (!result.success) {
-        throw new Error(result.error || '读取失败');
+        throw new Error(result.error || 'Read failed');
       }
 
       const content = result.result;
@@ -578,13 +579,13 @@ export const useSandbox = ({ addLog }) => {
 
       addLog({
         type: 'data',
-        content: `已下载: ${fileName}`,
+        content: i18n.t('success.fileDownloaded', { name: fileName }),
         status: 'normal'
       });
     } catch (error) {
       addLog({
         type: 'error',
-        content: `下载失败: ${error.message}`,
+        content: i18n.t('errors.downloadFailed', { message: error.message }),
         status: 'danger'
       });
     }
@@ -597,7 +598,7 @@ export const useSandbox = ({ addLog }) => {
     setToolResult(null);
     addLog({
       type: 'tool',
-      content: `执行命令: ${toolCommand}`,
+      content: i18n.t('messages.executingCommand', { command: toolCommand }),
       status: 'normal',
     });
 
@@ -609,20 +610,20 @@ export const useSandbox = ({ addLog }) => {
         const output = result.result;
         addLog({
           type: 'tool',
-          content: `命令完成 (exit: ${output.exit_code})`,
+          content: i18n.t('messages.commandCompleted', { code: output.exit_code }),
           status: output.exit_code === 0 ? 'success' : 'warning',
         });
       } else {
         addLog({
           type: 'error',
-          content: `命令失败: ${result.error}`,
+          content: i18n.t('errors.commandFailed', { error: result.error }),
           status: 'danger',
         });
       }
     } catch (error) {
       addLog({
         type: 'error',
-        content: `执行错误: ${error.message}`,
+        content: i18n.t('errors.executionError', { message: error.message }),
         status: 'danger',
       });
     }
@@ -733,7 +734,7 @@ export const useSandbox = ({ addLog }) => {
     if (!tag) {
       addLog({
         type: 'error',
-        content: '没有活跃的终端',
+        content: i18n.t('errors.noActiveTerminal'),
         status: 'danger',
       });
       return;
@@ -806,7 +807,7 @@ export const useSandbox = ({ addLog }) => {
         if (error.message !== '已取消') {
           addLog({
             type: 'error',
-            content: `上传失败 ${file.name}: ${error.message}`,
+            content: i18n.t('errors.fileUploadFailed', { message: `${file.name}: ${error.message}` }),
             status: 'danger',
           });
         }
@@ -818,7 +819,7 @@ export const useSandbox = ({ addLog }) => {
     // 上传完成提示
     addLog({
       type: 'toast_tester',
-      content: `上传 ${files.length} 个文件到 ${basePath}`,
+      content: i18n.t('success.filesUploaded', { count: files.length, path: basePath }),
       status: 'success',
     });
 
@@ -838,7 +839,7 @@ export const useSandbox = ({ addLog }) => {
     if (!tag) {
       addLog({
         type: 'error',
-        content: '没有活跃的终端',
+        content: i18n.t('errors.noActiveTerminal'),
         status: 'danger',
       });
       return;
@@ -872,7 +873,7 @@ export const useSandbox = ({ addLog }) => {
 
       addLog({
         type: 'toast_tester',
-        content: `下载文件: ${downloadName}`,
+        content: i18n.t('success.fileDownloaded', { name: downloadName }),
         status: 'success',
       });
 
@@ -880,7 +881,7 @@ export const useSandbox = ({ addLog }) => {
       if (error.message !== '已取消') {
         addLog({
           type: 'error',
-          content: `下载失败: ${error.message}`,
+          content: i18n.t('errors.downloadFailed', { message: error.message }),
           status: 'danger',
         });
       }
@@ -919,7 +920,7 @@ export const useSandbox = ({ addLog }) => {
         // 处理文件变化事件
         if (event.type === 'file_change') {
           // 显示 Toast 通知（world - 客观环境变化，无法追踪来源）
-          const eventName = { 'CREATE': '新建', 'DELETE': '删除', 'MODIFY': '修改', 'MOVE': '移动' }[event.event] || event.event;
+          const eventName = { 'CREATE': 'CREATE', 'DELETE': 'DELETE', 'MODIFY': 'MODIFY', 'MOVE': 'MOVE' }[event.event] || event.event;
           const fileName = event.path.split('/').pop();
           addLog({
             type: 'toast_world',
@@ -941,7 +942,7 @@ export const useSandbox = ({ addLog }) => {
           // 批量事件摘要（world - 客观环境变化）
           addLog({
             type: 'toast_world',
-            content: `${event.count} 个文件变化`,
+            content: i18n.t('messages.fileChanges', { count: event.count }),
             status: 'normal',
           });
 

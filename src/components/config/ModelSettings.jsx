@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../../config.js';
 import Section from './Section.jsx';
 
@@ -19,10 +20,11 @@ export default function ModelSettings({
   currentScenario,
   isEditingSystemPrompt, setIsEditingSystemPrompt,
 }) {
+  const { t } = useTranslation();
   const sysPromptModified = customSystemPrompt !== (currentScenario?.systemPrompt ?? '');
 
   return (
-    <Section title="模型配置">
+    <Section title={t('configPage.modelConfig')}>
       {/* Row 1: all params inline */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* Provider */}
@@ -33,7 +35,7 @@ export default function ModelSettings({
             disabled={isDemo}
             className="bg-surface-raised text-white text-xs px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-blue-500 disabled:opacity-50"
           >
-            <option value="">默认</option>
+            <option value="">{t('labels.default')}</option>
             {providers.map(p => (
               <option key={p.id} value={p.id}>{p.provider_name}</option>
             ))}
@@ -96,7 +98,7 @@ export default function ModelSettings({
             disabled={isDemo}
             className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
           />
-          思考
+          {t('configPage.thinking')}
         </label>
         {thinkingEnabled && (
           <input
@@ -119,7 +121,7 @@ export default function ModelSettings({
               dialogMode === 'single' ? 'bg-surface-hover text-white' : 'text-on-muted hover:text-on-canvas'
             } ${(conversationMode !== 'idle' || isDemo) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            单轮
+            {t('configPage.singleRound')}
           </button>
           <button
             onClick={() => setDialogMode('multi')}
@@ -128,7 +130,7 @@ export default function ModelSettings({
               dialogMode === 'multi' ? 'bg-blue-600 text-white' : 'text-on-muted hover:text-on-canvas'
             } ${(conversationMode !== 'idle' || isDemo) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            多轮
+            {t('configPage.multiRound')}
           </button>
         </div>
 
@@ -137,7 +139,7 @@ export default function ModelSettings({
           <button
             onClick={() => setProviderSettingsOpen(true)}
             className="ml-auto text-on-muted hover:text-on-canvas text-sm px-1"
-            title="LLM 供应商配置"
+            title={t('configPage.llmProviderConfig')}
           >&#9881;</button>
         )}
       </div>
@@ -146,23 +148,23 @@ export default function ModelSettings({
       <div className="mt-2 border border-edge-strong rounded">
         <div className="flex items-center justify-between px-2 py-1 bg-surface-raised/30">
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-on-muted">系统提示词</span>
-            {sysPromptModified && <span className="text-yellow-400 text-[10px]">(已修改)</span>}
+            <span className="text-on-muted">{t('configPage.systemPrompt')}</span>
+            {sysPromptModified && <span className="text-yellow-400 text-[10px]">({t('configPage.modified')})</span>}
           </div>
           <div className="flex items-center gap-1">
             {isEditingSystemPrompt ? (
               <>
                 <button onClick={() => setIsEditingSystemPrompt(false)}
-                  className="px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-500 rounded transition">保存</button>
+                  className="px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-500 rounded transition">{t('buttons.save')}</button>
                 <button onClick={() => { setCustomSystemPrompt(currentScenario?.systemPrompt || ''); setIsEditingSystemPrompt(false); }}
-                  className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition">取消</button>
+                  className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition">{t('buttons.cancel')}</button>
               </>
             ) : (
               <>
                 <button onClick={() => setIsEditingSystemPrompt(true)}
-                  className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition">编辑</button>
+                  className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition">{t('buttons.edit')}</button>
                 <button onClick={() => setCustomSystemPrompt(currentScenario?.systemPrompt || '')}
-                  className="px-2 py-0.5 text-[10px] bg-surface-raised hover:bg-surface-hover rounded transition">重置</button>
+                  className="px-2 py-0.5 text-[10px] bg-surface-raised hover:bg-surface-hover rounded transition">{t('configPage.reset')}</button>
               </>
             )}
           </div>
@@ -172,11 +174,11 @@ export default function ModelSettings({
             value={customSystemPrompt}
             onChange={(e) => setCustomSystemPrompt(e.target.value)}
             className="w-full min-h-[6rem] max-h-[12rem] text-xs bg-surface-muted/50 p-2 border-t border-edge-strong text-cyan-300 font-mono resize-y focus:outline-none custom-scroll"
-            placeholder="输入系统提示词..."
+            placeholder={t('configPage.enterSystemPrompt')}
           />
         ) : (
           <pre className="text-xs bg-surface-raised/30 p-2 border-t border-edge-strong overflow-auto max-h-[8rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
-            {customSystemPrompt || '(无系统提示词)'}
+            {customSystemPrompt || t('configPage.noSystemPrompt')}
           </pre>
         )}
       </div>

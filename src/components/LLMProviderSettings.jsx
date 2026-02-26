@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { authFetch } from '../auth';
 import UsagePanel from './UsagePanel';
 
@@ -11,6 +12,7 @@ const PROVIDER_PRESETS = [
 ];
 
 export default function LLMProviderSettings({ open, onClose }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('providers');
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -75,7 +77,7 @@ export default function LLMProviderSettings({ open, onClose }) {
   };
 
   const deleteProvider = async (id) => {
-    if (!confirm('确定删除此供应商？')) return;
+    if (!confirm(t('errors.deleteProviderConfirm'))) return;
     await authFetch(`/api/llm/providers/${id}`, { method: 'DELETE' });
     loadProviders();
   };
@@ -106,7 +108,7 @@ export default function LLMProviderSettings({ open, onClose }) {
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-canvas border border-edge rounded-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
         <div className="p-5 border-b border-edge flex items-center justify-between">
-          <h2 className="text-lg font-bold text-on-canvas">LLM 设置</h2>
+          <h2 className="text-lg font-bold text-on-canvas">{t('llmProvider.title')}</h2>
           <button onClick={onClose} className="text-on-muted hover:text-on-canvas text-xl">&times;</button>
         </div>
 
@@ -119,7 +121,7 @@ export default function LLMProviderSettings({ open, onClose }) {
                 ? 'text-blue-400 border-b-2 border-blue-400'
                 : 'text-on-muted hover:text-on-surface'
             }`}
-          >供应商配置</button>
+          >{t('llmProvider.providersTab')}</button>
           <button
             onClick={() => setActiveTab('usage')}
             className={`px-5 py-2.5 text-sm font-medium ${
@@ -127,7 +129,7 @@ export default function LLMProviderSettings({ open, onClose }) {
                 ? 'text-blue-400 border-b-2 border-blue-400'
                 : 'text-on-muted hover:text-on-surface'
             }`}
-          >用量统计</button>
+          >{t('llmProvider.usageTab')}</button>
         </div>
 
         {activeTab === 'usage' ? (
@@ -139,14 +141,14 @@ export default function LLMProviderSettings({ open, onClose }) {
           {/* Existing providers */}
           {providers.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm text-on-muted font-medium">已配置的供应商</h3>
+              <h3 className="text-sm text-on-muted font-medium">{t('llmProvider.configured')}</h3>
               {providers.map(p => (
                 <div key={p.id} className="flex items-center justify-between bg-surface rounded-lg px-4 py-2">
                   <div>
                     <span className="text-white text-sm font-medium">{p.provider_name}</span>
-                    {p.is_default && <span className="ml-2 text-[10px] bg-blue-600 px-1.5 py-0.5 rounded text-white">默认</span>}
-                    <div className="text-on-muted text-xs">{p.base_url} | Key: {p.api_key_masked}</div>
-                    <div className="text-on-dim text-xs">模型: {p.models.join(', ') || '未配置'}</div>
+                    {p.is_default && <span className="ml-2 text-[10px] bg-blue-600 px-1.5 py-0.5 rounded text-white">{t('labels.default')}</span>}
+                    <div className="text-on-muted text-xs">{p.base_url} | {t('llmProvider.apiKeyField')} {p.api_key_masked}</div>
+                    <div className="text-on-dim text-xs">{t('llmProvider.modelsField')} {p.models.join(', ') || t('llmProvider.notConfigured')}</div>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -161,8 +163,8 @@ export default function LLMProviderSettings({ open, onClose }) {
                         });
                       }}
                       className="text-xs text-blue-400 hover:text-blue-300"
-                    >编辑</button>
-                    <button onClick={() => deleteProvider(p.id)} className="text-xs text-red-400 hover:text-red-300">删除</button>
+                    >{t('buttons.edit')}</button>
+                    <button onClick={() => deleteProvider(p.id)} className="text-xs text-red-400 hover:text-red-300">{t('buttons.delete')}</button>
                   </div>
                 </div>
               ))}
@@ -172,7 +174,7 @@ export default function LLMProviderSettings({ open, onClose }) {
           {/* Form */}
           <div className="border border-edge rounded-lg p-4 space-y-3">
             <h3 className="text-sm text-on-surface font-medium">
-              {editingId ? '编辑供应商' : '添加供应商'}
+              {editingId ? t('llmProvider.editProvider') : t('llmProvider.addProvider')}
             </h3>
 
             {/* Presets */}
@@ -188,7 +190,7 @@ export default function LLMProviderSettings({ open, onClose }) {
 
             <div className="grid grid-cols-2 gap-3">
               <input
-                placeholder="供应商名称"
+                placeholder={t('llmProvider.providerName')}
                 value={form.provider_name}
                 onChange={e => setForm({ ...form, provider_name: e.target.value })}
                 className="px-3 py-1.5 bg-surface border border-edge-strong rounded text-sm text-on-canvas"
@@ -202,13 +204,13 @@ export default function LLMProviderSettings({ open, onClose }) {
             </div>
             <input
               type="password"
-              placeholder={editingId ? "API Key（留空不修改）" : "API Key"}
+              placeholder={editingId ? t('llmProvider.apiKeyEdit') : t('llmProvider.apiKey')}
               value={form.api_key}
               onChange={e => setForm({ ...form, api_key: e.target.value })}
               className="w-full px-3 py-1.5 bg-surface border border-edge-strong rounded text-sm text-on-canvas"
             />
             <input
-              placeholder="模型列表（逗号分隔）"
+              placeholder={t('llmProvider.models')}
               value={form.models}
               onChange={e => setForm({ ...form, models: e.target.value })}
               className="w-full px-3 py-1.5 bg-surface border border-edge-strong rounded text-sm text-on-canvas"
@@ -219,7 +221,7 @@ export default function LLMProviderSettings({ open, onClose }) {
                 checked={form.is_default}
                 onChange={e => setForm({ ...form, is_default: e.target.checked })}
               />
-              设为默认供应商
+              {t('llmProvider.setAsDefault')}
             </label>
 
             <div className="flex gap-2">
@@ -227,15 +229,15 @@ export default function LLMProviderSettings({ open, onClose }) {
                 onClick={saveProvider}
                 disabled={!form.provider_name || !form.base_url || (!editingId && !form.api_key)}
                 className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-surface-hover text-white text-sm rounded"
-              >{editingId ? '更新' : '添加'}</button>
+              >{editingId ? t('buttons.update') : t('buttons.add')}</button>
               {editingId && (
                 <button onClick={resetForm} className="px-4 py-1.5 bg-surface-raised text-on-surface text-sm rounded">
-                  取消
+                  {t('buttons.cancel')}
                 </button>
               )}
               {editingId && (
                 <button onClick={testConnection} className="px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-sm rounded">
-                  {testStatus === 'testing' ? '测试中...' : testStatus === 'success' ? '连接成功' : testStatus === 'error' ? '连接失败' : '测试连接'}
+                  {testStatus === 'testing' ? t('buttons.testingConnection') : testStatus === 'success' ? t('buttons.connectionSuccess') : testStatus === 'error' ? t('buttons.connectionFailed') : t('buttons.testConnection')}
                 </button>
               )}
             </div>

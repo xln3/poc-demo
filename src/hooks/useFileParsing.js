@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { CONFIG } from '../config';
 import { sandboxClient, ToolType } from '../sandbox.js';
 import { TerminalImage } from './useSandbox.js';
+import i18n from '../i18n/index.js';
 
 /**
  * File parsing logic extracted from App.jsx.
@@ -37,7 +38,7 @@ export function useFileParsing(deps) {
     });
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`MCP API错误 (${response.status}): ${errorText}`);
+      throw new Error(i18n.t('errors.mcpApiError', { status: response.status, text: errorText }));
     }
 
     const result = await response.json();
@@ -47,7 +48,7 @@ export function useFileParsing(deps) {
   const parseInSandbox = useCallback(async (file, parsers, abortController, containerInfoOverride = null) => {
     const activeContainerInfo = containerInfoOverride || d.current.containerInfo;
     if (!activeContainerInfo) {
-      throw new Error('沙箱容器未初始化');
+      throw new Error(i18n.t('errors.sandboxContainerNotInit'));
     }
 
     // Upload file to sandbox
@@ -81,7 +82,7 @@ export function useFileParsing(deps) {
 
     if (!uploadResp.ok) {
       const errText = await uploadResp.text();
-      throw new Error(`文件上传失败: ${errText}`);
+      throw new Error(i18n.t('errors.fileUploadFailed', { message: errText }));
     }
 
     // Run MCP parser in container
@@ -132,17 +133,17 @@ print('\\\\n'.join(all_text))
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`沙箱解析失败: ${errText}`);
+      throw new Error(i18n.t('errors.sandboxParsingFailed', { text: errText }));
     }
 
     const result = await response.json();
     if (!result.success) {
-      throw new Error(`解析命令失败: ${result.error || JSON.stringify(result.result)}`);
+      throw new Error(i18n.t('errors.parsingCommandFailed', { error: result.error || JSON.stringify(result.result) }));
     }
 
     const cmdResult = result.result;
     if (cmdResult.exit_code !== 0) {
-      throw new Error(`解析命令执行失败 (exit_code=${cmdResult.exit_code}): ${cmdResult.output}`);
+      throw new Error(i18n.t('errors.parsingExecutionFailed', { code: cmdResult.exit_code, output: cmdResult.output }));
     }
 
     return String(cmdResult.output || '').trim();
@@ -159,7 +160,7 @@ print('\\\\n'.join(all_text))
 
     const selectedParsers = mcpParsers[fileType] || [];
     if (selectedParsers.length === 0) {
-      throw new Error(`未配置${fileType}解析器`);
+      throw new Error(i18n.t('errors.parserNotConfigured', { type: fileType }));
     }
 
     const config = CONFIG.mcp.parsers[fileType];
@@ -176,11 +177,11 @@ print('\\\\n'.join(all_text))
       if (!isFileParserReady()) {
         setParsingProgress({
           filename: file.name,
-          parser: '准备中...',
+          parser: i18n.t('messages.preparing'),
           startTime,
           elapsedTime: 0,
           estimatedTime: 10000,
-          runLocation: '启动 File Parser 容器...'
+          runLocation: i18n.t('messages.startingFileParser')
         });
 
         if (containerInfo) {
@@ -204,12 +205,12 @@ print('\\\\n'.join(all_text))
           });
           setLogs(prev => [...prev, {
             type: 'container',
-            content: `MCP-tools 容器已自动启动: ${info.container_id}`,
+            content: i18n.t('success.terminalCreated', { tag: 'MCP-tools', image: info.container_id }),
             status: 'success',
           }]);
         } catch (error) {
           setSandboxStatus('error');
-          throw new Error(`自动启动 MCP-tools 容器失败: ${error.message}`);
+          throw new Error(i18n.t('errors.autoStartContainerFailed', { message: error.message }));
         }
       }
       useSandboxMode = true;
@@ -329,7 +330,7 @@ print('\\\\n'.join(all_text))
           });
 
           if (!response.ok) {
-            throw new Error(`解析失败: ${response.status}`);
+            throw new Error(i18n.t('errors.parsingFailed', { status: response.status }));
           }
 
           const result = await response.json();
@@ -337,10 +338,10 @@ print('\\\\n'.join(all_text))
           parsedWith = selectedParsers.join(', ');
 
         } catch (error) {
-          console.error('文件解析失败:', error);
+          console.error('File parsing failed:', error);
           parseError = error.message;
           content = await file.text();
-          parsedWith = 'fallback (原始文本)';
+          parsedWith = i18n.t('messages.fallbackRawText');
         } finally {
           if (progressTimer) clearInterval(progressTimer);
           setParsingProgress(null);

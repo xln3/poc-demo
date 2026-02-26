@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../../config.js';
 import Section from './Section.jsx';
 
@@ -18,6 +19,8 @@ export default function PromptConfig({
   dialogMode, setDialogMode, conversationMode,
   promptConfigCollapsed, setPromptConfigCollapsed,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="bg-surface rounded-lg border border-edge">
       {/* Collapse header */}
@@ -27,14 +30,14 @@ export default function PromptConfig({
           className="flex items-center gap-2 text-xs text-on-surface hover:text-on-canvas transition"
         >
           <span>{promptConfigCollapsed ? '▶' : '▼'}</span>
-          <span className="font-medium">模型配置</span>
+          <span className="font-medium">{t('configPage.modelConfig')}</span>
           {(customSystemPrompt !== currentScenario?.systemPrompt || customTestPayload !== currentAttack?.testPayload || payloadFiles.length > 0) && (
-            <span className="text-yellow-400">(已修改)</span>
+            <span className="text-yellow-400">({t('configPage.modified')})</span>
           )}
         </button>
         <div className="flex items-center gap-4 text-xs">
           {/* Thinking mode toggle */}
-          <label className="flex items-center gap-1.5 cursor-pointer" title="启用后，模型响应将包含思考过程">
+          <label className="flex items-center gap-1.5 cursor-pointer" title={t('configPage.thinkingModeHint')}>
             <input
               type="checkbox"
               checked={thinkingEnabled}
@@ -42,7 +45,7 @@ export default function PromptConfig({
               disabled={isDemo}
               className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
             />
-            <span className="text-on-muted">思考模式</span>
+            <span className="text-on-muted">{t('configPage.thinkingMode')}</span>
           </label>
           {thinkingEnabled && (
             <div className="flex items-center gap-1">
@@ -68,7 +71,7 @@ export default function PromptConfig({
                   : 'text-on-muted hover:text-on-canvas'
               } ${conversationMode !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              单轮
+              {t('configPage.singleRound')}
             </button>
             <button
               onClick={() => setDialogMode('multi')}
@@ -79,7 +82,7 @@ export default function PromptConfig({
                   : 'text-on-muted hover:text-on-canvas'
               } ${conversationMode !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              多轮
+              {t('configPage.multiRound')}
             </button>
           </div>
         </div>
@@ -93,7 +96,7 @@ export default function PromptConfig({
             <div className="bg-surface-muted/50 rounded border border-edge-strong flex flex-col">
               <div className="flex items-center justify-between p-2 border-b border-edge-strong">
                 <div className="flex items-center gap-2 flex-wrap text-xs">
-                  <span className="text-on-muted font-medium">系统提示词</span>
+                  <span className="text-on-muted font-medium">{t('configPage.systemPrompt')}</span>
                   {/* LLM params inline */}
                   <span className="text-on-dim">Temp</span>
                   <input
@@ -126,7 +129,7 @@ export default function PromptConfig({
                     }`}
                   />
                   {customSystemPrompt !== currentScenario?.systemPrompt && (
-                    <span className="text-yellow-400 text-[10px]">(改)</span>
+                    <span className="text-yellow-400 text-[10px]">({t('configPage.modifiedShort')})</span>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
@@ -136,7 +139,7 @@ export default function PromptConfig({
                         onClick={() => setIsEditingLlmConfig(false)}
                         className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
                       >
-                        保存
+                        {t('buttons.save')}
                       </button>
                       <button
                         onClick={() => {
@@ -148,7 +151,7 @@ export default function PromptConfig({
                         }}
                         className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded transition"
                       >
-                        取消
+                        {t('buttons.cancel')}
                       </button>
                     </>
                   ) : (
@@ -157,7 +160,7 @@ export default function PromptConfig({
                         onClick={() => setIsEditingLlmConfig(true)}
                         className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded transition"
                       >
-                        编辑
+                        {t('buttons.edit')}
                       </button>
                       <button
                         onClick={() => {
@@ -168,7 +171,7 @@ export default function PromptConfig({
                         }}
                         className="px-2 py-1 text-xs bg-surface-raised hover:bg-surface-hover rounded transition"
                       >
-                        重置
+                        {t('configPage.reset')}
                       </button>
                     </>
                   )}
@@ -180,11 +183,11 @@ export default function PromptConfig({
                     value={customSystemPrompt}
                     onChange={(e) => setCustomSystemPrompt(e.target.value)}
                     className="w-full h-full min-h-[8rem] max-h-[8rem] text-xs bg-surface-raised p-2 rounded border border-blue-500 text-cyan-300 font-mono resize-none focus:outline-none custom-scroll"
-                    placeholder="输入系统提示词..."
+                    placeholder={t('configPage.enterSystemPrompt')}
                   />
                 ) : (
                   <pre className="text-xs bg-surface-raised p-2 rounded overflow-auto max-h-[8rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
-                    {customSystemPrompt || '(无系统提示词)'}
+                    {customSystemPrompt || t('configPage.noSystemPrompt')}
                   </pre>
                 )}
               </div>
@@ -194,18 +197,18 @@ export default function PromptConfig({
             <div className="bg-surface-muted/50 rounded border border-edge-strong flex flex-col">
               <div className="flex items-center justify-between p-2 border-b border-edge-strong">
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-on-muted font-medium">用户提示词</span>
+                  <span className="text-on-muted font-medium">{t('configPage.userPrompt')}</span>
                   {(customTestPayload !== currentAttack?.testPayload || payloadFiles.length > 0) && (
-                    <span className="text-yellow-400 text-[10px]">(改)</span>
+                    <span className="text-yellow-400 text-[10px]">({t('configPage.modifiedShort')})</span>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
                   {isEditingPayload && (
                     <label
                       className="px-2 py-1 text-xs bg-surface-raised hover:bg-surface-hover rounded cursor-pointer transition"
-                      title="添加文件作为用户输入，文件内容将被解析后注入提示词"
+                      title={t('configPage.addFileHint')}
                     >
-                      添加文件
+                      {t('configPage.addFile')}
                       <input type="file" className="hidden" onChange={handleAddFile} multiple />
                     </label>
                   )}
@@ -215,7 +218,7 @@ export default function PromptConfig({
                         onClick={() => setIsEditingPayload(false)}
                         className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition"
                       >
-                        保存
+                        {t('buttons.save')}
                       </button>
                       <button
                         onClick={() => {
@@ -225,7 +228,7 @@ export default function PromptConfig({
                         }}
                         className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded transition"
                       >
-                        取消
+                        {t('buttons.cancel')}
                       </button>
                     </>
                   ) : (
@@ -234,7 +237,7 @@ export default function PromptConfig({
                         onClick={() => setIsEditingPayload(true)}
                         className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded transition"
                       >
-                        编辑
+                        {t('buttons.edit')}
                       </button>
                       <button
                         onClick={() => {
@@ -243,7 +246,7 @@ export default function PromptConfig({
                         }}
                         className="px-2 py-1 text-xs bg-surface-raised hover:bg-surface-hover rounded transition"
                       >
-                        重置
+                        {t('configPage.reset')}
                       </button>
                     </>
                   )}
@@ -273,11 +276,11 @@ export default function PromptConfig({
                     value={customTestPayload}
                     onChange={(e) => setCustomTestPayload(e.target.value)}
                     className="w-full h-full min-h-[8rem] max-h-[8rem] text-xs bg-surface-raised p-2 rounded border border-blue-500 text-orange-300 font-mono resize-none focus:outline-none custom-scroll break-all"
-                    placeholder="输入用户提示词..."
+                    placeholder={t('configPage.enterUserPrompt')}
                   />
                 ) : (
                   <pre className="text-xs bg-surface-raised p-2 rounded overflow-y-auto overflow-x-hidden max-h-[8rem] custom-scroll text-orange-300 whitespace-pre-wrap break-all">
-                    {getDisplayPayload() || '(无用户提示词)'}
+                    {getDisplayPayload() || t('configPage.noUserPrompt')}
                   </pre>
                 )}
               </div>

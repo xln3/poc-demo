@@ -37,7 +37,7 @@ export default function ToolCallCard({ event }) {
           )}
           {result && (
             <div>
-              <div className="text-[10px] text-on-dim mb-0.5">结果:</div>
+              <div className="text-[10px] text-on-dim mb-0.5">{t('interaction.result')}:</div>
               <pre className="bg-surface rounded p-1.5 text-[10px] text-on-muted overflow-x-auto font-mono max-h-40 overflow-y-auto">
                 {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
               </pre>

@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Reasoning/solver trace step display.
  */
 export default function ReasoningStep({ event }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const { label, content, stepIndex } = event.data;
 
@@ -15,7 +17,7 @@ export default function ReasoningStep({ event }) {
       >
         <span className="text-amber-400">💭</span>
         <span className="text-on-muted">
-          {label || `步骤 ${stepIndex ?? '?'}`}
+          {label || t('interaction.step', { index: stepIndex ?? '?' })}
         </span>
         <span className="text-on-dim ml-auto">{expanded ? '−' : '+'}</span>
       </button>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { ragClient } from '../../rag.js';
 
 /**
@@ -12,6 +13,8 @@ export default function RagConfig({
   handleRagDelete, handleRagClear, handleRagReset,
   ragQueryResults,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="bg-surface rounded-lg p-3 border border-amber-900/50">
       <div className="text-xs text-amber-400 flex items-center justify-between">
@@ -20,7 +23,7 @@ export default function RagConfig({
           className="flex items-center gap-2 hover:text-amber-300 transition"
         >
           <span>{ragConfigCollapsed ? '▶' : '▼'}</span>
-          <span>RAG 知识库配置</span>
+          <span>{t('configPage.ragKnowledgeConfig')}</span>
         </button>
         <div className="flex items-center gap-3">
           {/* Mode toggle */}
@@ -43,9 +46,9 @@ export default function RagConfig({
                   : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
               }`}
               disabled={!ragServiceAvailable}
-              title={ragServiceAvailable ? '使用真实 RAG 服务' : 'RAG 服务不可用，请启动后端'}
+              title={ragServiceAvailable ? t('configPage.useRealRag') : t('configPage.ragServiceUnavailable')}
             >
-              Real {!ragServiceAvailable && '(不可用)'}
+              Real {!ragServiceAvailable && `(${t('configPage.unavailable')})`}
             </button>
           </div>
         </div>
@@ -58,9 +61,9 @@ export default function RagConfig({
               {/* Left: display knowledge */}
               <div className="flex flex-col">
                 <div className="text-xs text-on-muted mb-1 flex items-center justify-between">
-                  <span>当前知识库</span>
+                  <span>{t('configPage.currentKnowledgeBase')}</span>
                   <span className="text-on-dim">
-                    {ragKnowledge ? `${ragKnowledge.split('\n').filter(l => l.trim()).length} 条` : '空'}
+                    {ragKnowledge ? t('configPage.entryCount', { count: ragKnowledge.split('\n').filter(l => l.trim()).length }) : t('configPage.empty')}
                   </span>
                 </div>
                 <div
@@ -70,26 +73,26 @@ export default function RagConfig({
                   {ragKnowledge ? (
                     <pre className="whitespace-pre-wrap">{ragKnowledge}</pre>
                   ) : (
-                    <span className="text-on-dim italic">暂无知识库内容，请在右侧编辑区添加</span>
+                    <span className="text-on-dim italic">{t('configPage.noKnowledgeBaseContent')}</span>
                   )}
                 </div>
               </div>
               {/* Right: edit knowledge */}
               <div className="flex flex-col">
                 <div className="text-xs text-on-muted mb-1 flex items-center justify-between">
-                  <span>编辑知识库</span>
+                  <span>{t('configPage.editKnowledgeBase')}</span>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setRagKnowledge(ragKnowledgeEdit)}
                       className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-[10px]"
                     >
-                      应用
+                      {t('buttons.apply')}
                     </button>
                     <button
                       onClick={() => setRagKnowledgeEdit(ragKnowledge)}
                       className="px-2 py-0.5 bg-surface-hover hover:bg-surface-hover rounded text-white text-[10px]"
                     >
-                      重置
+                      {t('configPage.reset')}
                     </button>
                     <button
                       onClick={() => {
@@ -98,14 +101,14 @@ export default function RagConfig({
                       }}
                       className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px]"
                     >
-                      清空
+                      {t('buttons.clear')}
                     </button>
                   </div>
                 </div>
                 <textarea
                   value={ragKnowledgeEdit}
                   onChange={(e) => setRagKnowledgeEdit(e.target.value)}
-                  placeholder={"每行输入一条知识条目，例如：\n- 用户张三的账号余额为 10000 元\n- 最新促销活动：满 1000 减 200\n- 公司内部通讯录：CEO 手机 138xxxx\n\n也可以输入恶意内容测试 RAG 投毒攻击"}
+                  placeholder={t('configPage.ragEditPlaceholder')}
                   className="flex-1 bg-surface-muted/50 rounded p-2 text-xs text-on-surface font-mono border border-edge-strong focus:border-amber-500 focus:outline-none resize-none"
                   style={{ maxHeight: '300px', minHeight: '120px' }}
                 />
@@ -117,22 +120,22 @@ export default function RagConfig({
               {/* Left: document list */}
               <div className="flex flex-col">
                 <div className="text-xs text-on-muted mb-1 flex items-center justify-between">
-                  <span>知识库文档</span>
+                  <span>{t('configPage.knowledgeBaseDocs')}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-on-dim">{ragDocuments.length} 个</span>
+                    <span className="text-on-dim">{ragDocuments.length}</span>
                     <button
                       onClick={handleRagReset}
                       className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-[10px]"
-                      title="重置为预置测试数据"
+                      title={t('configPage.resetToPreset')}
                     >
-                      重置
+                      {t('configPage.reset')}
                     </button>
                     <button
                       onClick={handleRagClear}
                       className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px]"
                       disabled={ragDocuments.length === 0}
                     >
-                      清空
+                      {t('buttons.clear')}
                     </button>
                   </div>
                 </div>
@@ -150,12 +153,12 @@ export default function RagConfig({
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <span>{ragClient.getDocumentTypeIcon(doc.document_type)}</span>
                             <span className="truncate">{doc.source_name}</span>
-                            <span className="text-on-dim text-[10px]">({doc.chunk_count} 块)</span>
+                            <span className="text-on-dim text-[10px]">({doc.chunk_count} {t('configPage.chunks')})</span>
                           </div>
                           <button
                             onClick={() => handleRagDelete(doc.document_id)}
                             className="text-red-400 hover:text-red-300 px-1"
-                            title="删除"
+                            title={t('buttons.delete')}
                           >
                             x
                           </button>
@@ -163,13 +166,13 @@ export default function RagConfig({
                       ))}
                     </div>
                   ) : (
-                    <span className="text-on-dim italic">暂无文档，请上传文件</span>
+                    <span className="text-on-dim italic">{t('configPage.noDocsUploadHint')}</span>
                   )}
                 </div>
               </div>
               {/* Right: upload & search results */}
               <div className="flex flex-col gap-2">
-                <div className="text-xs text-on-muted mb-1">上传文档</div>
+                <div className="text-xs text-on-muted mb-1">{t('configPage.uploadDocument')}</div>
                 <label
                   className={`flex-1 flex flex-col items-center justify-center p-4 bg-surface-muted/50 rounded border-2 border-dashed cursor-pointer transition ${
                     ragUploading
@@ -188,14 +191,14 @@ export default function RagConfig({
                   {ragUploading ? (
                     <>
                       <div className="animate-spin w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full mb-2" />
-                      <span className="text-amber-400">上传中...</span>
+                      <span className="text-amber-400">{t('configPage.uploadingEllipsis')}</span>
                     </>
                   ) : (
                     <>
                       <span className="text-2xl mb-1">📤</span>
-                      <span className="text-on-muted">拖拽上传</span>
+                      <span className="text-on-muted">{t('configPage.dragToUpload')}</span>
                       <span className="text-on-dim text-[10px] mt-1">
-                        支持 PDF, DOCX, XLSX, TXT, 图片
+                        {t('configPage.supportedFormats')}
                       </span>
                     </>
                   )}
@@ -203,7 +206,7 @@ export default function RagConfig({
                 {/* Recent search results */}
                 {ragQueryResults && ragQueryResults.results && ragQueryResults.results.length > 0 && (
                   <div className="mt-2">
-                    <div className="text-xs text-on-muted mb-1">最近检索结果</div>
+                    <div className="text-xs text-on-muted mb-1">{t('configPage.recentSearchResults')}</div>
                     <div className="bg-surface-muted/50 rounded p-2 text-xs space-y-1 max-h-32 overflow-auto">
                       {ragQueryResults.results.slice(0, 3).map((result, i) => (
                         <div key={i} className="flex items-start gap-2 text-on-surface">
@@ -223,8 +226,8 @@ export default function RagConfig({
       )}
       <div className="mt-2 text-[10px] text-on-dim">
         {ragMode === 'mock'
-          ? 'Mock 模式：手动输入内容作为检索结果注入。可用于测试知识库投毒、数据泄露等攻击场景。'
-          : 'Real 模式：使用真实向量检索。上传文档后，系统将自动分块、嵌入，并在测试时执行语义检索。'
+          ? t('configPage.ragMockDescription')
+          : t('configPage.ragRealDescription')
         }
       </div>
     </div>

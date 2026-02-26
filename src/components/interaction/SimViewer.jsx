@@ -6,6 +6,7 @@
  * - Recorded: <video> playback of MP4 synced with interaction timeline
  */
 import { useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function SimViewer({
   sessionId,
@@ -15,6 +16,7 @@ export default function SimViewer({
   isConnected = false,
   wsRef,                // ref to WebSocket instance (from useSimulator)
 }) {
+  const { t } = useTranslation();
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
 
@@ -53,7 +55,7 @@ export default function SimViewer({
   if (!sessionId && !videoUrl) {
     return (
       <div className="flex items-center justify-center h-full text-on-dim text-sm">
-        未启动仿真环境
+        {t('interaction.simNotStarted')}
       </div>
     );
   }
@@ -63,7 +65,7 @@ export default function SimViewer({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-surface border-b border-edge">
         <span className="text-xs text-on-surface">
-          仿真画面
+          {t('interaction.simView')}
           {mode === 'live' && (
             <span className={`ml-2 inline-block w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
           )}

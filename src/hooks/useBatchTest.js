@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { CONFIG, FIVE_LEVEL_RISK, calculateRiskStats } from '../config';
 import { saveTestResult } from '../testResultsApi.js';
+import i18n from '../i18n/index.js';
 
 /**
  * Batch test execution hook.
@@ -95,16 +96,16 @@ export function useBatchTest(deps) {
     // Logs
     const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
     const initialLogs = [
-      { type: 'model', content: `模型: ${modelName}`, status: 'normal' },
-      { type: 'info', content: `📋 批量测试 ${index + 1}/${cases.length}: ${caseData.name || attack.attackName || '未命名'}`, status: 'normal' },
+      { type: 'model', content: i18n.t('labels.model', { name: modelName }), status: 'normal' },
+      { type: 'info', content: i18n.t('batchTest.caseLabel', { index: index + 1, total: cases.length, name: caseData.name || attack.attackName || i18n.t('batchTest.unnamed') }), status: 'normal' },
     ];
 
     if (actualPayload !== displayPayload) {
-      initialLogs.push({ type: 'alert', content: `⚠️ Payload 包含隐藏内容`, status: 'warning' });
+      initialLogs.push({ type: 'alert', content: i18n.t('errors.payloadContainsHidden'), status: 'warning' });
     }
     initialLogs.push({
       type: 'data',
-      content: `发送 Payload (${actualPayload.length} 字符)`,
+      content: i18n.t('labels.payloadSent', { count: actualPayload.length }),
       status: 'normal',
       expandable: true,
       fullContent: actualPayload
@@ -120,8 +121,8 @@ export function useBatchTest(deps) {
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
       type: 'info',
       timestamp: Date.now(),
-      summary: `开始测试: ${caseData.name || attack.attackName || '未命名'}`,
-      fullContent: `批量测试 ${index + 1}/${cases.length}\n场景: ${attack.scenarioName || '未知'}\n攻击类型: ${attack.attackType || '未知'}`,
+      summary: i18n.t('messages.startTestCase', { name: caseData.name || attack.attackName || i18n.t('batchTest.unnamed') }),
+      fullContent: i18n.t('messages.batchTestDetail', { index: index + 1, total: cases.length, scenario: attack.scenarioName || i18n.t('labels.unknown'), type: attack.attackType || i18n.t('labels.unknown') }),
       meta: { caseId: caseData.id, index },
       annotations: []
     });
@@ -267,16 +268,16 @@ export function useBatchTest(deps) {
 
       setLogs(prev => [
         ...prev,
-        { type: 'data', content: `收到响应 (${responseContent.length} 字符)`, status: 'normal', expandable: true, fullContent: responseContent },
-        { type: 'timing', content: `⏱️ API 耗时: ${apiTime}ms`, status: 'normal' },
-        { type: 'judge', content: `正在使用 ${judgeConfig.model} 评判攻击结果...`, status: 'normal' }
+        { type: 'data', content: i18n.t('labels.responseReceived', { count: responseContent.length }), status: 'normal', expandable: true, fullContent: responseContent },
+        { type: 'timing', content: i18n.t('labels.apiTiming', { time: apiTime }), status: 'normal' },
+        { type: 'judge', content: i18n.t('errors.judgingResults', { model: judgeConfig.model }), status: 'normal' }
       ]);
 
       addTestRecord({
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         type: 'response',
         timestamp: Date.now(),
-        summary: `回答：${responseContent.slice(0, 30).replace(/\n/g, ' ')}...`,
+        summary: i18n.t('labels.responseSummary', { text: responseContent.slice(0, 30).replace(/\n/g, ' ') }),
         fullContent: responseContent,
         meta: { model: selectedModel, apiTime, chars: responseContent.length },
         annotations: []
@@ -308,7 +309,7 @@ export function useBatchTest(deps) {
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         type: 'judge',
         timestamp: Date.now(),
-        summary: `评判：${judgeStatusText}`,
+        summary: i18n.t('labels.judgmentSummary', { status: judgeStatusText, reason: '' }),
         fullContent: judgment.reason || '',
         meta: { model: judgeConfig.model, riskLevel, reason: judgment.reason },
         annotations: []
@@ -317,32 +318,32 @@ export function useBatchTest(deps) {
       // Judgment logs
       if (riskLevel === 'high') {
         setLogs(prev => [...prev,
-          { type: 'success', content: `🔴 高风险！${judgment.reason}`, status: 'danger' }
+          { type: 'success', content: i18n.t('risk.highResult', { reason: judgment.reason }), status: 'danger' }
         ]);
         setMessages(prev => prev.map((msg, idx) =>
           idx === prev.length - 1 ? { ...msg, isDangerous: true } : msg
         ));
       } else if (riskLevel === 'medium') {
         setLogs(prev => [...prev,
-          { type: 'warning', content: `🟠 中风险：${judgment.reason}`, status: 'warning' }
+          { type: 'warning', content: i18n.t('risk.mediumResult', { reason: judgment.reason }), status: 'warning' }
         ]);
       } else if (riskLevel === 'low') {
         setLogs(prev => [...prev,
-          { type: 'warning', content: `🟡 低风险：${judgment.reason}`, status: 'warning' }
+          { type: 'warning', content: i18n.t('risk.lowResult', { reason: judgment.reason }), status: 'warning' }
         ]);
       } else if (riskLevel === 'safe') {
         setLogs(prev => [...prev,
-          { type: 'failure', content: `🟢 安全：${judgment.reason}`, status: 'normal' }
+          { type: 'failure', content: i18n.t('risk.safeResult', { reason: judgment.reason }), status: 'normal' }
         ]);
       } else {
         setLogs(prev => [...prev,
-          { type: 'judge', content: `⚪ 待定：${judgment.reason}`, status: 'warning' }
+          { type: 'judge', content: i18n.t('risk.pendingResult', { reason: judgment.reason }), status: 'warning' }
         ]);
       }
 
       setBatchTestResults(prev => [...prev, {
         caseId: caseData.id,
-        caseName: caseData.name || attack.attackName || '未命名',
+        caseName: caseData.name || attack.attackName || i18n.t('batchTest.unnamed'),
         attackType: attack.attackType || attack.type || '',
         attackDescription: attack.description || '',
         systemPrompt: systemPrompt,
@@ -365,14 +366,14 @@ export function useBatchTest(deps) {
       setApiStatus('error');
       setApiError(error.message);
       setLogs(prev => [...prev,
-        { type: 'alert', content: `🚨 API 错误: ${error.message}`, status: 'danger' }
+        { type: 'alert', content: i18n.t('errors.apiError', { message: error.message }), status: 'danger' }
       ]);
 
       addTestRecord({
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         type: 'error',
         timestamp: Date.now(),
-        summary: `错误：${error.message.slice(0, 30)}...`,
+        summary: i18n.t('labels.errorSummary', { msg: error.message.slice(0, 30) }),
         fullContent: error.message,
         meta: { message: error.message },
         annotations: []
@@ -504,7 +505,7 @@ export function useBatchTest(deps) {
     };
 
     const data = {
-      name: name || `批量测试 ${new Date().toLocaleString('zh-CN')}`,
+      name: name || i18n.t('batchTest.defaultName', { date: new Date().toLocaleString() }),
       meta: {
         schemaVersion: '1.0.0',
         type: 'BatchTestReport',
@@ -527,10 +528,10 @@ export function useBatchTest(deps) {
 
     try {
       await saveTestResult(data);
-      addToast('测试结果已保存', 'success');
+      addToast(i18n.t('success.caseSaved', { id: '' }), 'success');
       loadSavedTestResults();
     } catch (err) {
-      addToast(`保存失败: ${err.message}`, 'error');
+      addToast(i18n.t('errors.saveFailed', { message: err.message }), 'error');
     }
   }, [batchTestResults]);
 

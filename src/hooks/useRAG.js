@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ragClient } from '../rag.js';
+import i18n from '../i18n/index.js';
 
 /**
  * Custom hook for RAG (Retrieval-Augmented Generation) management
@@ -64,13 +65,13 @@ export const useRAG = ({ addLog }) => {
       await refreshRagDocuments();
       addLog({
         type: 'info',
-        content: `📄 RAG 文档已上传: ${file.name}`,
+        content: i18n.t('success.ragDocUploaded', { name: file.name }),
         status: 'normal'
       });
     } catch (error) {
       addLog({
         type: 'error',
-        content: `RAG 上传失败: ${error.message}`,
+        content: i18n.t('errors.ragUploadFailed', { message: error.message }),
         status: 'danger'
       });
     } finally {

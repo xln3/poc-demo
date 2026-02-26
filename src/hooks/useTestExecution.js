@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import i18n from '../i18n/index.js';
 import {
   buildRecordingSession,
   createStandaloneTestCase,
@@ -96,7 +97,7 @@ export const useTestExecution = ({
    */
   const startSingleTest = useCallback(async (testCase) => {
     if (executionMode !== ExecutionMode.IDLE) {
-      console.warn('已有测试在执行中');
+      console.warn('Test already in progress');
       return false;
     }
 
@@ -158,13 +159,13 @@ export const useTestExecution = ({
    */
   const startBatchTest = useCallback(async (dataset, cases) => {
     if (executionMode !== ExecutionMode.IDLE) {
-      console.warn('已有测试在执行中');
+      console.warn('Test already in progress');
       return false;
     }
 
     const queue = cases || dataset?.cases || [];
     if (queue.length === 0) {
-      console.warn('测试队列为空');
+      console.warn('Test queue is empty');
       return false;
     }
 
@@ -257,7 +258,7 @@ export const useTestExecution = ({
           ),
         }));
       } catch (error) {
-        console.error(`批量测试第 ${i + 1} 个用例失败:`, error);
+        console.error(`Batch test case ${i + 1} failed:`, error);
 
         // 更新结果为失败
         setBatchProgress(prev => ({

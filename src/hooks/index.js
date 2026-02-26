@@ -26,3 +26,4 @@ export { useConversationEngine } from './useConversationEngine.js';
 export { useBatchTest } from './useBatchTest.js';
 export { useSafeAgentBench } from './useSafeAgentBench.js';
 export { useSimulator } from './useSimulator.js';
+export { useScenarioTranslation } from './useScenarioTranslation.js';

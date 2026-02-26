@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { RISK_ITEMS } from '../riskItems/index.js';
+import i18n from '../i18n/index.js';
 
 /**
  * M-S-O-B capability profile definitions from ATTACK-TAXONOMY.md.
@@ -11,40 +12,40 @@ import { RISK_ITEMS } from '../riskItems/index.js';
 
 export const CAPABILITY_AXES = {
   M: {
-    label: '输入模态',
+    get label() { return i18n.t('labels.inputModality'); },
     levels: {
-      M1: '纯文本',
-      M2: '+文档文件',
-      M3: '+图像',
-      M4: '+音频',
-      M5: '+视频',
+      get M1() { return i18n.t('capabilityDimensions.m1'); },
+      get M2() { return i18n.t('capabilityDimensions.m2'); },
+      get M3() { return i18n.t('capabilityDimensions.m3'); },
+      get M4() { return i18n.t('capabilityDimensions.m4'); },
+      get M5() { return i18n.t('capabilityDimensions.m5'); },
     },
   },
   S: {
-    label: '输入来源',
+    get label() { return i18n.t('labels.inputSource'); },
     levels: {
-      S1: '用户直接',
-      S2: '+第三方内容',
-      S3: '+系统/环境反馈',
+      get S1() { return i18n.t('capabilityDimensions.s1'); },
+      get S2() { return i18n.t('capabilityDimensions.s2'); },
+      get S3() { return i18n.t('capabilityDimensions.s3'); },
     },
   },
   O: {
-    label: '输出能力',
+    get label() { return i18n.t('labels.outputCapability'); },
     levels: {
-      O1: '纯对话',
-      O2: '+内容生成',
-      O3: '+工具调用/代码执行',
+      get O1() { return i18n.t('capabilityDimensions.o1'); },
+      get O2() { return i18n.t('capabilityDimensions.o2'); },
+      get O3() { return i18n.t('capabilityDimensions.o3'); },
     },
   },
   B: {
-    label: '信任边界',
+    get label() { return i18n.t('labels.trustBoundary'); },
     levels: {
-      B1: '对话边界',
-      B2: '计算边界',
-      B3: '数据边界',
-      B4: '网络边界',
-      B5: '身份边界',
-      B6: '物理边界',
+      get B1() { return i18n.t('capabilityDimensions.b1'); },
+      get B2() { return i18n.t('capabilityDimensions.b2'); },
+      get B3() { return i18n.t('capabilityDimensions.b3'); },
+      get B4() { return i18n.t('capabilityDimensions.b4'); },
+      get B5() { return i18n.t('capabilityDimensions.b5'); },
+      get B6() { return i18n.t('capabilityDimensions.b6'); },
     },
   },
 };

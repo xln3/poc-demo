@@ -1,10 +1,12 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * SimulationViewer - full-width MJPEG frame renderer for AI2-THOR simulation.
  * Renders above the chat/log panels on RunPage when a simulation session is active.
  */
 export default function SimulationViewer({ simulator }) {
+  const { t } = useTranslation();
   const imgRef = useRef(null);
   const [height, setHeight] = useState(300);
   const [actions, setActions] = useState([]);
@@ -71,31 +73,31 @@ export default function SimulationViewer({ simulator }) {
               className="max-w-full max-h-full object-contain"
             />
           ) : (
-            <div className="text-on-dim text-xs">等待帧流连接...</div>
+            <div className="text-on-dim text-xs">{t('simulation.frameStreamWaiting')}</div>
           )}
         </div>
 
         {/* Right: scene info panel */}
         <div className="w-56 border-l border-edge p-2 flex flex-col overflow-y-auto">
           <div className="text-xs text-on-muted mb-2 flex items-center justify-between">
-            <span>仿真状态</span>
+            <span>{t('simulation.status')}</span>
             <span className={`w-2 h-2 rounded-full ${simulator.isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
           </div>
 
           {simulator.engineName && (
             <div className="text-[10px] text-on-dim mb-1">
-              引擎: <span className="text-cyan-400">{simulator.engineName}</span>
+              {t('simulation.engine')}: <span className="text-cyan-400">{simulator.engineName}</span>
             </div>
           )}
 
           {simulator.actionSpace && (
             <div className="text-[10px] text-on-dim mb-2">
-              动作空间: {simulator.actionSpace.length || '?'} 种
+              {t('simulation.actionSpace')}: {simulator.actionSpace.length || '?'} {t('simulation.actionCount')}
             </div>
           )}
 
           {/* Action history */}
-          <div className="text-[10px] text-on-dim mb-1">执行动作 ({actions.length})</div>
+          <div className="text-[10px] text-on-dim mb-1">{t('simulation.executedActions', { count: actions.length })}</div>
           <div className="flex-1 overflow-y-auto space-y-0.5">
             {actions.map((action, i) => (
               <div key={i} className={`text-[10px] px-1.5 py-0.5 rounded ${
@@ -106,7 +108,7 @@ export default function SimulationViewer({ simulator }) {
               </div>
             ))}
             {actions.length === 0 && (
-              <div className="text-[10px] text-on-dim italic">等待执行...</div>
+              <div className="text-[10px] text-on-dim italic">{t('simulation.waitingForExecution')}</div>
             )}
           </div>
 
@@ -120,13 +122,13 @@ export default function SimulationViewer({ simulator }) {
                   : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
               }`}
             >
-              {simulator.isRecording ? '停止录制' : '录制'}
+              {simulator.isRecording ? t('buttons.stopRecording') : t('buttons.recording')}
             </button>
             <button
               onClick={() => simulator.stopSession()}
               className="px-2 py-1 rounded text-[10px] bg-surface-raised text-on-muted hover:bg-surface-hover transition"
             >
-              停止
+              {t('buttons.stopButton')}
             </button>
           </div>
         </div>

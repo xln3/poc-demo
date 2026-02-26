@@ -231,13 +231,13 @@ export const usePlayback = ({
 
     // v1 TestCase - 原有逻辑
     if (!data || !data.meta) {
-      console.error('无效的测试用例格式');
+      console.error('Invalid test case format');
       return false;
     }
 
     const { environment, source } = data;
     if (!environment) {
-      console.error('测试用例缺少 environment 字段');
+      console.error('Test case missing environment field');
       return false;
     }
 
@@ -410,7 +410,7 @@ export const usePlayback = ({
    */
   const playbackV1Execution = useCallback(async (testCase) => {
     if (!testCase?.execution) {
-      console.error('测试用例缺少 execution 字段');
+      console.error('Test case missing execution field');
       return;
     }
 
@@ -559,7 +559,7 @@ export const usePlayback = ({
     // 先恢复环境
     const restored = restoreEnvironment(data);
     if (!restored) {
-      console.warn('恢复环境配置失败或无配置，继续回放');
+      console.warn('Failed to restore environment config or none available, continuing playback');
     }
 
     if (version === SCHEMA_VERSION && type === 'PlaybackSequence') {
@@ -575,7 +575,7 @@ export const usePlayback = ({
         await playbackV2Sequence(sequence);
       } else {
         // 无录制数据，提示用户
-        console.warn('该测试用例没有录制数据，无法回放');
+        console.warn('Test case has no recording data, cannot playback');
         setIsPlaybackMode(false);
         setPlaybackCase(null);
       }
@@ -586,7 +586,7 @@ export const usePlayback = ({
         setPlaybackSequence(sequence);
         await playbackV2Sequence(sequence);
       } else {
-        console.warn('录制会话没有状态数据');
+        console.warn('Recording session has no state data');
         setIsPlaybackMode(false);
         setPlaybackCase(null);
       }
@@ -595,7 +595,7 @@ export const usePlayback = ({
       setPlaybackSequence(null);
       await playbackV1Execution(data);
     } else {
-      console.warn('未知的测试用例格式');
+      console.warn('Unknown test case format');
     }
   }, [restoreEnvironment, playbackV2Sequence, playbackV1Execution, buildSequenceFromRecording]);
 
@@ -706,7 +706,7 @@ export const usePlayback = ({
       setPlaybackSequence(sequence);
       await startPlayback(sequence);
     } catch (error) {
-      console.error('迁移失败:', error);
+      console.error('Migration failed:', error);
       // 降级到 v1 回放
       await startPlayback(v1Case);
     }

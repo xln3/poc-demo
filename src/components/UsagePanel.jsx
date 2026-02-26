@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { authFetch } from '../auth';
 
 export default function UsagePanel() {
+  const { t } = useTranslation();
   const [period, setPeriod] = useState('day');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -25,9 +27,9 @@ export default function UsagePanel() {
   };
 
   const periods = [
-    { key: 'day', label: '今日' },
-    { key: 'week', label: '本周' },
-    { key: 'month', label: '本月' },
+    { key: 'day', label: t('usage.today') },
+    { key: 'week', label: t('usage.thisWeek') },
+    { key: 'month', label: t('usage.thisMonth') },
   ];
 
   return (
@@ -47,8 +49,8 @@ export default function UsagePanel() {
         ))}
       </div>
 
-      {loading && <div className="text-on-muted text-sm">加载中...</div>}
-      {error && <div className="text-red-400 text-sm">加载失败: {error}</div>}
+      {loading && <div className="text-on-muted text-sm">{t('usage.loading')}</div>}
+      {error && <div className="text-red-400 text-sm">{t('usage.loadFailed', { error })}</div>}
 
       {data && !loading && (
         <>
@@ -56,15 +58,15 @@ export default function UsagePanel() {
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-surface rounded-lg p-3 text-center">
               <div className="text-2xl font-bold text-on-canvas">{data.totals.call_count}</div>
-              <div className="text-xs text-on-muted">调用次数</div>
+              <div className="text-xs text-on-muted">{t('usage.callCount')}</div>
             </div>
             <div className="bg-surface rounded-lg p-3 text-center">
               <div className="text-2xl font-bold text-on-canvas">{data.totals.total_tokens.toLocaleString()}</div>
-              <div className="text-xs text-on-muted">总 Token</div>
+              <div className="text-xs text-on-muted">{t('usage.totalTokens')}</div>
             </div>
             <div className="bg-surface rounded-lg p-3 text-center">
               <div className="text-2xl font-bold text-on-canvas">${data.totals.cost.toFixed(4)}</div>
-              <div className="text-xs text-on-muted">费用</div>
+              <div className="text-xs text-on-muted">{t('usage.cost')}</div>
             </div>
           </div>
 
@@ -73,11 +75,11 @@ export default function UsagePanel() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-on-muted text-left border-b border-edge">
-                  <th className="py-2 font-medium">模型</th>
-                  <th className="py-2 font-medium text-right">调用</th>
-                  <th className="py-2 font-medium text-right">输入 Token</th>
-                  <th className="py-2 font-medium text-right">输出 Token</th>
-                  <th className="py-2 font-medium text-right">费用</th>
+                  <th className="py-2 font-medium">{t('usage.modelColumn')}</th>
+                  <th className="py-2 font-medium text-right">{t('usage.callsColumn')}</th>
+                  <th className="py-2 font-medium text-right">{t('usage.inputTokens')}</th>
+                  <th className="py-2 font-medium text-right">{t('usage.outputTokens')}</th>
+                  <th className="py-2 font-medium text-right">{t('usage.cost')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -93,7 +95,7 @@ export default function UsagePanel() {
               </tbody>
             </table>
           ) : (
-            <div className="text-on-dim text-sm text-center py-4">暂无使用记录</div>
+            <div className="text-on-dim text-sm text-center py-4">{t('usage.noRecords')}</div>
           )}
         </>
       )}

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../../config.js';
 import { mcpClient } from '../../mcp.js';
 
@@ -10,6 +11,8 @@ export default function McpServerConfig({
   mcpServerStatus, setMcpServerStatus,
   selectedMcpServer, setSelectedMcpServer,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="bg-surface rounded-lg p-3 border border-emerald-900/50">
       <div className="text-xs text-emerald-400 flex items-center justify-between">
@@ -18,15 +21,15 @@ export default function McpServerConfig({
           className="flex items-center gap-2 hover:text-emerald-300 transition"
         >
           <span>{mcpServerConfigCollapsed ? '▶' : '▼'}</span>
-          <span>MCP Server 配置</span>
+          <span>{t('configPage.mcpServerConfig')}</span>
         </button>
-        <span className="text-on-dim text-[10px]">选择并配置外部服务</span>
+        <span className="text-on-dim text-[10px]">{t('configPage.selectAndConfigServices')}</span>
       </div>
       {!mcpServerConfigCollapsed && (
         <div className="mt-2 grid grid-cols-3 gap-3" style={{ minHeight: '200px' }}>
           {/* Left: server list */}
           <div className="flex flex-col">
-            <div className="text-xs text-on-muted mb-1">可用服务</div>
+            <div className="text-xs text-on-muted mb-1">{t('configPage.availableServices')}</div>
             <div className="flex-1 bg-surface-muted/50 rounded p-2 space-y-1">
               {Object.values(CONFIG.mcpServers.available).map((server) => {
                 const config = mcpServerConfigs[server.id];
@@ -48,16 +51,16 @@ export default function McpServerConfig({
                     </div>
                     <div className="flex items-center gap-1">
                       {status === 'testing' && (
-                        <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="测试中" />
+                        <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title={t('buttons.testingConnection')} />
                       )}
                       {status === 'connected' && (
-                        <span className="w-2 h-2 rounded-full bg-green-400" title="已连接" />
+                        <span className="w-2 h-2 rounded-full bg-green-400" title={t('buttons.connectionSuccess')} />
                       )}
                       {status === 'error' && (
-                        <span className="w-2 h-2 rounded-full bg-red-400" title="连接失败" />
+                        <span className="w-2 h-2 rounded-full bg-red-400" title={t('buttons.connectionFailed')} />
                       )}
                       {isEnabled && !status && (
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" title="已启用" />
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" title={t('configPage.enabled')} />
                       )}
                     </div>
                   </button>
@@ -80,14 +83,14 @@ export default function McpServerConfig({
               />
             ) : (
               <div className="flex-1 flex items-center justify-center text-xs text-on-dim">
-                ← 选择一个 MCP 服务进行配置
+                {t('configPage.selectMcpServiceHint')}
               </div>
             )}
           </div>
         </div>
       )}
       <div className="mt-2 text-[10px] text-on-dim">
-        MCP (Model Context Protocol) 服务提供外部工具能力。配置后可在攻击测试中调用这些工具。
+        {t('configPage.mcpDescription')}
       </div>
     </div>
   );
@@ -99,6 +102,7 @@ function ServerConfigForm({
   mcpServerStatus, setMcpServerStatus,
   selectedMcpServer,
 }) {
+  const { t } = useTranslation();
   const updateConfig = (patch) => {
     const updated = {
       ...mcpServerConfigs,
@@ -111,7 +115,7 @@ function ServerConfigForm({
   return (
     <>
       <div className="text-xs text-on-muted mb-1 flex items-center justify-between">
-        <span>{server.icon} {server.name} 配置</span>
+        <span>{server.icon} {server.name} {t('configPage.configuration')}</span>
         <div className="flex gap-2">
           <button
             onClick={async () => {
@@ -123,18 +127,18 @@ function ServerConfigForm({
                   [selectedMcpServer]: result.success ? 'connected' : 'error'
                 }));
                 if (!result.success) {
-                  alert(`连接失败: ${result.error || '未知错误'}`);
+                  alert(`${t('buttons.connectionFailed')}: ${result.error || t('labels.unknown')}`);
                 }
               } catch (e) {
                 console.error('[MCP] Test connection error:', e);
                 setMcpServerStatus(prev => ({ ...prev, [selectedMcpServer]: 'error' }));
-                alert(`连接测试失败: ${e.message}`);
+                alert(`${t('buttons.connectionFailed')}: ${e.message}`);
               }
             }}
             disabled={status === 'testing'}
             className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-[10px] disabled:opacity-50"
           >
-            {status === 'testing' ? '测试中...' : '测试连接'}
+            {status === 'testing' ? t('buttons.testingConnection') : t('buttons.testConnection')}
           </button>
           <button
             onClick={() => updateConfig({ enabled: !config.enabled })}
@@ -144,7 +148,7 @@ function ServerConfigForm({
                 : 'bg-emerald-600 hover:bg-emerald-500'
             }`}
           >
-            {config.enabled ? '禁用' : '启用'}
+            {config.enabled ? t('configPage.disable') : t('configPage.enable')}
           </button>
         </div>
       </div>
@@ -166,7 +170,7 @@ function ServerConfigForm({
                     className="w-3.5 h-3.5 rounded border-edge-strong bg-surface-raised text-emerald-500"
                   />
                   <span className="text-xs text-on-surface">
-                    {config[field.key] ? '是' : '否'}
+                    {config[field.key] ? t('configPage.yes') : t('configPage.no')}
                   </span>
                 </label>
               ) : (
@@ -186,7 +190,7 @@ function ServerConfigForm({
         </div>
         {/* Available tools list */}
         <div className="mt-3 pt-2 border-t border-edge-strong">
-          <div className="text-xs text-on-muted mb-1">提供的工具</div>
+          <div className="text-xs text-on-muted mb-1">{t('configPage.providedTools')}</div>
           <div className="flex flex-wrap gap-1">
             {server.tools.map((tool) => (
               <span

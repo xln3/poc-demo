@@ -10,7 +10,7 @@ export const SCENARIO_NS_MAP = {
   'vehicleAssistant': 'F1-vehicleAssistant',
   'autoRepair': 'F1-autoRepair',
 
-  // F2 - File Injection
+  // F2 - File Injection (individual sub-scenarios)
   'resume': 'F2-resume',
   'phishing': 'F2-phishing',
   'contract': 'F2-contract',
@@ -43,6 +43,22 @@ export const SCENARIO_NS_MAP = {
 };
 
 /**
+ * Mapping from F2 (indirectInjection) attack IDs to their translation file keys.
+ * The indirectInjection scenario is a single SCENARIOS entry containing
+ * multiple attacks, each with its own translation namespace.
+ */
+export const F2_ATTACK_NS_MAP = {
+  'I1': 'resume',
+  'I2': 'contract',
+  'I3': 'bidding',
+  'I4': 'phishing',
+  'I5': 'expense',
+  'I6': 'report',
+  'I7': 'codeReview',
+  'I8': 'ticket',
+};
+
+/**
  * Get translation namespace for a given scenario key.
  * @param {string} scenarioKey - e.g. 'loan', 'resume'
  * @returns {string} e.g. 'scenario_F1-loan'
@@ -50,4 +66,20 @@ export const SCENARIO_NS_MAP = {
 export function getScenarioNs(scenarioKey) {
   const fileKey = SCENARIO_NS_MAP[scenarioKey];
   return fileKey ? `scenario_${fileKey}` : null;
+}
+
+/**
+ * Resolve the scenario namespace key for a given SCENARIOS key + attack.
+ * For most scenarios, this is simply SCENARIO_NS_MAP[scenarioKey].
+ * For 'indirectInjection', we look up the attack ID in F2_ATTACK_NS_MAP.
+ *
+ * @param {string} scenarioKey - key in SCENARIOS, e.g. 'loan' or 'indirectInjection'
+ * @param {Object} [attack] - the attack object (needed for indirectInjection)
+ * @returns {string|null} the SCENARIO_NS_MAP key, e.g. 'loan', 'resume'
+ */
+export function resolveScenarioNsKey(scenarioKey, attack) {
+  if (scenarioKey === 'indirectInjection' && attack) {
+    return F2_ATTACK_NS_MAP[attack.id] || null;
+  }
+  return SCENARIO_NS_MAP[scenarioKey] ? scenarioKey : null;
 }

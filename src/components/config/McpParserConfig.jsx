@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../../config.js';
 
 /**
@@ -7,6 +8,8 @@ export default function McpParserConfig({
   mcpConfigCollapsed, setMcpConfigCollapsed,
   mcpParsers, setMcpParsers, payloadFiles,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="bg-surface rounded-lg p-3 border border-purple-900/50">
       <div className="text-xs text-purple-400 flex items-center justify-between">
@@ -15,11 +18,11 @@ export default function McpParserConfig({
           className="flex items-center gap-2 hover:text-purple-300 transition"
         >
           <span>{mcpConfigCollapsed ? '▶' : '▼'}</span>
-          <span>文件解析器配置</span>
+          <span>{t('configPage.fileParserConfig')}</span>
         </button>
         <div className="flex items-center gap-2">
           {payloadFiles.length > 0 && (
-            <span className="text-yellow-500 text-[10px]">修改后需重新上传文件</span>
+            <span className="text-yellow-500 text-[10px]">{t('configPage.reUploadAfterChange')}</span>
           )}
           {mcpConfigCollapsed && (
             <span className="text-[10px] text-on-muted truncate max-w-[300px]">
@@ -36,7 +39,7 @@ export default function McpParserConfig({
                     return names.join(', ');
                   })
                   .filter(Boolean);
-                return enabledByType.join(' | ') || '无';
+                return enabledByType.join(' | ') || t('labels.none');
               })()}
             </span>
           )}
@@ -93,7 +96,7 @@ export default function McpParserConfig({
             ))}
           </div>
           <div className="mt-2 text-[10px] text-on-dim">
-            <span>数字 = 解析优先级</span>
+            <span>{t('configPage.numberEqualsPriority')}</span>
           </div>
         </>
       )}

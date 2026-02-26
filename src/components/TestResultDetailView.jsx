@@ -13,21 +13,23 @@ export default function TestResultDetailView({
   reportTemplates, selectedTemplate, setSelectedTemplate,
   applyReportTemplate, handleLLMGenerateReport,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="h-full flex flex-col">
       {/* 测试报告标题区 */}
       <div className="mb-4 pb-3 border-b border-edge">
         <div className="flex items-center gap-3 mb-1">
-          <h2 className="text-lg font-bold">{selectedTestResult.name || '未命名测试'}</h2>
+          <h2 className="text-lg font-bold">{selectedTestResult.name || t('testResult.unnamed')}</h2>
           <span className="text-xs px-2 py-0.5 rounded bg-purple-600">
-            {selectedTestResult.results?.length || 0} 用例
+            {t('testResult.caseCountBadge', { count: selectedTestResult.results?.length || 0 })}
           </span>
         </div>
         <div className="text-xs text-on-muted mt-1">
-          模型: {selectedTestResult.meta?.testModel || '未知'} · 评审模型: {selectedTestResult.meta?.judgeModel || '未知'}
+          {t('testResult.model')} {selectedTestResult.meta?.testModel || t('labels.unknown')} · {t('testResult.judgeModel')} {selectedTestResult.meta?.judgeModel || t('labels.unknown')}
         </div>
         <div className="text-xs text-on-dim mt-1">
-          保存时间: {selectedTestResult.savedAt ? new Date(selectedTestResult.savedAt).toLocaleString('zh-CN') : '未知'}
+          {t('testResult.savedTime')} {selectedTestResult.savedAt ? new Date(selectedTestResult.savedAt).toLocaleString() : t('labels.unknown')}
         </div>
         {/* 五态风险统计 */}
         <div className="flex items-center gap-3 mt-2 text-xs flex-wrap">
@@ -46,7 +48,7 @@ export default function TestResultDetailView({
       <div className="flex-1 flex gap-4 min-h-0">
         {/* 左栏：测试记录 */}
         <div className="w-1/2 flex flex-col min-h-0">
-          <div className="text-sm font-medium text-on-surface mb-2">测试记录</div>
+          <div className="text-sm font-medium text-on-surface mb-2">{t('testResult.testRecords')}</div>
           <div className="flex-1 overflow-y-auto custom-scroll">
             <div className="space-y-2">
               {(selectedTestResult.results || []).map((result, idx) => {
@@ -60,7 +62,7 @@ export default function TestResultDetailView({
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-on-dim">#{result.index ?? idx + 1}</span>
-                        <span className="text-sm font-medium truncate max-w-[150px]">{result.caseName || '未命名'}</span>
+                        <span className="text-sm font-medium truncate max-w-[150px]">{result.caseName || t('batchTest.unnamed')}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded border ${riskConfig.badgeColor}`}>
                           {riskConfig.icon} {riskConfig.label}
                         </span>
@@ -74,7 +76,7 @@ export default function TestResultDetailView({
                     )}
                     {(result.judgment?.reason || result.review?.llm?.reason || result.review?.human?.reason) && (
                       <div className="text-xs text-on-surface p-2 bg-canvas/50 rounded mb-2 line-clamp-2">
-                        <span className="text-on-dim">判定: </span>
+                        <span className="text-on-dim">{t('conversation.judgmentReason')}: </span>
                         {result.review?.human?.reason || result.review?.llm?.reason || result.judgment?.reason}
                       </div>
                     )}
@@ -84,19 +86,19 @@ export default function TestResultDetailView({
                         onClick={() => openDetailModal(result)}
                         className="text-xs px-2 py-1 bg-surface-raised hover:bg-surface-hover rounded"
                       >
-                        详情
+                        {t('buttons.details')}
                       </button>
                       <button
                         onClick={() => openReviewModal(result)}
                         className="text-xs px-2 py-1 bg-violet-700 hover:bg-violet-600 rounded"
                       >
-                        评审
+                        {t('buttons.review')}
                       </button>
                       <button
                         onClick={() => handleDeleteTestCase(result.index ?? idx)}
                         className="text-xs px-2 py-1 bg-red-700 hover:bg-red-600 rounded"
                       >
-                        删除
+                        {t('buttons.delete')}
                       </button>
                     </div>
                   </div>
@@ -109,33 +111,33 @@ export default function TestResultDetailView({
         {/* 右栏：报告编辑器 */}
         <div className="w-1/2 flex flex-col min-h-0 border-l border-edge pl-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm font-medium text-on-surface">文字版报告</div>
+            <div className="text-sm font-medium text-on-surface">{t('report.textReport')}</div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setReportEditMode('edit')}
                 className={`text-xs px-2 py-1 rounded ${reportEditMode === 'edit' ? 'bg-blue-600' : 'bg-surface-raised hover:bg-surface-hover'}`}
               >
-                编辑
+                {t('buttons.edit')}
               </button>
               <button
                 onClick={() => setReportEditMode('preview')}
                 className={`text-xs px-2 py-1 rounded ${reportEditMode === 'preview' ? 'bg-blue-600' : 'bg-surface-raised hover:bg-surface-hover'}`}
               >
-                预览
+                {t('buttons.preview')}
               </button>
               <button
                 onClick={handleSaveReport}
                 disabled={reportSaving}
                 className="text-xs px-2 py-1 bg-green-700 hover:bg-green-600 rounded disabled:opacity-50"
               >
-                {reportSaving ? '保存中...' : '保存'}
+                {reportSaving ? t('buttons.saving') : t('buttons.save')}
               </button>
             </div>
           </div>
 
           {/* 模板选择 */}
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs text-on-muted">模板:</span>
+            <span className="text-xs text-on-muted">{t('report.templateLabel')}</span>
             <select
               value={selectedTemplate}
               onChange={(e) => setSelectedTemplate(e.target.value)}
@@ -149,7 +151,7 @@ export default function TestResultDetailView({
               onClick={() => applyReportTemplate(selectedTemplate)}
               className="text-xs px-2 py-1 bg-surface-raised hover:bg-surface-hover rounded"
             >
-              应用模板
+              {t('report.applyTemplate')}
             </button>
           </div>
 
@@ -160,11 +162,11 @@ export default function TestResultDetailView({
                 value={reportContent}
                 onChange={(e) => setReportContent(e.target.value)}
                 className="w-full h-full bg-canvas border border-edge rounded p-3 text-sm resize-none custom-scroll font-mono"
-                placeholder="在此编辑报告内容（支持 Markdown 格式）..."
+                placeholder={t('report.markdownPlaceholder')}
               />
             ) : (
               <div className="w-full h-full bg-canvas border border-edge rounded p-3 text-sm overflow-y-auto custom-scroll prose prose-invert prose-sm max-w-none">
-                <pre className="whitespace-pre-wrap font-sans">{reportContent || '暂无报告内容'}</pre>
+                <pre className="whitespace-pre-wrap font-sans">{reportContent || t('report.noContent')}</pre>
               </div>
             )}
           </div>
@@ -174,7 +176,7 @@ export default function TestResultDetailView({
             <div className="flex items-center gap-2">
               <input
                 type="text"
-                placeholder="输入指令让 LLM 生成/优化报告..."
+                placeholder={t('report.llmInstruction')}
                 className="flex-1 text-xs bg-surface border border-edge rounded px-2 py-1.5"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -189,7 +191,7 @@ export default function TestResultDetailView({
                 disabled={reportSaving}
                 className="text-xs px-3 py-1.5 bg-violet-700 hover:bg-violet-600 rounded disabled:opacity-50"
               >
-                {reportSaving ? '生成中...' : 'LLM 生成'}
+                {reportSaving ? t('buttons.generating') : t('buttons.llmGenerate')}
               </button>
             </div>
           </div>

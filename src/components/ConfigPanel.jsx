@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   ModelSettings,
@@ -67,6 +68,7 @@ export default function ConfigPanel({
   // Actions
   runRealTest, apiStatus,
 }) {
+  const { t } = useTranslation();
   const { isAuditor } = useAuth();
   const isDemo = appMode === 'demo';
 
@@ -75,7 +77,7 @@ export default function ConfigPanel({
       {/* Demo mode banner */}
       {isDemo && (
         <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-3 text-xs text-amber-400 text-center">
-          演示模式 — 配置仅供查看，切换到测试模式以编辑
+          {t('modes.demoConfigBanner')}
         </div>
       )}
 
@@ -208,7 +210,7 @@ export default function ConfigPanel({
                 : 'bg-blue-600 hover:bg-blue-500 text-white'
             }`}
           >
-            {apiStatus === 'loading' ? '测试中...' : '开始测试'}
+            {apiStatus === 'loading' ? t('buttons.testing') : t('config.startTest')}
           </button>
         </div>
       )}

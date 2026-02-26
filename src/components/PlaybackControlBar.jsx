@@ -1,21 +1,25 @@
+import { useTranslation } from 'react-i18next';
+
 export default function PlaybackControlBar({
   isPlaybackMode, playbackCase, isPlaybackPlaying, isPlaybackPaused,
   playbackProgress, playbackTotal,
   pausePlayback, resumePlayback, stopPlayback, skipToEnd, startPlayback, exitPlayback,
 }) {
+  const { t } = useTranslation();
+
   if (!isPlaybackMode) return null;
 
   return (
     <div className="mb-4 p-3 bg-cyan-900/30 border border-cyan-600 rounded-lg">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-cyan-400 font-medium">▶️ 回放模式</span>
+          <span className="text-cyan-400 font-medium">{t('playback.mode')}</span>
           <span className="text-xs text-on-muted">
-            {playbackCase?.meta?.name || playbackCase?.source?.attack?.name || '未命名用例'}
+            {playbackCase?.meta?.name || playbackCase?.source?.attack?.name || t('playback.unnamed')}
           </span>
           {isPlaybackPlaying && (
             <span className="text-xs text-cyan-400 animate-pulse">
-              ● 播放中 ({playbackProgress}/{playbackTotal})
+              {t('playback.playing', { current: playbackProgress, total: playbackTotal })}
             </span>
           )}
         </div>
@@ -27,21 +31,21 @@ export default function PlaybackControlBar({
                   onClick={resumePlayback}
                   className="px-2 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 rounded"
                 >
-                  ▶️ 继续
+                  {t('buttons.resume')}
                 </button>
               ) : (
                 <button
                   onClick={pausePlayback}
                   className="px-2 py-1 text-xs bg-yellow-600 hover:bg-yellow-500 rounded"
                 >
-                  ⏸️ 暂停
+                  {t('buttons.pause')}
                 </button>
               )}
               <button
                 onClick={skipToEnd}
                 className="px-2 py-1 text-xs bg-surface-hover hover:bg-surface-hover rounded"
               >
-                ⏭️ 跳过
+                {t('buttons.skip')}
               </button>
             </>
           ) : (
@@ -50,14 +54,14 @@ export default function PlaybackControlBar({
               className="px-2 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 rounded"
               disabled={!playbackCase}
             >
-              ▶️ 重新播放
+              {t('buttons.replay')}
             </button>
           )}
           <button
             onClick={exitPlayback}
             className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 rounded"
           >
-            ✕ 退出回放
+            {t('buttons.exitPlayback')}
           </button>
         </div>
       </div>

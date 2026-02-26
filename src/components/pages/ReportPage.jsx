@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FIVE_LEVEL_RISK, calculateRiskStats } from '../../config.js';
 import { previewEval, uploadEval } from '../../evalApi.js';
 import TestResultDetailView from '../TestResultDetailView.jsx';
@@ -18,6 +19,7 @@ export default function ReportPage({
   // TestResultDetailView props
   detailView,
 }) {
+  const { t } = useTranslation();
   const isDemo = appMode === 'demo';
   const fileInputRef = useRef(null);
   const [evalImporting, setEvalImporting] = useState(false);
@@ -81,7 +83,7 @@ export default function ReportPage({
               disabled={evalImporting}
               className="w-full px-3 py-1.5 rounded bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
             >
-              {evalImporting ? '处理中...' : '导入 .eval 文件'}
+              {evalImporting ? t('buttons.processing') : t('reportPage.importEvalFile')}
             </button>
             {evalError && (
               <div className="mt-1 text-[10px] text-red-400 break-all">{evalError}</div>
@@ -92,10 +94,10 @@ export default function ReportPage({
         {/* Eval preview dialog */}
         {evalPreview && (
           <div className="mb-3 p-2 bg-blue-900/30 border border-blue-700/50 rounded text-xs">
-            <div className="font-medium text-blue-300 mb-1">预览导入</div>
+            <div className="font-medium text-blue-300 mb-1">{t('reportPage.previewImport')}</div>
             <div className="text-on-surface">{evalPreview.meta?.task_display_name || evalPreview.meta?.task}</div>
             <div className="text-on-muted text-[10px] mt-0.5">
-              {evalPreview.meta?.model} · {evalPreview.sample_count} 样本
+              {evalPreview.meta?.model} · {evalPreview.sample_count} {t('reportPage.samples')}
             </div>
             {evalPreview.meta?.scores?.length > 0 && (
               <div className="mt-1 space-y-0.5">
@@ -114,13 +116,13 @@ export default function ReportPage({
                 disabled={evalImporting}
                 className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs disabled:opacity-50"
               >
-                {evalImporting ? '导入中...' : '确认导入'}
+                {evalImporting ? t('reportPage.importing') : t('reportPage.confirmImport')}
               </button>
               <button
                 onClick={() => setEvalPreview(null)}
                 className="px-2 py-1 bg-surface-raised hover:bg-surface-hover rounded text-on-surface text-xs"
               >
-                取消
+                {t('buttons.cancel')}
               </button>
             </div>
           </div>
@@ -130,7 +132,7 @@ export default function ReportPage({
         {evalResults.length > 0 && (
           <>
             <div className="mb-2 text-xs text-on-muted font-medium">
-              Eval 导入 ({evalResults.length})
+              {t('reportPage.evalImport')} ({evalResults.length})
             </div>
             <div className="space-y-2 mb-3">
               {evalResults.map((item) => (
@@ -151,12 +153,12 @@ export default function ReportPage({
 
         {/* Batch results section */}
         <div className="mb-2 text-xs text-on-muted font-medium">
-          批量测试报告 ({batchResults.length})
+          {t('reportPage.batchTestReports')} ({batchResults.length})
         </div>
         {batchResults.length === 0 ? (
           <div className="text-xs text-on-dim text-center py-4">
-            暂无测试报告
-            <div className="mt-1 text-on-dim">执行批量测试后可保存</div>
+            {t('reportPage.noTestReports')}
+            <div className="mt-1 text-on-dim">{t('reportPage.runBatchTestHint')}</div>
           </div>
         ) : (
           <div className="space-y-2">
@@ -182,7 +184,7 @@ export default function ReportPage({
           <div className="flex-1 flex items-center justify-center text-on-dim">
             <div className="text-center">
               <div className="text-4xl mb-4">📊</div>
-              <div>选择左侧的测试报告查看详情</div>
+              <div>{t('reportPage.selectReportHint')}</div>
             </div>
           </div>
         )}
@@ -193,6 +195,7 @@ export default function ReportPage({
 
 
 function ResultCard({ item, isSelected, isDemo, isEval, onClick, onDelete }) {
+  const { t } = useTranslation();
   const stats = item.meta?.statistics || {};
   return (
     <div
@@ -204,20 +207,20 @@ function ResultCard({ item, isSelected, isDemo, isEval, onClick, onDelete }) {
       <div className="flex items-center justify-between">
         <div className="text-xs font-medium truncate flex-1">
           {isEval && <span className="text-blue-400 mr-1">[eval]</span>}
-          {item.name?.replace(/^\[eval\]\s*/, '') || '未命名测试'}
+          {item.name?.replace(/^\[eval\]\s*/, '') || t('testResult.unnamed')}
         </div>
         {!isDemo && (
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             className="text-xs text-on-muted hover:text-red-400 ml-1"
-            title="删除"
+            title={t('buttons.delete')}
           >
             x
           </button>
         )}
       </div>
       <div className="text-xs text-on-muted mt-1">
-        {item.meta?.testModel || '未知模型'} · {stats.total || 0} 用例
+        {item.meta?.testModel || t('reportPage.unknownModel')} · {stats.total || 0} {t('reportPage.casesUnit')}
       </div>
       {isEval && item.meta?.evalScores?.length > 0 && (
         <div className="text-[10px] text-on-dim mt-0.5">
@@ -229,11 +232,11 @@ function ResultCard({ item, isSelected, isDemo, isEval, onClick, onDelete }) {
         </div>
       )}
       <div className="flex items-center gap-1 mt-1 flex-wrap">
-        <span className="text-xs text-red-400" title="高风险">🔴{stats.high || 0}</span>
-        <span className="text-xs text-orange-400" title="中风险">🟠{stats.medium || 0}</span>
-        <span className="text-xs text-yellow-400" title="低风险">🟡{stats.low || 0}</span>
-        <span className="text-xs text-green-400" title="安全">🟢{stats.safe || 0}</span>
-        <span className="text-xs text-on-muted" title="待定">⚪{stats.pending || 0}</span>
+        <span className="text-xs text-red-400" title={t('reportPage.highRisk')}>🔴{stats.high || 0}</span>
+        <span className="text-xs text-orange-400" title={t('reportPage.mediumRisk')}>🟠{stats.medium || 0}</span>
+        <span className="text-xs text-yellow-400" title={t('reportPage.lowRisk')}>🟡{stats.low || 0}</span>
+        <span className="text-xs text-green-400" title={t('reportPage.safe')}>🟢{stats.safe || 0}</span>
+        <span className="text-xs text-on-muted" title={t('reportPage.pending')}>⚪{stats.pending || 0}</span>
         <span className="text-xs text-on-dim ml-auto">
           {item.savedAt ? new Date(item.savedAt).toLocaleString('zh-CN') : ''}
         </span>

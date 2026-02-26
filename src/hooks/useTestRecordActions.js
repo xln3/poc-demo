@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { CONFIG } from '../config';
+import i18n from '../i18n/index.js';
 
 /**
  * Extends useTestRecords with record manipulation actions.
@@ -41,7 +42,7 @@ export function useTestRecordActions(deps) {
       id,
       type: 'thinking',
       timestamp: Date.now(),
-      summary: '思考中...',
+      summary: i18n.t('labels.thinking'),
       fullContent: null,
       meta: { chars: 0, thinkingIndex, isStreaming: true },
       annotations: []
@@ -56,7 +57,7 @@ export function useTestRecordActions(deps) {
       return;
     }
     updateTestRecord(id, {
-      summary: `思考：${content.slice(0, 30).replace(/\n/g, ' ')}...`,
+      summary: i18n.t('labels.thinkingSummary', { text: content.slice(0, 30).replace(/\n/g, ' ') }),
       fullContent: content,
       meta: { chars: content.length, thinkingIndex, isStreaming: false }
     });
@@ -69,7 +70,7 @@ export function useTestRecordActions(deps) {
       id,
       type: 'response',
       timestamp: Date.now(),
-      summary: `回答：${content.slice(0, 30).replace(/\n/g, ' ')}...`,
+      summary: i18n.t('labels.responseSummary', { text: content.slice(0, 30).replace(/\n/g, ' ') }),
       fullContent: content,
       meta: { chars: content.length },
       annotations: []
@@ -131,7 +132,7 @@ export function useTestRecordActions(deps) {
         content: content.slice(0, 200)
       });
     } catch (error) {
-      addToast(`LLM 分析失败: ${error.message}`, 'error');
+      addToast(i18n.t('errors.llmAnalysisFailed', { message: error.message }), 'error');
     }
   }, [addAnnotation]);
 
@@ -143,7 +144,7 @@ export function useTestRecordActions(deps) {
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
       type: 'judge',
       timestamp: Date.now(),
-      summary: `人类评判：${humanJudgment.score}星 - ${humanJudgment.summary.slice(0, 20) || '无总结'}...`,
+      summary: i18n.t('success.humanJudgmentSummary', { score: humanJudgment.score, summary: humanJudgment.summary.slice(0, 20) || i18n.t('labels.none') }),
       fullContent: humanJudgment.summary,
       meta: {
         source: 'human',
@@ -155,7 +156,7 @@ export function useTestRecordActions(deps) {
     };
 
     addTestRecord(judgeRecord);
-    addToast(`人类评判已提交：${humanJudgment.score}星`, 'success', 'tester');
+    addToast(i18n.t('success.humanJudgmentSubmitted', { score: humanJudgment.score }), 'success', 'tester');
     setHumanJudgment({ auditorCode: '', score: null, summary: '' });
   }, [addTestRecord]);
 

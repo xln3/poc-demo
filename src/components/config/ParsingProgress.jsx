@@ -1,7 +1,10 @@
+import { useTranslation } from 'react-i18next';
+
 /**
  * Parsing progress indicator — shown when file parsing is in progress.
  */
 export default function ParsingProgress({ parsingProgress, parsingAbortController }) {
+  const { t } = useTranslation();
   if (!parsingProgress) return null;
 
   return (
@@ -10,10 +13,10 @@ export default function ParsingProgress({ parsingProgress, parsingAbortControlle
         <div className="flex items-center gap-2">
           <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full" />
           <span className="text-xs text-blue-400 font-medium">
-            正在使用 {parsingProgress.parser} 解析
+            {t('configPage.parsingWith', { parser: parsingProgress.parser })}
           </span>
           <span className="text-xs text-on-muted">
-            ({parsingProgress.runLocation === 'sandbox' ? '沙箱隔离' : 'MCP后端'})
+            ({parsingProgress.runLocation === 'sandbox' ? t('configPage.sandboxIsolated') : t('configPage.mcpBackend')})
           </span>
         </div>
         <button
@@ -24,14 +27,14 @@ export default function ParsingProgress({ parsingProgress, parsingAbortControlle
           }}
           className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded transition"
         >
-          取消
+          {t('buttons.cancel')}
         </button>
       </div>
       <div className="text-xs text-on-surface">
         <div>📄 {parsingProgress.filename}</div>
         <div className="mt-1 flex gap-4">
-          <span>已用时间: {(parsingProgress.elapsedTime / 1000).toFixed(1)}s</span>
-          <span>预估剩余: {Math.max(0, (parsingProgress.estimatedTime - parsingProgress.elapsedTime) / 1000).toFixed(1)}s</span>
+          <span>{t('configPage.elapsedTime')}: {(parsingProgress.elapsedTime / 1000).toFixed(1)}s</span>
+          <span>{t('configPage.estimatedRemaining')}: {Math.max(0, (parsingProgress.estimatedTime - parsingProgress.elapsedTime) / 1000).toFixed(1)}s</span>
         </div>
       </div>
       {/* Progress bar */}

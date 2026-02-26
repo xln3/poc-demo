@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../../config.js';
 
 /**
@@ -7,6 +8,8 @@ export default function TerminalToolsConfig({
   toolsConfigCollapsed, setToolsConfigCollapsed,
   enabledTools, setEnabledTools, maxToolCalls, setMaxToolCalls,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="bg-surface rounded-lg p-3 border border-cyan-900/50">
       <div className="text-xs text-cyan-400 flex items-center justify-between">
@@ -15,18 +18,18 @@ export default function TerminalToolsConfig({
           className="flex items-center gap-2 hover:text-cyan-300 transition"
         >
           <span>{toolsConfigCollapsed ? '▶' : '▼'}</span>
-          <span>终端工具配置</span>
+          <span>{t('configPage.terminalToolsConfig')}</span>
         </button>
         {toolsConfigCollapsed && (
           <span className="text-[10px] text-on-muted truncate max-w-[300px]">
-            {Object.entries(enabledTools).filter(([_, enabled]) => enabled).map(([name]) => name).join(' | ') || '无'}
+            {Object.entries(enabledTools).filter(([_, enabled]) => enabled).map(([name]) => name).join(' | ') || t('labels.none')}
           </span>
         )}
       </div>
       {!toolsConfigCollapsed && (
         <>
           <div className="mt-2 mb-2 flex items-center gap-4 text-xs">
-            <span className="text-on-muted">最大调用次数:</span>
+            <span className="text-on-muted">{t('configPage.maxCallCount')}:</span>
             <input
               type="number"
               min="1"
@@ -44,7 +47,7 @@ export default function TerminalToolsConfig({
                 }}
                 className="px-2 py-0.5 bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
               >
-                全选
+                {t('buttons.selectAll')}
               </button>
               <button
                 onClick={() => {
@@ -56,7 +59,7 @@ export default function TerminalToolsConfig({
                 }}
                 className="px-2 py-0.5 bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
               >
-                仅安全
+                {t('configPage.safeOnly')}
               </button>
               <button
                 onClick={() => {
@@ -66,7 +69,7 @@ export default function TerminalToolsConfig({
                 }}
                 className="px-2 py-0.5 bg-surface-raised hover:bg-surface-hover rounded text-on-surface"
               >
-                全不选
+                {t('configPage.selectNone')}
               </button>
             </div>
           </div>
@@ -115,7 +118,7 @@ export default function TerminalToolsConfig({
             ))}
           </div>
           <div className="mt-2 text-[10px] text-on-dim">
-            启用工具后，LLM 可在测试中调用这些工具。工具将在沙箱中执行。
+            {t('configPage.toolsDescription')}
           </div>
         </>
       )}

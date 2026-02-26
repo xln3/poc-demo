@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Section from './Section.jsx';
 
 /**
@@ -13,44 +14,45 @@ export default function UserPayloadConfig({
   payloadFiles, setPayloadFiles, removePayloadFile, handleAddFile,
   getDisplayPayload,
 }) {
+  const { t } = useTranslation();
   const payloadModified = customTestPayload !== (currentAttack?.testPayload ?? '') || payloadFiles.length > 0;
 
   return (
-    <Section title={dialogMode === 'multi' ? '初始消息' : '测试输入'}>
+    <Section title={dialogMode === 'multi' ? t('configPage.initialMessage') : t('configPage.testInput')}>
       {/* Header bar */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 text-xs">
           {dialogMode === 'multi' && (
-            <span className="text-blue-400 text-[10px] px-1.5 py-0.5 bg-blue-600/20 rounded">多轮</span>
+            <span className="text-blue-400 text-[10px] px-1.5 py-0.5 bg-blue-600/20 rounded">{t('configPage.multiRound')}</span>
           )}
-          {payloadModified && <span className="text-yellow-400 text-[10px]">(已修改)</span>}
+          {payloadModified && <span className="text-yellow-400 text-[10px]">({t('configPage.modified')})</span>}
           {payloadFiles.length > 0 && (
-            <span className="text-on-dim text-[10px]">{payloadFiles.length} 个文件</span>
+            <span className="text-on-dim text-[10px]">{payloadFiles.length} {t('configPage.files')}</span>
           )}
         </div>
         <div className="flex items-center gap-1">
           {isEditingPayload && (
             <label
               className="px-2 py-0.5 text-[10px] bg-surface-raised hover:bg-surface-hover rounded cursor-pointer transition"
-              title="添加文件作为用户输入"
+              title={t('configPage.addFileAsInput')}
             >
-              + 文件
+              + {t('configPage.file')}
               <input type="file" className="hidden" onChange={handleAddFile} multiple />
             </label>
           )}
           {isEditingPayload ? (
             <>
               <button onClick={() => setIsEditingPayload(false)}
-                className="px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-500 rounded transition">保存</button>
+                className="px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-500 rounded transition">{t('buttons.save')}</button>
               <button onClick={() => { setCustomTestPayload(currentAttack?.testPayload || ''); setPayloadFiles([]); setIsEditingPayload(false); }}
-                className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition">取消</button>
+                className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition">{t('buttons.cancel')}</button>
             </>
           ) : (
             <>
               <button onClick={() => setIsEditingPayload(true)} disabled={isDemo}
-                className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition disabled:opacity-50">编辑</button>
+                className="px-2 py-0.5 text-[10px] bg-surface-hover hover:bg-surface-hover rounded transition disabled:opacity-50">{t('buttons.edit')}</button>
               <button onClick={() => { setCustomTestPayload(currentAttack?.testPayload || ''); setPayloadFiles([]); }} disabled={isDemo}
-                className="px-2 py-0.5 text-[10px] bg-surface-raised hover:bg-surface-hover rounded transition disabled:opacity-50">重置</button>
+                className="px-2 py-0.5 text-[10px] bg-surface-raised hover:bg-surface-hover rounded transition disabled:opacity-50">{t('configPage.reset')}</button>
             </>
           )}
         </div>
@@ -76,18 +78,18 @@ export default function UserPayloadConfig({
           value={customTestPayload}
           onChange={(e) => setCustomTestPayload(e.target.value)}
           className="w-full min-h-[6rem] max-h-[12rem] text-xs bg-surface-muted/50 p-2 rounded border border-blue-500 text-orange-300 font-mono resize-y focus:outline-none custom-scroll break-all"
-          placeholder={dialogMode === 'multi' ? '输入首条消息（后续消息在运行页发送）...' : '输入测试 Payload...'}
+          placeholder={dialogMode === 'multi' ? t('configPage.enterFirstMessage') : t('configPage.enterTestPayload')}
         />
       ) : (
         <pre className="text-xs bg-surface-raised/30 p-2 rounded overflow-y-auto overflow-x-hidden max-h-[8rem] custom-scroll text-orange-300 whitespace-pre-wrap break-all">
-          {getDisplayPayload() || (dialogMode === 'multi' ? '(无初始消息)' : '(无用户提示词)')}
+          {getDisplayPayload() || (dialogMode === 'multi' ? t('configPage.noInitialMessage') : t('configPage.noUserPrompt'))}
         </pre>
       )}
 
       {/* Multi-round hint */}
       {dialogMode === 'multi' && (
         <div className="mt-2 text-[10px] text-on-dim">
-          多轮模式：此消息作为首条用户输入发送，后续对话在运行页面实时输入。
+          {t('configPage.multiRoundHint')}
         </div>
       )}
     </Section>

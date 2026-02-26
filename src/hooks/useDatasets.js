@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import i18n from '../i18n/index.js';
 import {
   listDatasets,
   saveDataset,
@@ -26,31 +27,31 @@ import { convertToDatasetFormat } from '../datasetConverter.js';
 export const CAPABILITY_CONFIG = {
   [CapabilityLevel.F1_CONVERSATION]: {
     key: CapabilityLevel.F1_CONVERSATION,
-    label: '文字对话',
+    get label() { return i18n.t('capabilityLevels.F1-conversation', { ns: 'config' }); },
     icon: '💬',
     shortLabel: 'F1',
   },
   [CapabilityLevel.F2_FILE_INJECTION]: {
     key: CapabilityLevel.F2_FILE_INJECTION,
-    label: '文件解析',
+    get label() { return i18n.t('capabilityLevels.F2-file-injection', { ns: 'config' }); },
     icon: '📎',
     shortLabel: 'F2',
   },
   [CapabilityLevel.F3_TOOL_USE]: {
     key: CapabilityLevel.F3_TOOL_USE,
-    label: '终端运行',
+    get label() { return i18n.t('capabilityLevels.F3-tool-use', { ns: 'config' }); },
     icon: '🔧',
     shortLabel: 'F3',
   },
   [CapabilityLevel.F4_RAG]: {
     key: CapabilityLevel.F4_RAG,
-    label: 'RAG知识',
+    get label() { return i18n.t('capabilityLevels.F4-rag', { ns: 'config' }); },
     icon: '🔍',
     shortLabel: 'F4',
   },
   [CapabilityLevel.F5_MCP]: {
     key: CapabilityLevel.F5_MCP,
-    label: 'MCP连接',
+    get label() { return i18n.t('capabilityLevels.F5-mcp', { ns: 'config' }); },
     icon: '🔌',
     shortLabel: 'F5',
   },
@@ -96,7 +97,7 @@ export const useDatasets = () => {
       setDatasets(list);
     } catch (err) {
       setError(err.message);
-      console.error('加载数据集失败:', err);
+      console.error('Failed to load datasets:', err);
     } finally {
       setIsLoading(false);
     }
@@ -195,7 +196,7 @@ export const useDatasets = () => {
       }
 
       if (result.type !== 'Dataset') {
-        setError(`不支持的数据类型: ${result.type}`);
+        setError(i18n.t('errors.unsupportedDataType', { type: result.type }));
         return null;
       }
 
@@ -368,7 +369,7 @@ export const useDatasets = () => {
       setIsConverting(false);
       return saved;
     } catch (err) {
-      setError(`格式转换失败: ${err.message}`);
+      setError(i18n.t('errors.formatConversionFailed', { message: err.message }));
       setIsConverting(false);
       return null;
     }

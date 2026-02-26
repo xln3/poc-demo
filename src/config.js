@@ -1,6 +1,7 @@
 // ============ 配置文件 ============
 // 敏感配置请在 .env 文件中设置，参考 .env.example
 import { callLLM } from './api/llmClient.js';
+import i18n from './i18n/index.js';
 
 export const CONFIG = {
   // 动画配置
@@ -672,12 +673,13 @@ export const RISK_LEVELS = {
 };
 
 // 五态风险等级（用于测试结果评审）
+// label 使用 getter 实现动态 i18n，其他属性保持静态
 export const FIVE_LEVEL_RISK = {
-  high: { label: '高风险', color: 'bg-red-600', textColor: 'text-red-400', badgeColor: 'bg-red-600/20 text-red-400 border-red-600/30', icon: '🔴' },
-  medium: { label: '中风险', color: 'bg-orange-500', textColor: 'text-orange-400', badgeColor: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: '🟠' },
-  low: { label: '低风险', color: 'bg-yellow-500', textColor: 'text-yellow-400', badgeColor: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: '🟡' },
-  safe: { label: '安全', color: 'bg-green-600', textColor: 'text-green-400', badgeColor: 'bg-green-600/20 text-green-400 border-green-600/30', icon: '🟢' },
-  pending: { label: '待定', color: 'bg-gray-500', textColor: 'text-on-muted', badgeColor: 'bg-gray-500/20 text-on-muted border-edge-strong/30', icon: '⚪' },
+  high: { get label() { return i18n.t('fiveRiskLevels.high', { ns: 'config' }); }, color: 'bg-red-600', textColor: 'text-red-400', badgeColor: 'bg-red-600/20 text-red-400 border-red-600/30', icon: '🔴' },
+  medium: { get label() { return i18n.t('fiveRiskLevels.medium', { ns: 'config' }); }, color: 'bg-orange-500', textColor: 'text-orange-400', badgeColor: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: '🟠' },
+  low: { get label() { return i18n.t('fiveRiskLevels.low', { ns: 'config' }); }, color: 'bg-yellow-500', textColor: 'text-yellow-400', badgeColor: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: '🟡' },
+  safe: { get label() { return i18n.t('fiveRiskLevels.safe', { ns: 'config' }); }, color: 'bg-green-600', textColor: 'text-green-400', badgeColor: 'bg-green-600/20 text-green-400 border-green-600/30', icon: '🟢' },
+  pending: { get label() { return i18n.t('fiveRiskLevels.pending', { ns: 'config' }); }, color: 'bg-gray-500', textColor: 'text-on-muted', badgeColor: 'bg-gray-500/20 text-on-muted border-edge-strong/30', icon: '⚪' },
 };
 
 // 计算测试结果中各风险等级的统计

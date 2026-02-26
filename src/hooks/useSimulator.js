@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { getToken, authFetch } from '../auth.js';
+import i18n from '../i18n/index.js';
 
 const POLL_INTERVAL_MS = 1000;
 const START_TIMEOUT_MS = 180_000;
@@ -41,7 +42,7 @@ export function useSimulator() {
     setLoading(true);
     setError(null);
     setStartProgress(0);
-    setStartMessage('发送启动请求...');
+    setStartMessage(i18n.t('messages.sendingStartRequest'));
     cancelledRef.current = false;
 
     try {
@@ -57,7 +58,7 @@ export function useSimulator() {
       }
       const { session_id } = await res.json();
       setStartProgress(5);
-      setStartMessage('容器启动中...');
+      setStartMessage(i18n.t('messages.containerStarting'));
 
       // 2. Poll /status until ready or error
       const result = await new Promise((resolve, reject) => {
@@ -67,13 +68,13 @@ export function useSimulator() {
           if (cancelledRef.current) {
             clearInterval(pollRef.current);
             pollRef.current = null;
-            reject(new Error('已取消'));
+            reject(new Error(i18n.t('messages.cancelled')));
             return;
           }
           if (Date.now() - t0 > START_TIMEOUT_MS) {
             clearInterval(pollRef.current);
             pollRef.current = null;
-            reject(new Error('启动超时 (3 分钟)'));
+            reject(new Error(i18n.t('errors.startTimeout')));
             return;
           }
 
@@ -92,7 +93,7 @@ export function useSimulator() {
             } else if (status.phase === 'error') {
               clearInterval(pollRef.current);
               pollRef.current = null;
-              reject(new Error(status.message || '启动失败'));
+              reject(new Error(status.message || i18n.t('errors.startFailed')));
             }
           } catch {
             // Network error — keep retrying
@@ -105,7 +106,7 @@ export function useSimulator() {
       setEngineName(engine);
       setActionSpace(result.action_space);
       setStartProgress(100);
-      setStartMessage('就绪');
+      setStartMessage(i18n.t('messages.ready'));
       return result;
     } catch (e) {
       setError(e.message);
@@ -122,7 +123,7 @@ export function useSimulator() {
       pollRef.current = null;
     }
     setLoading(false);
-    setError('已取消');
+    setError(i18n.t('messages.cancelled'));
   }, []);
 
   // Execute one step

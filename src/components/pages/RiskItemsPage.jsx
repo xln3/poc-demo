@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getRiskTree, CATEGORY_ICONS } from '../../riskItems/index.js';
 import { CAPABILITY_CONFIG } from '../../hooks/useDatasets.js';
 import { CapabilityTabs, DatasetList } from '../index.js';
+import RiskTreeAttackButton from '../RiskTreeAttackButton.jsx';
 
 /**
  * RiskItemsPage - 风险项 tab 主内容
@@ -43,6 +45,7 @@ export default function RiskItemsPage({
     formatSize,
   } = datasets;
 
+  const { t } = useTranslation();
   const isDemo = appMode === 'demo';
   const riskTree = useMemo(() => getRiskTree(), []);
 
@@ -61,7 +64,7 @@ export default function RiskItemsPage({
           onClick={() => setScenarioListExpanded(!scenarioListExpanded)}
           className="w-full flex items-center justify-between px-2 py-1.5 mb-2 rounded text-xs font-medium bg-surface-raised hover:bg-surface-hover"
         >
-          <span>📋 风险测试项 ({totalSubcategories})</span>
+          <span>📋 {t('riskItemsPage.riskTestItems')} ({totalSubcategories})</span>
           <span className="text-on-muted">{scenarioListExpanded ? '−' : '+'}</span>
         </button>
 
@@ -116,21 +119,15 @@ export default function RiskItemsPage({
                               const isCaseSelected = selectedAttack?.scenario === c.scenario
                                 && selectedAttack?.index === c.attackIndex;
                               return (
-                                <button
+                                <RiskTreeAttackButton
                                   key={`${c.scenario}-${c.attackIndex}-${ci}`}
-                                  onClick={() => {
+                                  caseRef={c}
+                                  isSelected={isCaseSelected}
+                                  onSelect={() => {
                                     selectAttack(c.scenario, c.attackIndex);
                                     setActiveTab('run');
                                   }}
-                                  className={`w-full text-left px-2 py-0.5 rounded text-[11px] truncate ${
-                                    isCaseSelected
-                                      ? 'bg-blue-600 text-white'
-                                      : 'hover:bg-surface-muted/50 text-on-muted'
-                                  }`}
-                                  title={`${c.scenarioData.name} - ${c.attack.name}`}
-                                >
-                                  {c.attack.name}
-                                </button>
+                                />
                               );
                             })}
                           </div>
@@ -138,7 +135,7 @@ export default function RiskItemsPage({
 
                         {isExpanded && sub.cases.length === 0 && (
                           <div className="ml-4 mt-0.5 px-2 py-1 text-[10px] text-on-dim italic">
-                            暂无测试用例
+                            {t('riskItemsPage.noTestCases')}
                           </div>
                         )}
                       </div>
@@ -178,7 +175,7 @@ export default function RiskItemsPage({
         {importedTestCase && (
           <div className="mt-3 p-2 bg-green-900/30 border border-green-700/50 rounded text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-green-400">已选择用例</span>
+              <span className="text-green-400">{t('riskItemsPage.caseSelected')}</span>
               {!isDemo && (
                 <button
                   onClick={() => setImportedTestCase(null)}
@@ -189,7 +186,7 @@ export default function RiskItemsPage({
               )}
             </div>
             <div className="mt-1 text-on-surface truncate">
-              {importedTestCase.case?.name || '未命名'}
+              {importedTestCase.case?.name || t('labels.unnamed')}
             </div>
             {importedTestCase.case?.capability && (
               <div className="mt-1 text-on-dim text-[10px]">
@@ -205,15 +202,15 @@ export default function RiskItemsPage({
                 }}
                 className="mt-2 w-full py-1.5 bg-green-600 hover:bg-green-500 rounded text-white text-xs"
               >
-                开始测试
+                {t('config.startTest')}
               </button>
             )}
           </div>
         )}
 
         <div className="mt-4 pt-3 border-t border-edge text-xs text-on-dim">
-          共 {filteredDatasets.length} 个数据集
-          {selectedCapabilities.length > 0 && ` (已筛选)`}
+          {t('riskItemsPage.totalDatasets', { count: filteredDatasets.length })}
+          {selectedCapabilities.length > 0 && ` (${t('riskItemsPage.filtered')})`}
         </div>
       </div>
 
@@ -238,7 +235,7 @@ export default function RiskItemsPage({
             {currentRiskItemData.benchmarks?.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs font-medium text-on-muted mb-2">
-                  关联 Benchmarks ({currentRiskItemData.benchmarks.length})
+                  {t('riskItemsPage.relatedBenchmarks')} ({currentRiskItemData.benchmarks.length})
                 </div>
                 <div className="space-y-1">
                   {currentRiskItemData.benchmarks.map((b, i) => (
@@ -246,7 +243,7 @@ export default function RiskItemsPage({
                       <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                         b.source === 'original' ? 'bg-blue-900/50 text-blue-400' : 'bg-amber-900/50 text-amber-400'
                       }`}>
-                        {b.source === 'original' ? '原有' : '复现'}
+                        {b.source === 'original' ? t('riskItemsPage.original') : t('riskItemsPage.reproduced')}
                       </span>
                       <span className="text-on-surface">{b.name}</span>
                       {b.repo && (
@@ -266,14 +263,14 @@ export default function RiskItemsPage({
             )}
 
             <div className="text-xs text-on-dim">
-              选择左侧的测试用例，或点击用例直接跳转到运行 tab
+              {t('riskItemsPage.selectCaseHint')}
             </div>
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-on-dim">
             <div className="text-center">
               <div className="text-4xl mb-4">🛡️</div>
-              <div>选择左侧的风险项查看详情</div>
+              <div>{t('riskItemsPage.selectRiskItemHint')}</div>
             </div>
           </div>
         )}
