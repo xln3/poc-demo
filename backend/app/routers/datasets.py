@@ -1,7 +1,7 @@
 """API endpoints for dataset management."""
 from __future__ import annotations
 from typing import List, Optional, Any, Dict
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..auth.security import require_auth
@@ -146,7 +146,7 @@ router = APIRouter(prefix="/datasets", tags=["datasets"], dependencies=[Depends(
 
 
 @router.get("")
-async def list_datasets(offset: int = 0, limit: Optional[int] = None):
+async def list_datasets(offset: int = Query(default=0, ge=0), limit: Optional[int] = Query(default=None, ge=1, le=500)):
     """List all saved datasets with optional pagination."""
     return dataset_storage.list_datasets(offset=offset, limit=limit)
 

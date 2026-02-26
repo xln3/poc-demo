@@ -48,6 +48,12 @@
   --color-scroll-thumb-hover: #9ca3af;
 }
 
+.light input[type="number"],
+.light select {
+  color: var(--color-on-canvas);
+  border-color: var(--color-edge-strong);
+}
+
 /* 自定义滚动条样式 */
 @layer utilities {
   .custom-scroll::-webkit-scrollbar {
@@ -69,6 +75,15 @@
 
 html, body, #root {
   height: 100%;
+}
+
+*:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* Toast 动画 */

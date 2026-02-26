@@ -1,7 +1,7 @@
 """API endpoints for batch test results."""
 from __future__ import annotations
 from typing import List, Optional, Any, Dict, Literal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..auth.security import require_auth
@@ -71,7 +71,7 @@ class GenerateRequest(BaseModel):
 
 
 @router.get("")
-async def list_test_results(offset: int = 0, limit: Optional[int] = None):
+async def list_test_results(offset: int = Query(default=0, ge=0), limit: Optional[int] = Query(default=None, ge=1, le=500)):
     """List all saved test results with optional pagination."""
     return test_results_storage.list_results(offset=offset, limit=limit)
 

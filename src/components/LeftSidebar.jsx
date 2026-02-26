@@ -20,16 +20,17 @@ export default function LeftSidebar({
   ];
 
   return (
-    <div className="w-[72px] bg-surface flex flex-col items-center py-3 flex-shrink-0 border-r border-edge">
+    <div className="w-12 sm:w-[72px] bg-surface flex flex-col items-center py-3 flex-shrink-0 border-r border-edge">
       {/* Mode toggle */}
-      <div className="flex flex-col gap-1 w-full px-2 mb-3">
+      <div className="flex flex-col gap-1 w-full px-1 sm:px-2 mb-3">
         <button
           onClick={() => setAppMode('test')}
           className={`py-1.5 rounded text-[10px] font-medium transition ${
             appMode === 'test' ? 'bg-blue-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
           }`}
         >
-          {t('modes.test')}
+          <span className="hidden sm:inline">{t('modes.test')}</span>
+          <span className="sm:hidden">T</span>
         </button>
         <button
           onClick={() => setAppMode('demo')}
@@ -37,19 +38,22 @@ export default function LeftSidebar({
             appMode === 'demo' ? 'bg-amber-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
           }`}
         >
-          {t('modes.demo')}
+          <span className="hidden sm:inline">{t('modes.demo')}</span>
+          <span className="sm:hidden">D</span>
         </button>
       </div>
 
       <div className="w-8 h-px bg-surface-raised mb-3" />
 
       {/* Tab buttons */}
-      <div className="flex flex-col gap-0.5 w-full">
+      <div className="flex flex-col gap-0.5 w-full" role="tablist">
         {tabs.map(tab => {
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={isActive}
               onClick={() => setActiveTab(tab.id)}
               className={`flex flex-col items-center gap-0.5 py-2.5 mx-1 rounded-lg transition-colors ${
                 isActive
@@ -57,8 +61,8 @@ export default function LeftSidebar({
                   : 'text-on-muted hover:text-on-canvas hover:bg-surface-muted/50'
               }`}
             >
-              <span className="text-lg leading-none">{tab.icon}</span>
-              <span className="text-[10px] font-medium">{tab.label}</span>
+              <span className="text-xl leading-none">{tab.icon}</span>
+              <span className="text-[11px] font-medium hidden sm:block">{tab.label}</span>
             </button>
           );
         })}
@@ -75,6 +79,7 @@ export default function LeftSidebar({
         onClick={toggleTheme}
         className="mb-3 p-2 rounded-lg text-on-muted hover:text-on-canvas hover:bg-surface-hover transition-colors"
         title={isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
+        aria-label={isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
       >
         {isDark ? (
           <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

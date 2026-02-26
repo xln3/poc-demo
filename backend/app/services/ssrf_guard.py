@@ -33,14 +33,21 @@ def resolve_all_addresses(hostname: str) -> list[str]:
     """Resolve hostname to all IP addresses (IPv4 + IPv6).
 
     Uses getaddrinfo to cover all address families, preventing IPv6 bypass.
+    Applies a 5-second timeout to prevent slow DNS resolution from blocking.
     """
+    old_timeout = socket.getdefaulttimeout()
     try:
+        socket.setdefaulttimeout(5)
         results = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         # results: list of (family, type, proto, canonname, sockaddr)
         # sockaddr is (ip, port) for IPv4, (ip, port, flow, scope) for IPv6
         return list({r[4][0] for r in results})
+    except socket.timeout:
+        raise ValueError(f"DNS resolution timed out for {hostname}")
     except socket.gaierror:
         return []
+    finally:
+        socket.setdefaulttimeout(old_timeout)
 
 
 def check_ssrf(url: str, allow_private: bool = False) -> dict:

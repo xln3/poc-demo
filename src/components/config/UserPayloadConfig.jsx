@@ -81,7 +81,9 @@ export default function UserPayloadConfig({
           placeholder={dialogMode === 'multi' ? t('configPage.enterFirstMessage') : t('configPage.enterTestPayload')}
         />
       ) : (
-        <pre className="text-xs bg-surface-raised/30 p-2 rounded overflow-y-auto overflow-x-hidden max-h-[8rem] custom-scroll text-orange-300 whitespace-pre-wrap break-all">
+        <pre className={`text-xs bg-surface-raised/30 p-2 rounded overflow-y-auto overflow-x-hidden max-h-[8rem] custom-scroll whitespace-pre-wrap break-all ${
+          getDisplayPayload() ? 'text-orange-300' : 'text-on-dim italic'
+        }`}>
           {getDisplayPayload() || (dialogMode === 'multi' ? t('configPage.noInitialMessage') : t('configPage.noUserPrompt'))}
         </pre>
       )}

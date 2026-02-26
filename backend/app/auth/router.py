@@ -99,7 +99,9 @@ async def register(
 
 
 @router.post("/bootstrap", response_model=UserResponse, status_code=201)
+@limiter.limit("3/minute")
 async def bootstrap_admin(
+    request: Request,
     req: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):

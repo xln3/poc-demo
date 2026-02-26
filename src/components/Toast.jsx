@@ -56,7 +56,7 @@ const Toast = ({ toasts, removeToast }) => {
   if (!toasts || toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
+    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2" aria-live="polite" role="status">
       {toasts.map(toast => (
         <ToastItem key={toast.id} toast={toast} onClose={removeToast} />
       ))}

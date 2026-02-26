@@ -19,6 +19,7 @@ export default function LanguageSwitcher({ className = '' }) {
         bg-surface-raised text-on-muted hover:bg-surface-hover hover:text-on-canvas
         ${className}`}
       title={isChinese ? 'Switch to English' : '切换到中文'}
+      aria-label={isChinese ? 'Switch to English' : '切换到中文'}
     >
       {isChinese ? 'EN' : '中'}
     </button>

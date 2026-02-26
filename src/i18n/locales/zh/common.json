@@ -166,7 +166,8 @@
     "convert": "转换",
     "selectAll": "全选",
     "selectAllF1F2": "全选 F1/F2",
-    "clearSelection": "清空"
+    "clearSelection": "清空",
+    "retry": "重试"
   },
   "records": {
     "noRecords": "暂无执行日志",
@@ -608,7 +609,8 @@
     "deleteProviderConfirm": "确定删除此供应商？",
     "startTimeout": "启动超时 (3 分钟)",
     "startFailed": "启动失败",
-    "payloadContainsHidden": "⚠️ Payload 包含隐藏内容"
+    "payloadContainsHidden": "⚠️ Payload 包含隐藏内容",
+    "datasetsLoadFailed": "数据集加载失败"
   },
   "success": {
     "caseSaved": "保存成功！用例 ID: {{id}}",
@@ -725,7 +727,7 @@
     "addFile": "添加文件",
     "addFileHint": "添加文件作为用户输入，文件内容将被解析后注入提示词",
     "enterSystemPrompt": "输入系统提示词...",
-    "noSystemPrompt": "(无系统提示词)",
+    "noSystemPrompt": "选择场景后自动设置",
     "enterUserPrompt": "输入用户提示词...",
     "noUserPrompt": "(无用户提示词)",
     "reset": "重置",
@@ -757,7 +759,7 @@
     "addFileAsInput": "添加文件作为用户输入",
     "enterFirstMessage": "输入首条消息（后续消息在运行页发送）...",
     "enterTestPayload": "输入测试 Payload...",
-    "noInitialMessage": "(无初始消息)",
+    "noInitialMessage": "选择场景后自动设置",
     "multiRoundHint": "多轮模式：此消息作为首条用户输入发送，后续对话在运行页面实时输入。",
     "parsingWith": "正在使用 {{parser}} 解析",
     "sandboxIsolated": "沙箱隔离",
@@ -807,7 +809,8 @@
     "prevPage": "上一页",
     "nextPage": "下一页",
     "loadAsTestCase": "加载为测试用例",
-    "selectCaseHint": "← 选择一个测例查看详情"
+    "selectCaseHint": "← 选择一个测例查看详情",
+    "casesLoadFailed": "基准用例加载失败"
   },
   "toasts": {
     "datasetImportSuccess": "数据集导入成功: {{name}}",
@@ -865,5 +868,11 @@
     "reportPromptCurrentContent": "当前报告内容（请在此基础上优化）",
     "reportPromptOutputMarkdown": "请输出 Markdown 格式的报告内容：",
     "reportSystemPrompt": "你是安全评估报告撰写专家。请输出 Markdown 格式的报告。"
+  },
+  "hints": {
+    "selectScenarioFirst": "请先选择一个测试场景"
+  },
+  "confirmations": {
+    "clearTestData": "清除所有测试数据？此操作不可撤销。"
   }
 }

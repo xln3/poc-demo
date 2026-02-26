@@ -40,6 +40,8 @@ export default function RiskItemsPage({
     selectedDataset, setSelectedDataset,
     selectedCapabilities,
     isLoading: datasetsLoading,
+    error: datasetsError,
+    loadDatasets,
     toggleCapability, clearCapabilityFilter,
     exportDataset, removeDataset,
     formatSize,
@@ -56,9 +58,9 @@ export default function RiskItemsPage({
     ), [riskTree]);
 
   return (
-    <div className="flex-1 flex min-h-0">
+    <div className="flex-1 flex flex-col sm:flex-row min-h-0">
       {/* Left: risk tree + datasets */}
-      <div className="w-72 flex-shrink-0 border-r border-edge overflow-y-auto custom-scroll p-3">
+      <div className="w-full sm:w-60 md:w-72 flex-shrink-0 border-b sm:border-b-0 sm:border-r border-edge overflow-y-auto custom-scroll p-3">
         {/* Risk tree header */}
         <button
           onClick={() => setScenarioListExpanded(!scenarioListExpanded)}
@@ -156,6 +158,17 @@ export default function RiskItemsPage({
           onToggleCapability={toggleCapability}
           onClearFilter={clearCapabilityFilter}
         />
+        {datasetsError && (
+          <div className="mb-2 p-2 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-400 flex items-center justify-between">
+            <span>{t('errors.datasetsLoadFailed')}</span>
+            <button
+              onClick={loadDatasets}
+              className="ml-2 px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[10px] transition"
+            >
+              {t('buttons.retry')}
+            </button>
+          </div>
+        )}
         <DatasetList
           datasets={filteredDatasets}
           selectedDataset={selectedDataset}

@@ -34,7 +34,7 @@ export default function AppModals({
     <>
       {/* 格式转换确认弹窗 */}
       {pendingConversion && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true">
           <div className="bg-surface rounded-lg p-6 max-w-md">
             <h3 className="text-lg font-medium text-white mb-4">{t('formatConversion.title')}</h3>
             <p className="text-on-surface mb-4">
@@ -73,13 +73,13 @@ export default function AppModals({
 
       {/* 评判设置弹窗 */}
       {judgeConfigOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface rounded-lg p-4 w-[600px] max-h-[80vh] overflow-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true">
+          <div className="bg-surface rounded-lg p-4 w-[90vw] max-w-[600px] max-h-[80vh] overflow-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold">{t('judgeConfig.title')}</h3>
               <button
                 onClick={() => setJudgeConfigOpen(false)}
-                className="text-on-muted hover:text-on-canvas"
+                className="text-on-muted hover:text-on-canvas" aria-label="Close"
               >
                 ✕
               </button>
@@ -141,13 +141,13 @@ export default function AppModals({
 
       {/* 批注弹窗 */}
       {annotationModal.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface rounded-lg p-4 w-[400px]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true">
+          <div className="bg-surface rounded-lg p-4 w-[90vw] max-w-[400px]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold">{t('buttons.addAnnotation')}</h3>
               <button
                 onClick={() => setAnnotationModal({ open: false, recordId: null })}
-                className="text-on-muted hover:text-on-canvas"
+                className="text-on-muted hover:text-on-canvas" aria-label="Close"
               >
                 ✕
               </button>
@@ -230,13 +230,13 @@ export default function AppModals({
 
       {/* 保存测试对话框 */}
       {showSaveDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface rounded-lg p-4 w-[400px]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true">
+          <div className="bg-surface rounded-lg p-4 w-[90vw] max-w-[400px]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold">{t('saveDialog.title')}</h3>
               <button
                 onClick={() => setShowSaveDialog(false)}
-                className="text-on-muted hover:text-on-canvas"
+                className="text-on-muted hover:text-on-canvas" aria-label="Close"
               >
                 ✕
               </button>
@@ -293,13 +293,13 @@ export default function AppModals({
 
       {/* 详情弹窗 */}
       {detailModalCase && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-surface rounded-lg shadow-xl w-[800px] max-h-[80vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" role="dialog" aria-modal="true">
+          <div className="bg-surface rounded-lg shadow-xl w-[90vw] max-w-[800px] max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-edge">
               <h3 className="text-lg font-bold">{t('caseDetail.title')}</h3>
               <button
                 onClick={() => setDetailModalCase(null)}
-                className="text-on-muted hover:text-on-canvas text-xl"
+                className="text-on-muted hover:text-on-canvas text-xl" aria-label="Close"
               >
                 ✕
               </button>
@@ -308,7 +308,7 @@ export default function AppModals({
               {/* 基本信息 */}
               <div className="p-3 bg-canvas/50 rounded">
                 <div className="text-sm font-medium text-on-surface mb-2">{t('caseDetail.basicInfo')}</div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                   <div><span className="text-on-dim">{t('caseDetail.caseName')}</span> {detailModalCase.caseName || t('caseDetail.unnamed')}</div>
                   <div><span className="text-on-dim">{t('caseDetail.attackType')}</span> {detailModalCase.attackType || t('caseDetail.unknown')}</div>
                   <div className="col-span-2"><span className="text-on-dim">{t('caseDetail.attackDescription')}</span> {detailModalCase.attackDescription || t('labels.none')}</div>
@@ -421,22 +421,22 @@ export default function AppModals({
 
       {/* 评审弹窗 */}
       {reviewModalCase && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-surface rounded-lg shadow-xl w-[900px] max-h-[80vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" role="dialog" aria-modal="true">
+          <div className="bg-surface rounded-lg shadow-xl w-[90vw] max-w-[900px] max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-edge">
               <h3 className="text-lg font-bold">{t('reviewModal.title', { name: reviewModalCase.caseName || t('reviewModal.unnamed') })}</h3>
               <button
                 onClick={() => setReviewModalCase(null)}
-                className="text-on-muted hover:text-on-canvas text-xl"
+                className="text-on-muted hover:text-on-canvas text-xl" aria-label="Close"
               >
                 ✕
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 custom-scroll">
               {/* 双栏布局：左 LLM 评审 + 右人类评审 */}
-              <div className="flex gap-4">
+              <div className="flex flex-col md:flex-row gap-4">
                 {/* 左栏：LLM 评审 */}
-                <div className="w-1/2 p-4 bg-canvas/50 rounded">
+                <div className="w-full md:w-1/2 p-4 bg-canvas/50 rounded">
                   <div className="text-sm font-medium text-on-surface mb-3">{t('review.llmReview')}</div>
                   {reviewModalCase.review?.llm ? (
                     <div className="space-y-2">
@@ -472,7 +472,7 @@ export default function AppModals({
                 </div>
 
                 {/* 右栏：人类评审 */}
-                <div className="w-1/2 p-4 bg-canvas/50 rounded">
+                <div className="w-full md:w-1/2 p-4 bg-canvas/50 rounded">
                   <div className="text-sm font-medium text-on-surface mb-3">{t('review.humanReview')}</div>
                   <form
                     onSubmit={(e) => {

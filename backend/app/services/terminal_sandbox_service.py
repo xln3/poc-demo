@@ -267,21 +267,29 @@ class MultiTerminalSandboxService:
             state = self._terminals.get(tag)
             if state is None:
                 return None
+            # Copy state fields into local variables while under the lock
+            # to avoid race conditions if state is modified after lock release
+            local_tag = state.tag
+            local_session_id = state.session_id
+            local_container_id = state.container_id
+            local_image = state.image
+            local_created_at = state.created_at
+            local_mount_path = state.mount_path
 
-        # 获取容器最新状态
-        container_info = container_manager.get_container_status(state.session_id)
+        # 获取容器最新状态 (outside lock — potentially slow I/O)
+        container_info = container_manager.get_container_status(local_session_id)
 
-        # 计算占用体积
-        size_bytes = self._get_dir_size(state.mount_path)
+        # 计算占用体积 (outside lock — potentially slow I/O)
+        size_bytes = self._get_dir_size(local_mount_path)
 
         return TerminalInfo(
-            tag=state.tag,
-            session_id=state.session_id,
-            container_id=state.container_id,
-            image=state.image,
+            tag=local_tag,
+            session_id=local_session_id,
+            container_id=local_container_id,
+            image=local_image,
             status=container_info.status,
-            created_at=state.created_at,
-            mount_path=state.mount_path,
+            created_at=local_created_at,
+            mount_path=local_mount_path,
             size_bytes=size_bytes,
         )
 

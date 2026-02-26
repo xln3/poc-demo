@@ -54,7 +54,7 @@ export default function LoginPage({ onLogin }) {
         <h1 className="text-xl font-bold text-on-canvas mb-1">{t('auth.title')}</h1>
         <p className="text-on-muted text-sm mb-6">{t('auth.subtitle')}</p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" aria-label="Login">
           <div>
             <label className="block text-sm text-on-surface mb-1">{t('auth.username')}</label>
             <input

@@ -47,6 +47,7 @@ export default function SimulationEnvConfig({
   const [activeDataset, setActiveDataset] = useState('unsafe_detailed');
   const [cases, setCases] = useState([]);
   const [casesLoading, setCasesLoading] = useState(false);
+  const [casesError, setCasesError] = useState(null);
   const [selectedCase, setSelectedCase] = useState(null);
   const [riskFilter, setRiskFilter] = useState('');
   const [offset, setOffset] = useState(0);
@@ -71,8 +72,10 @@ export default function SimulationEnvConfig({
         limit: LIMIT,
       });
       setCases(data.cases || []);
+      setCasesError(null);
     } catch (e) {
       console.error('[SafeAgentBench] Failed to load cases:', e);
+      setCasesError(e.message);
     } finally {
       setCasesLoading(false);
     }
@@ -202,6 +205,19 @@ export default function SimulationEnvConfig({
                   {cat}
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Cases load error */}
+          {casesError && (
+            <div className="p-2 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-400 flex items-center justify-between">
+              <span>{t('configPage.casesLoadFailed')} — {casesError}</span>
+              <button
+                onClick={loadCases}
+                className="ml-2 px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[10px] transition"
+              >
+                {t('buttons.retry')}
+              </button>
             </div>
           )}
 

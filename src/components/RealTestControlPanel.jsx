@@ -34,6 +34,8 @@ export default function RealTestControlPanel({
   simEngine,
   // Error
   apiError,
+  // Current attack
+  currentAttack,
 }) {
   const { t } = useTranslation();
   const isDemo = appMode === 'demo';
@@ -52,9 +54,9 @@ export default function RealTestControlPanel({
       )}
 
       {/* Config summary + execution buttons */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         {/* Left: config summary badges */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className={`flex items-center gap-2 flex-wrap${!currentAttack ? ' opacity-40' : ''}`}>
           {/* Model badge */}
           <span className="text-xs px-2 py-0.5 bg-surface-raised rounded text-on-surface">
             {providerName ? `${providerName} / ` : ''}{modelName}
@@ -231,7 +233,11 @@ export default function RealTestControlPanel({
                 {t('buttons.replayDemo')}
               </button>
               <button
-                onClick={() => { setLastRecording(null); setMessages([]); setLogs([]); }}
+                onClick={() => {
+                  if (window.confirm(t('confirmations.clearTestData'))) {
+                    setLastRecording(null); setMessages([]); setLogs([]);
+                  }
+                }}
                 className="px-3 py-1.5 rounded text-xs font-medium transition bg-surface-hover hover:bg-surface-hover"
               >
                 {t('buttons.newTest')}
@@ -253,9 +259,10 @@ export default function RealTestControlPanel({
           ) : dialogMode === 'single' ? (
             <button
               onClick={() => { startRecording(); runRealTest(); }}
-              disabled={apiStatus === 'loading' || isDemo}
+              disabled={apiStatus === 'loading' || isDemo || !currentAttack}
+              title={!currentAttack ? t('hints.selectScenarioFirst') : undefined}
               className={`px-4 py-1.5 rounded text-xs font-medium transition ${
-                apiStatus === 'loading' || isDemo
+                apiStatus === 'loading' || isDemo || !currentAttack
                   ? 'bg-surface-hover cursor-not-allowed'
                   : 'bg-green-600 hover:bg-green-500'
               }`}
@@ -265,8 +272,9 @@ export default function RealTestControlPanel({
           ) : conversationMode === 'idle' ? (
             <button
               onClick={() => { startRecording(); startConversation(); }}
-              disabled={apiStatus === 'loading' || isDemo}
-              className={`px-4 py-1.5 rounded text-xs font-medium transition ${isDemo ? 'bg-surface-hover cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
+              disabled={apiStatus === 'loading' || isDemo || !currentAttack}
+              title={!currentAttack ? t('hints.selectScenarioFirst') : undefined}
+              className={`px-4 py-1.5 rounded text-xs font-medium transition ${isDemo || !currentAttack ? 'bg-surface-hover cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
             >
               {t('buttons.startTest')}
             </button>

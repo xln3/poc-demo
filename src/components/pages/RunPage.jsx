@@ -39,7 +39,7 @@ export default function RunPage({
 
       {/* Panels: 2-col (default) or 3-col (thinking enabled) */}
       <div className={`flex-1 grid gap-4 min-h-0 ${
-        thinkingEnabled ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'
+        thinkingEnabled ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'
       }`}>
         <ConversationPanel ref={chatRef} {...conversationPanel} />
         <RightPanel ref={logRef} {...rightPanel} />

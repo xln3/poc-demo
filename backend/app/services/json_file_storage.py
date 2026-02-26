@@ -6,6 +6,7 @@ Subclasses implement extract_summary() for their domain.
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
 import threading
 import uuid
@@ -14,6 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .id_validator import sanitize_id
+
+logger = logging.getLogger(__name__)
 
 
 class JsonFileStorage:
@@ -68,6 +71,8 @@ class JsonFileStorage:
         """Subclasses override to produce a summary dict for list responses."""
         raise NotImplementedError
 
+    MAX_LIMIT = 500
+
     def list_items(
         self, *, offset: int = 0, limit: Optional[int] = None
     ) -> Dict[str, Any]:
@@ -76,13 +81,16 @@ class JsonFileStorage:
         Returns {"items": [...], "total": N, "offset": int, "limit": int|None}.
         Items are sorted by savedAt descending (newest first).
         """
+        limit = min(limit, self.MAX_LIMIT) if limit else self.MAX_LIMIT
+
         items: List[dict] = []
-        for path in self._data_dir.glob("*.json"):
+        for file_path in self._data_dir.glob("*.json"):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 items.append(self.extract_summary(data))
             except (json.JSONDecodeError, IOError):
+                logger.warning(f"Corrupted JSON file skipped: {file_path}")
                 continue
 
         items.sort(key=lambda x: x.get("savedAt", ""), reverse=True)

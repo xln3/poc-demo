@@ -186,7 +186,9 @@ export default function PromptConfig({
                     placeholder={t('configPage.enterSystemPrompt')}
                   />
                 ) : (
-                  <pre className="text-xs bg-surface-raised p-2 rounded overflow-auto max-h-[8rem] custom-scroll text-cyan-300 whitespace-pre-wrap">
+                  <pre className={`text-xs bg-surface-raised p-2 rounded overflow-auto max-h-[8rem] custom-scroll whitespace-pre-wrap ${
+                    customSystemPrompt ? 'text-cyan-300' : 'text-on-dim italic'
+                  }`}>
                     {customSystemPrompt || t('configPage.noSystemPrompt')}
                   </pre>
                 )}

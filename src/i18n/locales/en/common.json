@@ -166,7 +166,8 @@
     "convert": "Convert",
     "selectAll": "Select All",
     "selectAllF1F2": "Select All F1/F2",
-    "clearSelection": "Clear"
+    "clearSelection": "Clear",
+    "retry": "Retry"
   },
   "records": {
     "noRecords": "No execution logs",
@@ -608,7 +609,8 @@
     "deleteProviderConfirm": "Are you sure you want to delete this provider?",
     "startTimeout": "Start timeout (3 minutes)",
     "startFailed": "Start failed",
-    "payloadContainsHidden": "⚠️ Payload contains hidden content"
+    "payloadContainsHidden": "⚠️ Payload contains hidden content",
+    "datasetsLoadFailed": "Failed to load datasets"
   },
   "success": {
     "caseSaved": "Saved successfully! Case ID: {{id}}",
@@ -725,7 +727,7 @@
     "addFile": "Add File",
     "addFileHint": "Add file as user input; file content will be parsed and injected into the prompt",
     "enterSystemPrompt": "Enter system prompt...",
-    "noSystemPrompt": "(No system prompt)",
+    "noSystemPrompt": "Set by scenario selection",
     "enterUserPrompt": "Enter user prompt...",
     "noUserPrompt": "(No user prompt)",
     "reset": "Reset",
@@ -757,7 +759,7 @@
     "addFileAsInput": "Add file as user input",
     "enterFirstMessage": "Enter first message (send follow-up messages on the Run page)...",
     "enterTestPayload": "Enter test Payload...",
-    "noInitialMessage": "(No initial message)",
+    "noInitialMessage": "Set by scenario selection",
     "multiRoundHint": "Multi-round mode: this message is sent as the first user input, subsequent dialogue is entered in real-time on the Run page.",
     "parsingWith": "Parsing with {{parser}}",
     "sandboxIsolated": "Sandbox isolated",
@@ -807,7 +809,8 @@
     "prevPage": "Previous",
     "nextPage": "Next",
     "loadAsTestCase": "Load as Test Case",
-    "selectCaseHint": "Select a case to view details"
+    "selectCaseHint": "Select a case to view details",
+    "casesLoadFailed": "Failed to load benchmark cases"
   },
   "toasts": {
     "datasetImportSuccess": "Dataset imported: {{name}}",
@@ -865,5 +868,11 @@
     "reportPromptCurrentContent": "Current Report Content (please optimize based on this)",
     "reportPromptOutputMarkdown": "Please output the report content in Markdown format:",
     "reportSystemPrompt": "You are a security assessment report writing expert. Please output the report in Markdown format."
+  },
+  "hints": {
+    "selectScenarioFirst": "Select a test scenario first"
+  },
+  "confirmations": {
+    "clearTestData": "Clear all test data? This cannot be undone."
   }
 }

@@ -485,6 +485,18 @@ export default function App() {
     }
   }, [datasetsError, addToast, clearDatasetsError]);
 
+  // Warn before unload when there are unsaved changes
+  useEffect(() => {
+    const handler = (e) => {
+      if (isEditingPayload || isEditingSystemPrompt || apiStatus === 'loading') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isEditingPayload, isEditingSystemPrompt, apiStatus]);
+
   // 数据集详情弹窗状态
   const [showDatasetDetail, setShowDatasetDetail] = useState(false);
 
@@ -1559,6 +1571,8 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
               setMessages, setLogs,
               // Error
               apiError,
+              // Current attack (for disable logic)
+              currentAttack: translatedAttack || currentAttack,
             }}
             conversationPanel={{
               leftPanelTab, setLeftPanelTab,
