@@ -117,7 +117,7 @@ export default function RisksPage() {
       <div className="grid grid-cols-4 gap-3">
         <StatCard label={isZh ? '风险大类' : 'Categories'} value={totalCats} />
         <StatCard label={isZh ? '风险子类' : 'Subcategories'} value={totalSubs} />
-        <StatCard label="Benchmarks" value={totalBms} />
+        <StatCard label={isZh ? '风险基准' : 'Risk Benchmarks'} value={totalBms} />
         <StatCard label="Tasks" value={totalTasks} />
       </div>
 
@@ -176,7 +176,7 @@ function CategoryNode({ cat, isZh, expanded, toggleExpand, t }) {
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs text-on-dim">
-          <span>{cat.subcategories?.reduce((s, sub) => s + (sub.benchmarks?.length || 0), 0)} benchmarks</span>
+          <span>{cat.subcategories?.reduce((s, sub) => s + (sub.benchmarks?.length || 0), 0)} {isZh ? '个风险基准' : 'risk benchmarks'}</span>
         </div>
       </button>
 
@@ -209,7 +209,7 @@ function SubcategoryNode({ sub, isZh, expanded, toggleExpand, t }) {
           </span>
         </div>
         <span className="text-xs text-on-dim">
-          {sub.benchmarks?.length || 0} benchmarks
+          {sub.benchmarks?.length || 0} {isZh ? '个风险基准' : 'risk benchmarks'}
         </span>
       </button>
 
