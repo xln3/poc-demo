@@ -70,9 +70,22 @@ export default function App() {
     setEvalSubPage(page);
     setEvalContext(prev => ({ ...prev, ...ctx }));
     if (page === 'run-reproduce' && ctx) {
-      // Jump to Run tab with pre-config
+      // Jump to Run tab with pre-config from eval reproduce
       setActiveTab('run');
-      // TODO: inject reproduce config into run page state
+      // Pre-select matching scenario
+      if (ctx.scenarios?.length > 0) {
+        const scenarioKey = ctx.scenarios[0];
+        if (SCENARIOS[scenarioKey]) {
+          setSelectedAttack({ scenario: scenarioKey, index: 0 });
+          // Inject payload after the scenario-switch effect resets defaults (next tick)
+          if (ctx.pre_config?.payload) {
+            setTimeout(() => {
+              setCustomTestPayload(ctx.pre_config.payload);
+              setIsEditingPayload(true);
+            }, 100);
+          }
+        }
+      }
     }
   };
 
@@ -990,7 +1003,6 @@ export default function App() {
     const newPrompt = (translatedScenario || currentScenario).systemPrompt || '';
     setCustomSystemPrompt(newPrompt);
     lastDefaultPromptRef.current = newPrompt;
-    setIsEditingLlmConfig(false);
     // 切换场景时重置测试 payload 为默认值（使用翻译版本）
     const newPayload = (translatedAttack || currentAttack).testPayload || '';
     setCustomTestPayload(newPayload);

@@ -183,7 +183,17 @@ async def reproduce_risk_case(
     """Get pre-config for reproducing a high-risk case in poc-demo."""
     from ..services.risk_scenario_map import get_reproduction_config
     try:
-        samples = await eval_bridge.get_eval_result_samples(model, task, "HIGH")
+        # Try to fetch per-sample data; gracefully fall back if unavailable
+        samples = {"samples": []}
+        try:
+            samples = await eval_bridge.get_eval_result_samples(model, task, "HIGH")
+        except Exception as sample_err:
+            logger.warning("Per-sample data unavailable for %s/%s: %s", model, task, sample_err)
+            # Try without risk filter
+            try:
+                samples = await eval_bridge.get_eval_result_samples(model, task)
+            except Exception:
+                pass
         config = get_reproduction_config(task, samples, req.sample_id)
         return config
     except Exception as e:
