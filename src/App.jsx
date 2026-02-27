@@ -24,6 +24,7 @@ import AppModals from './components/AppModals.jsx';
 import RunPage from './components/pages/RunPage.jsx';
 import ConfigPage from './components/pages/ConfigPage.jsx';
 import ReportPage from './components/pages/ReportPage.jsx';
+import ReportEditorPage from './components/pages/ReportEditorPage.jsx';
 import RiskItemsPage from './components/pages/RiskItemsPage.jsx';
 import RisksPage from './components/pages/RisksPage.jsx';
 import CasesPage from './components/pages/CasesPage.jsx';
@@ -1640,23 +1641,9 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
 
         {/* 报告 tab */}
         {activeTab === 'report' && (
-          <ReportPage
-            appMode={appMode}
-            savedTestResults={savedTestResults}
-            selectedTestResult={selectedTestResult}
-            viewTestResultDetail={viewTestResultDetail}
-            handleDeleteTestResult={handleDeleteTestResult}
-            loadSavedTestResults={loadSavedTestResults}
-            detailView={{
-              selectedTestResult,
-              openDetailModal, openReviewModal, handleDeleteTestCase,
-              reportContent, setReportContent,
-              reportEditMode, setReportEditMode,
-              reportSaving, handleSaveReport,
-              reportTemplates, selectedTemplate, setSelectedTemplate,
-              applyReportTemplate, handleLLMGenerateReport,
-            }}
-          />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <ReportEditorPage />
+          </div>
         )}
 
         {/* 风险分类 tab */}

@@ -1,0 +1,91 @@
+{
+  "title": "报告编辑器",
+  "newReport": "新建报告",
+  "noReports": "暂无报告，点击上方按钮创建",
+  "noReportSelected": "请选择或新建一份报告",
+  "untitledReport": "未命名报告",
+  "reportTitle": "报告标题",
+
+  "status": {
+    "draft": "草稿",
+    "generating": "生成中",
+    "ready": "就绪"
+  },
+
+  "scenario": {
+    "title": "报告场景",
+    "single_agent": "单智能体综合安全报告",
+    "single_agent_desc": "全面评估单个智能体的安全性能",
+    "comparison": "多智能体对比报告",
+    "comparison_desc": "对比分析多个智能体的安全表现差异",
+    "time_compare": "同智能体时序对比报告",
+    "time_compare_desc": "分析同一智能体不同时间的安全评测变化",
+    "risk_deep_dive": "风险类别深度分析",
+    "risk_deep_dive_desc": "深入分析特定风险类别的评测结果",
+    "custom": "自定义报告",
+    "custom_desc": "用户自定义报告目的和生成指令"
+  },
+
+  "source": {
+    "title": "数据源选择",
+    "selectResults": "选择评测结果",
+    "noResults": "暂无可用的评测结果",
+    "selectedCount": "已选 {{count}} 项",
+    "agent": "智能体",
+    "model": "模型",
+    "evalDate": "评测日期",
+    "score": "评分"
+  },
+
+  "generate": {
+    "button": "生成报告",
+    "stop": "停止生成",
+    "generating": "AI 正在生成报告...",
+    "complete": "报告生成完成",
+    "error": "生成失败",
+    "systemPrompt": "系统提示词",
+    "systemPromptPlaceholder": "自定义系统提示词（可选）"
+  },
+
+  "editor": {
+    "save": "保存",
+    "saving": "保存中...",
+    "saved": "已保存",
+    "undo": "撤销",
+    "redo": "重做",
+    "history": "历史版本",
+    "export": "导出PDF",
+    "toc": "目录",
+    "editSource": "编辑源码",
+    "saveSource": "保存源码",
+    "cancelSource": "取消"
+  },
+
+  "selection": {
+    "aiRegen": "AI重写",
+    "instruction": "修改指令",
+    "instructionPlaceholder": "描述你希望如何修改这段内容...",
+    "regenerating": "正在重新生成...",
+    "apply": "应用",
+    "cancel": "取消"
+  },
+
+  "history": {
+    "title": "版本历史",
+    "version": "版本 {{version}}",
+    "rollback": "回滚到此版本",
+    "preview": "预览",
+    "noHistory": "暂无历史版本",
+    "rollbackConfirm": "确定要回滚到版本 {{version}} 吗？当前内容将被保存为新版本。"
+  },
+
+  "delete": {
+    "confirm": "确定要删除这份报告吗？此操作不可撤销。",
+    "button": "删除报告"
+  },
+
+  "print": {
+    "title": "打印预览",
+    "preparing": "正在准备打印..."
+  }
+}

@@ -118,6 +118,10 @@ export default defineConfig({
         target: backendTarget,
         changeOrigin: true,
       },
+      '/report-editor': {
+        target: backendTarget,
+        changeOrigin: true,
+      },
       // direct eval-poc backend access (for dev debugging)
       '/eval-api': {
         target: evalBackendTarget,

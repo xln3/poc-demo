@@ -130,6 +130,44 @@ class EvalTemplate(Base):
     updated_at = Column(DateTime, nullable=True)
 
 
+class Report(Base):
+    """LLM-generated evaluation report."""
+    __tablename__ = "reports"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    title = Column(String(512), nullable=False)
+    content = Column(Text, nullable=True)  # HTML content
+    scenario_type = Column(String(64), nullable=False, default="single_agent")
+    system_prompt = Column(Text, nullable=True)
+    source_data = Column(JSON, nullable=False, default=dict)  # {agents, models, jobs, ...}
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    status = Column(String(32), nullable=False, default="draft")  # draft | generating | ready
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    history = relationship("ReportHistory", back_populates="report", cascade="all, delete-orphan",
+                           order_by="ReportHistory.version.desc()")
+
+
+class ReportHistory(Base):
+    """Version snapshot of a report's content."""
+    __tablename__ = "report_history"
+
+    id = Column(Integer, primary_key=True)
+    report_id = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    content = Column(Text, nullable=True)  # HTML snapshot
+    change_summary = Column(String(512), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    report = relationship("Report", back_populates="history")
+
+    __table_args__ = (
+        Index("ix_report_history_report_version", "report_id", "version", unique=True),
+    )
+
+
 class ApiUsage(Base):
     """Tracks per-call LLM API usage for cost analysis."""
     __tablename__ = "api_usage"

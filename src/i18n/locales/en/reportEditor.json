@@ -1,0 +1,91 @@
+{
+  "title": "Report Editor",
+  "newReport": "New Report",
+  "noReports": "No reports yet. Click the button above to create one.",
+  "noReportSelected": "Select or create a report to get started.",
+  "untitledReport": "Untitled Report",
+  "reportTitle": "Report Title",
+
+  "status": {
+    "draft": "Draft",
+    "generating": "Generating",
+    "ready": "Ready"
+  },
+
+  "scenario": {
+    "title": "Report Scenario",
+    "single_agent": "Single Agent Safety Report",
+    "single_agent_desc": "Comprehensive safety evaluation for one agent",
+    "comparison": "Multi-Agent Comparison Report",
+    "comparison_desc": "Compare safety performance across multiple agents",
+    "time_compare": "Temporal Comparison Report",
+    "time_compare_desc": "Analyze safety changes over time for the same agent",
+    "risk_deep_dive": "Risk Category Deep Dive",
+    "risk_deep_dive_desc": "In-depth analysis of a specific risk category",
+    "custom": "Custom Report",
+    "custom_desc": "User-defined report purpose and generation instructions"
+  },
+
+  "source": {
+    "title": "Data Source Selection",
+    "selectResults": "Select Evaluation Results",
+    "noResults": "No evaluation results available",
+    "selectedCount": "{{count}} selected",
+    "agent": "Agent",
+    "model": "Model",
+    "evalDate": "Eval Date",
+    "score": "Score"
+  },
+
+  "generate": {
+    "button": "Generate Report",
+    "stop": "Stop Generation",
+    "generating": "AI is generating the report...",
+    "complete": "Report generation complete",
+    "error": "Generation failed",
+    "systemPrompt": "System Prompt",
+    "systemPromptPlaceholder": "Custom system prompt (optional)"
+  },
+
+  "editor": {
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "undo": "Undo",
+    "redo": "Redo",
+    "history": "History",
+    "export": "Export PDF",
+    "toc": "Contents",
+    "editSource": "Edit Source",
+    "saveSource": "Save Source",
+    "cancelSource": "Cancel"
+  },
+
+  "selection": {
+    "aiRegen": "AI Rewrite",
+    "instruction": "Instruction",
+    "instructionPlaceholder": "Describe how you want to modify this section...",
+    "regenerating": "Regenerating...",
+    "apply": "Apply",
+    "cancel": "Cancel"
+  },
+
+  "history": {
+    "title": "Version History",
+    "version": "Version {{version}}",
+    "rollback": "Rollback to this version",
+    "preview": "Preview",
+    "noHistory": "No version history yet",
+    "rollbackConfirm": "Are you sure you want to rollback to version {{version}}? Current content will be saved as a new version."
+  },
+
+  "delete": {
+    "confirm": "Are you sure you want to delete this report? This action cannot be undone.",
+    "button": "Delete Report"
+  },
+
+  "print": {
+    "title": "Print Preview",
+    "preparing": "Preparing for print..."
+  }
+}

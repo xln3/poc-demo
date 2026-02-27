@@ -118,3 +118,247 @@ html, body, #root {
 .animate-toast-exit {
   animation: toast-exit 0.2s ease-in forwards;
 }
+
+/* ========== Report Editor HTML Styles ========== */
+.report-html-content {
+  line-height: 1.7;
+  color: var(--color-on-canvas);
+}
+
+.report-html-content h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--color-edge);
+  color: var(--color-on-canvas);
+}
+
+.report-html-content h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-on-canvas);
+}
+
+.report-html-content h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.4rem;
+  color: var(--color-on-surface);
+}
+
+.report-html-content p {
+  margin-bottom: 0.75rem;
+  color: var(--color-on-surface);
+}
+
+.report-html-content ul,
+.report-html-content ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+  color: var(--color-on-surface);
+}
+
+.report-html-content li {
+  margin-bottom: 0.25rem;
+}
+
+.report-html-content code {
+  background: var(--color-surface-raised);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: ui-monospace, monospace;
+}
+
+/* Report tables */
+.report-html-content .report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+
+.report-html-content .report-table th,
+.report-html-content .report-table td {
+  border: 1px solid var(--color-edge);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.report-html-content .report-table th {
+  background: var(--color-surface);
+  font-weight: 600;
+  color: var(--color-on-canvas);
+}
+
+.report-html-content .report-table td {
+  color: var(--color-on-surface);
+}
+
+.report-html-content .report-table tr:nth-child(even) td {
+  background: var(--color-surface-raised);
+}
+
+/* Risk badges */
+.report-html-content .risk-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.report-html-content .risk-badge[data-level="CRITICAL"] {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.report-html-content .risk-badge[data-level="HIGH"] {
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+  border-color: rgba(249, 115, 22, 0.3);
+}
+
+.report-html-content .risk-badge[data-level="MEDIUM"] {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+  border-color: rgba(234, 179, 8, 0.3);
+}
+
+.report-html-content .risk-badge[data-level="LOW"] {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.report-html-content .risk-badge[data-level="MINIMAL"] {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Light theme risk badge overrides */
+.light .report-html-content .risk-badge[data-level="CRITICAL"] { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.light .report-html-content .risk-badge[data-level="HIGH"] { background: #ffedd5; color: #9a3412; border-color: #fed7aa; }
+.light .report-html-content .risk-badge[data-level="MEDIUM"] { background: #fef9c3; color: #854d0e; border-color: #fef08a; }
+.light .report-html-content .risk-badge[data-level="LOW"] { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.light .report-html-content .risk-badge[data-level="MINIMAL"] { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+
+/* Callouts */
+.report-html-content .callout {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  border-left: 4px solid;
+  font-size: 0.85rem;
+}
+
+.report-html-content .callout-warning {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: #eab308;
+  color: var(--color-on-surface);
+}
+
+.report-html-content .callout-info {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+  color: var(--color-on-surface);
+}
+
+.light .report-html-content .callout-warning {
+  background: #fffbeb;
+  border-color: #f59e0b;
+}
+
+.light .report-html-content .callout-info {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+/* Chart placeholders (before React renders into them) */
+.report-html-content .chart-placeholder {
+  padding: 1.5rem;
+  margin: 1rem 0;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-edge);
+  border-radius: 0.5rem;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Section edit indicators (for contentEditable) */
+.report-html-content section {
+  position: relative;
+  border-left: 2px solid transparent;
+  padding-left: 0.5rem;
+  transition: border-color 0.2s;
+}
+
+.report-html-content section:hover {
+  border-left-color: var(--color-edge);
+}
+
+/* Block selection highlight (click-to-select a section/chart/table) */
+.report-html-content .report-block-selected {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 4px;
+  position: relative;
+}
+
+.report-html-content .report-block-selected::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Selectable block hover indicators */
+.report-html-content .chart-placeholder:hover,
+.report-html-content table.report-table:hover,
+.report-html-content .callout:hover {
+  outline: 1px dashed var(--color-edge-strong);
+  outline-offset: 2px;
+  cursor: pointer;
+}
+
+/* @media print handled in PrintView component */
+@media print {
+  .report-html-content {
+    color: #1a1a1a !important;
+  }
+  .report-html-content h2,
+  .report-html-content h3,
+  .report-html-content h4 {
+    color: #1a1a1a !important;
+  }
+  .report-html-content p,
+  .report-html-content li,
+  .report-html-content td {
+    color: #333 !important;
+  }
+  .report-html-content .report-table th {
+    background: #f5f5f5 !important;
+    color: #1a1a1a !important;
+  }
+  .report-html-content .chart-placeholder {
+    break-inside: avoid;
+  }
+  .report-html-content section {
+    break-inside: avoid;
+    border-left: none !important;
+  }
+}
