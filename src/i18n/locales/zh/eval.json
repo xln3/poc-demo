@@ -131,6 +131,7 @@
     "perTask": "各任务得分",
     "riskDistribution": "风险分布",
     "reproduce": "复现演示",
+    "agent": "智能体",
     "model": "模型",
     "score": "评分",
     "tasks": "任务数",
@@ -204,6 +205,9 @@
     "vulnerabilityAnalysis": "漏洞分析",
     "reproGuide": "复现指引",
     "selectModel": "请选择模型查看报告",
+    "selectAgent": "选择智能体",
+    "selectResult": "选择评测结果",
+    "evalRunning": "评测仍在运行中...",
     "level4": "数据集示例"
   },
 

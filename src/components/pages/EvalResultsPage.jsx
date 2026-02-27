@@ -20,11 +20,14 @@ export default function EvalResultsPage({ onNavigate }) {
         listEvaluations().catch(() => []),
         fetchResults().catch(() => []),
       ]);
-      // Build model→result lookup (trim keys for matching)
+      // Build model→result lookup (multiple keys for robust matching)
       const rmap = {};
       for (const r of results) {
         rmap[r.model] = r;
         rmap[r.model.trim()] = r;
+        // Also index by last segment (result_reader strips provider prefix)
+        const lastSeg = r.model.split('/').pop().trim();
+        if (lastSeg) rmap[lastSeg] = r;
       }
       setResultMap(rmap);
       // Sort jobs: running first, then by created_at desc
@@ -80,7 +83,7 @@ export default function EvalResultsPage({ onNavigate }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-edge bg-surface-raised/50">
-              <th className="text-left py-3 px-4 text-on-muted font-medium">{t('results.model')}</th>
+              <th className="text-left py-3 px-4 text-on-muted font-medium">{t('results.agent')}</th>
               <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.score')}</th>
               <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.tasks')}</th>
               <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.status')}</th>
@@ -92,7 +95,8 @@ export default function EvalResultsPage({ onNavigate }) {
           <tbody>
             {jobs.map((job) => {
               const mid = (job.model_id || job.model || '').trim();
-              const result = resultMap[mid] || resultMap[job.model_id || job.model];
+              const midLast = mid.split('/').pop();
+              const result = resultMap[mid] || resultMap[midLast] || resultMap[job.model_id || job.model];
               return (
                 <JobRow
                   key={job.job_id || job.id}
@@ -113,6 +117,8 @@ export default function EvalResultsPage({ onNavigate }) {
 
 function JobRow({ job, result, hasResults, t, onNavigate }) {
   const modelName = (job.model_id || job.model || '-').trim();
+  const agentName = job.agent_name || null;
+  const displayName = agentName || modelName;
   const status = job.status || 'pending';
   const startedAt = job.started_at ? new Date(job.started_at)
     : job.created_at ? new Date(job.created_at) : null;
@@ -144,9 +150,12 @@ function JobRow({ job, result, hasResults, t, onNavigate }) {
 
   return (
     <tr className="border-b border-edge/50 hover:bg-surface-hover/50 transition-colors">
-      {/* Model */}
+      {/* Agent / Model */}
       <td className="py-3 px-4">
-        <div className="font-medium text-on-canvas">{modelName}</div>
+        <div className="font-medium text-on-canvas">{displayName}</div>
+        {agentName && (
+          <div className="text-xs text-on-dim mt-0.5">{modelName}</div>
+        )}
         {job.benchmarks && job.benchmarks.length > 0 && (
           <div className="text-xs text-on-dim mt-0.5 truncate max-w-[200px]">
             {job.benchmarks.slice(0, 3).join(', ')}{job.benchmarks.length > 3 ? '...' : ''}
@@ -193,7 +202,7 @@ function JobRow({ job, result, hasResults, t, onNavigate }) {
         <div className="flex items-center justify-center gap-1.5">
           {status === 'completed' && hasResults && (
             <button
-              onClick={() => onNavigate?.('eval-report', { model: modelName })}
+              onClick={() => onNavigate?.('eval-report', { model: result.model })}
               className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30"
             >
               {t('results.viewReport')}

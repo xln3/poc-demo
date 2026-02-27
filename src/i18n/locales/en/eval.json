@@ -131,6 +131,7 @@
     "perTask": "Per-Task Scores",
     "riskDistribution": "Risk Distribution",
     "reproduce": "Reproduce",
+    "agent": "Agent",
     "model": "Model",
     "score": "Score",
     "tasks": "Tasks",
@@ -204,6 +205,9 @@
     "vulnerabilityAnalysis": "Vulnerability Analysis",
     "reproGuide": "Reproduction Guide",
     "selectModel": "Select a model to view report",
+    "selectAgent": "Select Agent",
+    "selectResult": "Select Evaluation Result",
+    "evalRunning": "Evaluation is still running...",
     "level4": "Dataset Examples"
   },
 

@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next';
 import {
   fetchResults, fetchResultDetail, fetchResultSamples,
   generateReport, fetchDatasetDescription, fetchRiskHierarchy,
+  listEvaluations, fetchAgents,
 } from '../../api/evalBridgeApi';
 import SafetyScoreGauge from '../eval/SafetyScoreGauge';
 import RiskLevelBadge from '../eval/RiskLevelBadge';
 
 /**
- * EvalReportPage — standalone report viewer with model selector
+ * EvalReportPage — standalone report viewer
+ * Cascade selector: Agent → Result (completed evaluation) → Report
  * Level 1: Single benchmark report
  * Level 2: Full evaluation report
  * Level 3: High-risk case report
@@ -16,8 +18,15 @@ import RiskLevelBadge from '../eval/RiskLevelBadge';
  */
 export default function EvalReportPage({ model: initialModel, onNavigate }) {
   const { t, i18n } = useTranslation('eval');
-  const [models, setModels] = useState([]);
-  const [selectedModel, setSelectedModel] = useState(initialModel || '');
+
+  // Agent and result cascade state
+  const [agents, setAgents] = useState([]);
+  const [selectedAgentId, setSelectedAgentId] = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const [selectedJobId, setSelectedJobId] = useState(null);
+  const [resultMap, setResultMap] = useState({});
+
+  // Report data state
   const [detail, setDetail] = useState(null);
   const [activeLevel, setActiveLevel] = useState(2);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -25,7 +34,7 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
   const [samples, setSamples] = useState([]);
   const [generatedReport, setGeneratedReport] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [loadingModels, setLoadingModels] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   // Risk hierarchy for grouping tasks
   const [hierarchy, setHierarchy] = useState([]);
@@ -34,22 +43,60 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
   const [datasetData, setDatasetData] = useState(null);
   const [datasetLoading, setDatasetLoading] = useState(false);
 
-  // Load available models
+  // Load agents, jobs, and results
   useEffect(() => {
-    fetchResults()
-      .then(data => {
-        setModels(data);
-        // If initialModel was given, check it exists in results
-        const trimmedInit = initialModel?.trim();
-        const match = trimmedInit && data.find(r => r.model === trimmedInit || r.model.trim() === trimmedInit);
-        if (match) {
-          setSelectedModel(match.model);
-        } else if (!selectedModel && data.length > 0) {
-          setSelectedModel(data[0].model);
+    Promise.all([
+      fetchAgents().catch(() => []),
+      listEvaluations().catch(() => []),
+      fetchResults().catch(() => []),
+    ]).then(([agentList, jobList, results]) => {
+      setAgents(agentList);
+
+      // Build model→result lookup
+      const rmap = {};
+      for (const r of results) {
+        rmap[r.model] = r;
+        rmap[r.model.trim()] = r;
+        const lastSeg = r.model.split('/').pop().trim();
+        if (lastSeg) rmap[lastSeg] = r;
+      }
+      setResultMap(rmap);
+
+      // Sort jobs by created_at desc
+      const sorted = [...(Array.isArray(jobList) ? jobList : [])].sort((a, b) => {
+        const aTime = a.created_at || a.started_at || 0;
+        const bTime = b.created_at || b.started_at || 0;
+        return new Date(bTime) - new Date(aTime);
+      });
+      setJobs(sorted);
+
+      // If initialModel provided (from View Report click), find the agent for it
+      if (initialModel) {
+        const trimmedInit = initialModel.trim();
+        const matchJob = sorted.find(j => {
+          const mid = (j.model_id || '').trim();
+          const midLast = mid.split('/').pop();
+          return mid === trimmedInit || midLast === trimmedInit;
+        });
+        if (matchJob) {
+          setSelectedAgentId(matchJob.agent_id || '_model_' + (matchJob.model_id || '').trim());
+          setSelectedJobId(matchJob.id);
+        } else {
+          // Fallback: try direct result lookup
+          const r = rmap[trimmedInit];
+          if (r) {
+            setSelectedAgentId('_model_' + r.model);
+            // Find first job matching this model
+            const mj = sorted.find(j => {
+              const mid = (j.model_id || '').trim();
+              const midLast = mid.split('/').pop();
+              return mid === r.model || midLast === r.model;
+            });
+            if (mj) setSelectedJobId(mj.id);
+          }
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoadingModels(false));
+      }
+    }).finally(() => setLoading(false));
   }, []);
 
   // Load risk hierarchy for grouping
@@ -57,28 +104,59 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
     fetchRiskHierarchy().then(setHierarchy).catch(() => {});
   }, []);
 
-  // Set initial model from prop
-  useEffect(() => {
-    if (initialModel) setSelectedModel(initialModel?.trim());
-  }, [initialModel]);
+  // Derive unique agents from jobs (some may not have agent_name)
+  const agentOptions = (() => {
+    const seen = new Map();
+    for (const j of jobs) {
+      const key = j.agent_id || '_model_' + (j.model_id || '').trim();
+      if (!seen.has(key)) {
+        seen.set(key, {
+          id: key,
+          agent_id: j.agent_id,
+          name: j.agent_name || (j.model_id || '').trim(),
+          model_id: (j.model_id || '').trim(),
+        });
+      }
+    }
+    return Array.from(seen.values());
+  })();
 
-  // Load detail when model selected
+  // Filter jobs for selected agent
+  const agentJobs = jobs.filter(j => {
+    if (!selectedAgentId) return false;
+    const key = j.agent_id || '_model_' + (j.model_id || '').trim();
+    return key === selectedAgentId;
+  });
+
+  // Get the selected job
+  const selectedJob = selectedJobId ? jobs.find(j => j.id === selectedJobId) : null;
+
+  // Resolve result model for the selected job
+  const selectedResultModel = (() => {
+    if (!selectedJob) return null;
+    const mid = (selectedJob.model_id || '').trim();
+    const midLast = mid.split('/').pop();
+    const r = resultMap[mid] || resultMap[midLast];
+    return r ? r.model : null;
+  })();
+
+  // Load detail when result model resolved
   useEffect(() => {
-    if (!selectedModel) return;
+    if (!selectedResultModel) { setDetail(null); return; }
     setDetail(null);
-    fetchResultDetail(selectedModel)
+    fetchResultDetail(selectedResultModel)
       .then(setDetail)
-      .catch(() => {});
-  }, [selectedModel]);
+      .catch(() => setDetail(null));
+  }, [selectedResultModel]);
 
   // Load samples for Level 3
   useEffect(() => {
-    if (selectedTask && selectedModel) {
-      fetchResultSamples(selectedModel, selectedTask, 'HIGH')
+    if (selectedTask && selectedResultModel) {
+      fetchResultSamples(selectedResultModel, selectedTask, 'HIGH')
         .then(data => setSamples(data.samples || []))
         .catch(() => setSamples([]));
     }
-  }, [selectedTask, selectedModel]);
+  }, [selectedTask, selectedResultModel]);
 
   // Load dataset examples when Level 4 selected
   useEffect(() => {
@@ -93,10 +171,10 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
   }, [activeLevel, i18n.language]);
 
   const handleGenerate = async () => {
-    if (!selectedModel) return;
+    if (!selectedResultModel) return;
     setGenerating(true);
     try {
-      const resp = await generateReport(selectedModel);
+      const resp = await generateReport(selectedResultModel);
       setGeneratedReport(resp.content || '');
     } catch (err) {
       setGeneratedReport(`Error: ${err.message}`);
@@ -105,12 +183,28 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
     }
   };
 
-  if (loadingModels) {
+  const handleSelectAgent = (agentId) => {
+    setSelectedAgentId(agentId);
+    setSelectedJobId(null);
+    setDetail(null);
+    setActiveLevel(2);
+    setSelectedTask(null);
+    setGeneratedReport('');
+  };
+
+  const handleSelectJob = (jobId) => {
+    setSelectedJobId(jobId);
+    setDetail(null);
+    setActiveLevel(2);
+    setSelectedTask(null);
+    setGeneratedReport('');
+  };
+
+  if (loading) {
     return <div className="p-8 text-center text-on-muted">{t('loading')}</div>;
   }
 
-  // No models available at all
-  if (models.length === 0) {
+  if (agentOptions.length === 0) {
     return (
       <div className="p-8 text-center text-on-muted">
         <div className="text-4xl mb-4">📝</div>
@@ -123,33 +217,99 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <h1 className="text-xl font-bold text-on-canvas">{t('report.title')}</h1>
 
-      {/* Model selector */}
-      <div className="flex gap-2 flex-wrap">
-        {models.map(r => (
-          <button
-            key={r.model}
-            onClick={() => { setSelectedModel(r.model); setDetail(null); setActiveLevel(2); }}
-            className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-              selectedModel === r.model
-                ? 'bg-blue-600 text-white'
-                : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
-            }`}
-          >
-            {r.model}
-            <span className="ml-2 opacity-70">{Math.round(r.avg_score)}</span>
-          </button>
-        ))}
+      {/* Agent selector */}
+      <div>
+        <div className="text-xs text-on-muted mb-2">{t('report.selectAgent')}</div>
+        <div className="flex gap-2 flex-wrap">
+          {agentOptions.map(a => (
+            <button
+              key={a.id}
+              onClick={() => handleSelectAgent(a.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                selectedAgentId === a.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
+              }`}
+            >
+              {a.name}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {!selectedModel && (
-        <div className="text-center text-on-muted py-8">{t('report.selectModel')}</div>
+      {/* Result (job) selector — cascade from selected agent */}
+      {selectedAgentId && agentJobs.length > 0 && (
+        <div>
+          <div className="text-xs text-on-muted mb-2">{t('report.selectResult')}</div>
+          <div className="flex gap-2 flex-wrap">
+            {agentJobs.map(j => {
+              const mid = (j.model_id || '').trim();
+              const midLast = mid.split('/').pop();
+              const r = resultMap[mid] || resultMap[midLast];
+              const score = r ? Math.round(r.avg_score) : null;
+              const isRunning = j.status === 'running' || j.status === 'pending';
+              const hasResult = !!r;
+              const timeStr = j.created_at ? formatDateTime(new Date(j.created_at)) : '';
+
+              return (
+                <button
+                  key={j.id}
+                  onClick={() => handleSelectJob(j.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${
+                    selectedJobId === j.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span>{timeStr}</span>
+                    {isRunning && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-blue-500/20 text-blue-400">
+                        {t(`status.${j.status}`)}
+                      </span>
+                    )}
+                    {!isRunning && hasResult && score !== null && (
+                      <span className={`opacity-70 ${selectedJobId === j.id ? '' : ''}`}>{score}</span>
+                    )}
+                    {!isRunning && !hasResult && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400">
+                        {t('status.failed')}
+                      </span>
+                    )}
+                  </div>
+                  {j.benchmarks && j.benchmarks.length > 0 && (
+                    <div className={`text-[10px] mt-0.5 truncate max-w-[200px] ${selectedJobId === j.id ? 'opacity-70' : 'text-on-dim'}`}>
+                      {j.benchmarks.length} benchmarks
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
-      {selectedModel && !detail && (
+      {selectedAgentId && agentJobs.length === 0 && (
+        <div className="text-center text-on-muted py-4 text-sm">
+          {t('results.noResults')}
+        </div>
+      )}
+
+      {/* No result model found for selected job */}
+      {selectedJobId && !selectedResultModel && (
+        <div className="text-center text-on-muted py-8 text-sm">
+          {selectedJob?.status === 'running' || selectedJob?.status === 'pending'
+            ? t('report.evalRunning')
+            : t('results.noResults')}
+        </div>
+      )}
+
+      {/* Loading detail */}
+      {selectedResultModel && !detail && (
         <div className="text-center text-on-muted py-8">{t('loading')}</div>
       )}
 
-      {selectedModel && detail && (
+      {selectedResultModel && detail && (
         <>
           {/* Level tabs */}
           <div className="flex gap-2 border-b border-edge pb-2">
@@ -177,7 +337,7 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
           {activeLevel === 2 && (
             <FullReportView
               detail={detail}
-              model={selectedModel}
+              model={selectedResultModel}
               hierarchy={hierarchy}
               lang={i18n.language}
               t={t}
@@ -205,7 +365,7 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
           {activeLevel === 3 && (
             <HighRiskView
               detail={detail}
-              model={selectedModel}
+              model={selectedResultModel}
               hierarchy={hierarchy}
               lang={i18n.language}
               selectedTask={selectedTask}
@@ -721,4 +881,9 @@ function StatCard({ label, value }) {
       <div className="text-xs text-on-muted mt-1">{label}</div>
     </div>
   );
+}
+
+function formatDateTime(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
