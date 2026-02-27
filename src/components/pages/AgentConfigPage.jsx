@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fetchAgents, createAgent, updateAgent, deleteAgent } from '../../api/evalBridgeApi';
+import AgentEvalDialog from '../eval/AgentEvalDialog';
 
 /**
  * AgentConfigPage — CRUD for agent configurations with plugin-style capabilities
@@ -11,6 +12,7 @@ export default function AgentConfigPage({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // null or agent object
   const [showForm, setShowForm] = useState(false);
+  const [evalTarget, setEvalTarget] = useState(null); // agent to evaluate
 
   const loadAgents = useCallback(async () => {
     try {
@@ -86,10 +88,23 @@ export default function AgentConfigPage({ onNavigate }) {
               agent={agent}
               onEdit={() => { setEditing(agent); setShowForm(true); }}
               onDelete={() => handleDelete(agent.id)}
-              onEvaluate={() => onNavigate?.('eval-new', { agentId: agent.id, modelId: agent.model_id })}
+              onEvaluate={() => setEvalTarget(agent)}
             />
           ))}
         </div>
+      )}
+
+      {/* Eval dialog */}
+      {evalTarget && (
+        <AgentEvalDialog
+          agentId={evalTarget.id}
+          agentName={evalTarget.name}
+          onClose={() => setEvalTarget(null)}
+          onStarted={(job) => {
+            setEvalTarget(null);
+            onNavigate?.('eval-progress', { jobId: job.job_id || job.id });
+          }}
+        />
       )}
     </div>
   );
