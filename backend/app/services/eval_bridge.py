@@ -91,6 +91,12 @@ async def get_evaluation_status(job_id: str) -> Dict[str, Any]:
     return resp.json()
 
 
+async def cancel_evaluation(job_id: str) -> Dict[str, Any]:
+    resp = await _get_client().delete(f"/api/evaluations/{job_id}")
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ---- Results ----
 
 async def list_eval_results() -> List[Dict[str, Any]]:

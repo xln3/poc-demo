@@ -37,7 +37,8 @@
     "running": "Running",
     "completed": "Completed",
     "failed": "Failed",
-    "skipped": "Skipped"
+    "skipped": "Skipped",
+    "cancelled": "Cancelled"
   },
 
   "benchmarks": {
@@ -134,7 +135,12 @@
     "agent": "Agent",
     "model": "Model",
     "score": "Score",
+    "categories": "Categories",
+    "subcategories": "Subcategories",
+    "benchmarks": "Benchmarks",
     "tasks": "Tasks",
+    "cancel": "Cancel",
+    "cancelConfirm": "Are you sure you want to cancel this evaluation?",
     "status": "Status",
     "startTime": "Start Time",
     "duration": "Duration",

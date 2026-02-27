@@ -57,12 +57,16 @@ export function getEvaluation(jobId) {
   return request('GET', `/eval/evaluations/${jobId}`);
 }
 
+export function cancelEvaluation(jobId) {
+  return request('DELETE', `/eval/evaluations/${encodeURIComponent(jobId)}`);
+}
+
 export function pollEvaluation(jobId, intervalMs = 3000) {
   return new Promise((resolve, reject) => {
     const poll = async () => {
       try {
         const job = await getEvaluation(jobId);
-        if (job.status === 'completed' || job.status === 'failed') {
+        if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
           resolve(job);
         } else {
           setTimeout(poll, intervalMs);

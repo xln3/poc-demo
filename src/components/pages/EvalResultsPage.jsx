@@ -1,18 +1,42 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listEvaluations, fetchResults } from '../../api/evalBridgeApi';
+import {
+  listEvaluations, fetchResults, fetchResultByJob,
+  fetchRiskHierarchy, cancelEvaluation,
+} from '../../api/evalBridgeApi';
 import RiskLevelBadge from '../eval/RiskLevelBadge';
 
 /**
  * EvalResultsPage — evaluation job status table
  * Shows all past and running evaluations with status, progress, duration.
+ * Uses job-scoped results for scores (not model-level aggregated data).
  */
 export default function EvalResultsPage({ onNavigate }) {
   const { t } = useTranslation('eval');
   const [jobs, setJobs] = useState([]);
   const [resultMap, setResultMap] = useState({});
+  const [jobResultMap, setJobResultMap] = useState({});
+  const [hierarchy, setHierarchy] = useState(null);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef(null);
+
+  // Build reverse map: catalog_key → { categoryId, subcategoryId }
+  const benchmarkToCategoryMap = useMemo(() => {
+    if (!hierarchy) return {};
+    const map = {};
+    // hierarchy is a list of categories (or {categories: [...]})
+    const cats = Array.isArray(hierarchy) ? hierarchy : (hierarchy.categories || []);
+    for (const cat of cats) {
+      for (const sub of (cat.subcategories || [])) {
+        for (const bm of (sub.benchmarks || [])) {
+          if (bm.catalog_key) {
+            map[bm.catalog_key] = { categoryId: cat.id, subcategoryId: sub.id };
+          }
+        }
+      }
+    }
+    return map;
+  }, [hierarchy]);
 
   const loadData = async () => {
     try {
@@ -20,16 +44,40 @@ export default function EvalResultsPage({ onNavigate }) {
         listEvaluations().catch(() => []),
         fetchResults().catch(() => []),
       ]);
-      // Build model→result lookup (multiple keys for robust matching)
+      // Build model→result lookup (for orphaned entries only)
       const rmap = {};
       for (const r of results) {
         rmap[r.model] = r;
         rmap[r.model.trim()] = r;
-        // Also index by last segment (result_reader strips provider prefix)
         const lastSeg = r.model.split('/').pop().trim();
         if (lastSeg) rmap[lastSeg] = r;
       }
       setResultMap(rmap);
+
+      // Fetch job-scoped results for running/completed jobs
+      const validJobs = (Array.isArray(jobList) ? jobList : []).filter(
+        j => !j.id?.startsWith('_orphan_')
+      );
+      const jobResultPromises = validJobs
+        .filter(j => j.status === 'running' || j.status === 'completed')
+        .map(j => fetchResultByJob(j.id)
+          .then(detail => ({ jobId: j.id, detail }))
+          .catch(() => ({ jobId: j.id, detail: null }))
+        );
+      const jobResults = await Promise.allSettled(jobResultPromises);
+      const jrMap = {};
+      for (const settled of jobResults) {
+        if (settled.status === 'fulfilled' && settled.value.detail) {
+          const { jobId, detail } = settled.value;
+          jrMap[jobId] = {
+            avg_score: detail.avg_score,
+            risk_level: detail.risk_level,
+            task_count: detail.tasks?.length ?? 0,
+          };
+        }
+      }
+      setJobResultMap(jrMap);
+
       // Sort jobs: running first, then by created_at desc
       const sorted = [...(Array.isArray(jobList) ? jobList : [])].sort((a, b) => {
         if (a.status === 'running' && b.status !== 'running') return -1;
@@ -68,6 +116,11 @@ export default function EvalResultsPage({ onNavigate }) {
     }
   };
 
+  // Load hierarchy once on mount
+  useEffect(() => {
+    fetchRiskHierarchy().then(setHierarchy).catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadData();
     // Poll every 5s if there are running jobs
@@ -84,6 +137,16 @@ export default function EvalResultsPage({ onNavigate }) {
     }
   }, [jobs]);
 
+  const handleCancel = async (jobId) => {
+    if (!window.confirm(t('results.cancelConfirm'))) return;
+    try {
+      await cancelEvaluation(jobId);
+      await loadData();
+    } catch {
+      // ignore — will be caught on next poll
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center text-on-muted">{t('loading')}</div>;
   }
@@ -98,7 +161,7 @@ export default function EvalResultsPage({ onNavigate }) {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-4">
+    <div className="p-6 max-w-7xl mx-auto space-y-4">
       <h1 className="text-xl font-bold text-on-canvas">{t('results.title')}</h1>
 
       <div className="bg-surface border border-edge rounded-xl overflow-hidden">
@@ -106,27 +169,35 @@ export default function EvalResultsPage({ onNavigate }) {
           <thead>
             <tr className="border-b border-edge bg-surface-raised/50">
               <th className="text-left py-3 px-4 text-on-muted font-medium">{t('results.agent')}</th>
-              <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.score')}</th>
-              <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.tasks')}</th>
-              <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.status')}</th>
-              <th className="text-left py-3 px-3 text-on-muted font-medium">{t('results.startTime')}</th>
-              <th className="text-left py-3 px-3 text-on-muted font-medium">{t('results.duration')}</th>
-              <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.actions')}</th>
+              <th className="text-center py-3 px-2 text-on-muted font-medium">{t('results.score')}</th>
+              <th className="text-center py-3 px-2 text-on-muted font-medium">{t('results.categories')}</th>
+              <th className="text-center py-3 px-2 text-on-muted font-medium">{t('results.subcategories')}</th>
+              <th className="text-center py-3 px-2 text-on-muted font-medium">{t('results.benchmarks')}</th>
+              <th className="text-center py-3 px-2 text-on-muted font-medium">{t('results.tasks')}</th>
+              <th className="text-center py-3 px-2 text-on-muted font-medium">{t('results.status')}</th>
+              <th className="text-left py-3 px-2 text-on-muted font-medium">{t('results.startTime')}</th>
+              <th className="text-left py-3 px-2 text-on-muted font-medium">{t('results.duration')}</th>
+              <th className="text-center py-3 px-2 text-on-muted font-medium">{t('results.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {jobs.map((job) => {
+              const jobId = job.job_id || job.id;
               const mid = (job.model_id || job.model || '').trim();
               const midLast = mid.split('/').pop();
-              const result = resultMap[mid] || resultMap[midLast] || resultMap[job.model_id || job.model];
+              // Use job-scoped result if available, fall back to model-level for orphans
+              const jobResult = jobResultMap[jobId];
+              const modelResult = resultMap[mid] || resultMap[midLast] || resultMap[job.model_id || job.model];
               return (
                 <JobRow
-                  key={job.job_id || job.id}
+                  key={jobId}
                   job={job}
-                  result={result}
-                  hasResults={!!result}
+                  jobResult={jobResult}
+                  modelResult={modelResult}
+                  benchmarkToCategoryMap={benchmarkToCategoryMap}
                   t={t}
                   onNavigate={onNavigate}
+                  onCancel={handleCancel}
                 />
               );
             })}
@@ -137,7 +208,7 @@ export default function EvalResultsPage({ onNavigate }) {
   );
 }
 
-function JobRow({ job, result, hasResults, t, onNavigate }) {
+function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavigate, onCancel }) {
   const modelName = (job.model_id || job.model || '-').trim();
   const agentName = job.agent_name || null;
   const displayName = agentName || modelName;
@@ -165,10 +236,31 @@ function JobRow({ job, result, hasResults, t, onNavigate }) {
     ? Math.round(job.progress / 100 * tasksTotal)
     : jobTasks.filter(t => t.status === 'completed' || t.status === 'error').length;
 
-  // Score from result data
-  const score = result ? Math.round(result.avg_score) : null;
-  const riskLevel = result?.risk_level;
-  const taskCount = result?.task_count ?? tasksTotal;
+  // Score: prefer job-scoped result, fall back to model-level for orphans only
+  const isOrphan = !!job._isOrphan;
+  const effectiveResult = isOrphan ? modelResult : jobResult;
+  const score = effectiveResult ? Math.round(effectiveResult.avg_score) : null;
+  const riskLevel = effectiveResult?.risk_level;
+  const hasResults = !!effectiveResult;
+
+  // Hierarchy counts from job.benchmarks using the reverse map
+  const benchmarks = job.benchmarks || [];
+  const benchmarkCount = benchmarks.length;
+  const taskCount = isOrphan ? (modelResult?.task_count ?? 0) : jobTasks.length;
+
+  const categories = new Set();
+  const subcategories = new Set();
+  for (const bm of benchmarks) {
+    const mapping = benchmarkToCategoryMap[bm];
+    if (mapping) {
+      categories.add(mapping.categoryId);
+      subcategories.add(mapping.subcategoryId);
+    }
+  }
+  const categoryCount = categories.size;
+  const subcategoryCount = subcategories.size;
+
+  const jobId = job.job_id || job.id;
 
   return (
     <tr className="border-b border-edge/50 hover:bg-surface-hover/50 transition-colors">
@@ -178,15 +270,15 @@ function JobRow({ job, result, hasResults, t, onNavigate }) {
         {agentName && (
           <div className="text-xs text-on-dim mt-0.5">{modelName}</div>
         )}
-        {job.benchmarks && job.benchmarks.length > 0 && (
+        {benchmarks.length > 0 && (
           <div className="text-xs text-on-dim mt-0.5 truncate max-w-[200px]">
-            {job.benchmarks.slice(0, 3).join(', ')}{job.benchmarks.length > 3 ? '...' : ''}
+            {benchmarks.slice(0, 3).join(', ')}{benchmarks.length > 3 ? '...' : ''}
           </div>
         )}
       </td>
 
       {/* Score */}
-      <td className="py-3 px-3 text-center">
+      <td className="py-3 px-2 text-center">
         {score !== null ? (
           <div className="flex items-center justify-center gap-1.5">
             <span className="font-semibold text-on-canvas">{score}</span>
@@ -197,34 +289,50 @@ function JobRow({ job, result, hasResults, t, onNavigate }) {
         )}
       </td>
 
+      {/* Categories */}
+      <td className="py-3 px-2 text-center text-on-surface">
+        {categoryCount || '-'}
+      </td>
+
+      {/* Subcategories */}
+      <td className="py-3 px-2 text-center text-on-surface">
+        {subcategoryCount || '-'}
+      </td>
+
+      {/* Benchmarks */}
+      <td className="py-3 px-2 text-center text-on-surface">
+        {benchmarkCount || '-'}
+      </td>
+
       {/* Tasks */}
-      <td className="py-3 px-3 text-center text-on-surface">
+      <td className="py-3 px-2 text-center text-on-surface">
         {taskCount || '-'}
       </td>
 
       {/* Status */}
-      <td className="py-3 px-3 text-center">
+      <td className="py-3 px-2 text-center">
         <StatusBadge status={status} t={t} tasksDone={tasksDone} tasksTotal={tasksTotal} />
       </td>
 
       {/* Start time */}
-      <td className="py-3 px-3 text-on-muted text-xs">
+      <td className="py-3 px-2 text-on-muted text-xs">
         {startedAt ? formatDateTime(startedAt) : '-'}
       </td>
 
       {/* Duration */}
-      <td className="py-3 px-3 text-on-muted text-xs">
+      <td className="py-3 px-2 text-on-muted text-xs">
         {status === 'running' ? (
           <span className="text-blue-400">{durationStr}</span>
         ) : durationStr}
       </td>
 
       {/* Actions */}
-      <td className="py-3 px-3 text-center">
+      <td className="py-3 px-2 text-center">
         <div className="flex items-center justify-center gap-1.5">
           {status === 'completed' && hasResults && (
             <button
-              onClick={() => onNavigate?.('eval-report', { model: job.id })}
+              type="button"
+              onClick={() => onNavigate?.('eval-report', { model: jobId })}
               className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30"
             >
               {t('results.viewReport')}
@@ -233,13 +341,23 @@ function JobRow({ job, result, hasResults, t, onNavigate }) {
           {status === 'completed' && !hasResults && (
             <span className="text-xs text-on-dim">{t('status.failed')}</span>
           )}
-          {status === 'running' && (
-            <button
-              onClick={() => onNavigate?.('eval-progress', { jobId: job.job_id || job.id })}
-              className="px-2 py-1 text-xs bg-amber-600/20 text-amber-400 rounded hover:bg-amber-600/30"
-            >
-              {t('results.viewDetail')}
-            </button>
+          {(status === 'running' || status === 'pending') && (
+            <>
+              <button
+                type="button"
+                onClick={() => onNavigate?.('eval-progress', { jobId })}
+                className="px-2 py-1 text-xs bg-amber-600/20 text-amber-400 rounded hover:bg-amber-600/30"
+              >
+                {t('results.viewDetail')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onCancel(jobId)}
+                className="px-2 py-1 text-xs bg-red-600/20 text-red-400 rounded hover:bg-red-600/30"
+              >
+                {t('results.cancel')}
+              </button>
+            </>
           )}
         </div>
       </td>
@@ -253,6 +371,7 @@ function StatusBadge({ status, t, tasksDone, tasksTotal }) {
     running: 'bg-blue-500/20 text-blue-400',
     completed: 'bg-green-500/20 text-green-400',
     failed: 'bg-red-500/20 text-red-400',
+    cancelled: 'bg-gray-500/20 text-gray-400',
   };
 
   return (

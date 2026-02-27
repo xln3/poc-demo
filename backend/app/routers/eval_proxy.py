@@ -222,6 +222,16 @@ async def get_evaluation(job_id: str, user: User = Depends(require_user)):
         raise HTTPException(status_code=502, detail=f"Eval backend error: {e}")
 
 
+@router.delete("/evaluations/{job_id}")
+async def cancel_evaluation(job_id: str, user: User = Depends(require_user)):
+    """Cancel a running evaluation job."""
+    try:
+        return await eval_bridge.cancel_evaluation(job_id)
+    except Exception as e:
+        logger.error("Failed to cancel evaluation %s: %s", job_id, e)
+        raise HTTPException(status_code=502, detail=f"Eval backend error: {e}")
+
+
 # ---- Result endpoints ----
 
 @router.get("/results")
