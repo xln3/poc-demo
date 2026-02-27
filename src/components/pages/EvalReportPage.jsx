@@ -149,10 +149,11 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
       .catch(() => setDetail(null));
   }, [selectedResultModel]);
 
-  // Load samples for Level 3
+  // Load samples when task selected (all risk levels for client-side filtering)
   useEffect(() => {
     if (selectedTask && selectedResultModel) {
-      fetchResultSamples(selectedResultModel, selectedTask, 'HIGH')
+      setSamples([]);
+      fetchResultSamples(selectedResultModel, selectedTask)
         .then(data => setSamples(data.samples || []))
         .catch(() => setSamples([]));
     }
@@ -357,6 +358,7 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
               lang={i18n.language}
               selectedTask={selectedTask}
               setSelectedTask={setSelectedTask}
+              samples={samples}
               t={t}
             />
           )}
@@ -570,8 +572,64 @@ function FullReportView({ detail, model, hierarchy, lang, t, onSelectTask, onHig
 
 // ---- Level 1: Single Benchmark ----
 
-function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelectedTask, t }) {
+const RISK_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, MINIMAL: 4, UNKNOWN: 5 };
+const ALL_RISK_LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'MINIMAL'];
+
+function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelectedTask, samples, t }) {
+  const isZh = lang?.startsWith('zh');
   const groups = groupTasksByHierarchy(detail.tasks, hierarchy, lang);
+
+  // Sample table state
+  const [riskFilter, setRiskFilter] = useState(new Set(['CRITICAL', 'HIGH']));
+  const [sortKey, setSortKey] = useState('score');    // 'score' | 'risk' | 'id'
+  const [sortAsc, setSortAsc] = useState(true);       // true = ascending (worst first for score)
+  const [page, setPage] = useState(0);
+  const [expandedSample, setExpandedSample] = useState(null);
+  const perPage = 20;
+
+  // Reset page when task or filter changes
+  const handleFilterToggle = (level) => {
+    setRiskFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(level)) next.delete(level);
+      else next.add(level);
+      return next;
+    });
+    setPage(0);
+  };
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+    setPage(0);
+  };
+
+  // Filter and sort samples
+  const filteredSamples = samples
+    .filter(s => riskFilter.size === 0 || riskFilter.has(s.risk_level))
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'score') {
+        cmp = (a.score ?? 1) - (b.score ?? 1);
+      } else if (sortKey === 'risk') {
+        cmp = (RISK_ORDER[a.risk_level] ?? 5) - (RISK_ORDER[b.risk_level] ?? 5);
+      } else {
+        cmp = String(a.sample_id || '').localeCompare(String(b.sample_id || ''));
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+
+  const totalPages = Math.ceil(filteredSamples.length / perPage);
+  const pageItems = filteredSamples.slice(page * perPage, (page + 1) * perPage);
+
+  const SortIcon = ({ column }) => {
+    if (sortKey !== column) return <span className="text-on-dim/40 ml-1">↕</span>;
+    return <span className="text-blue-400 ml-1">{sortAsc ? '↑' : '↓'}</span>;
+  };
 
   return (
     <div className="space-y-4">
@@ -583,7 +641,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
               {group.tasks.map(task => (
                 <button
                   key={task.task}
-                  onClick={() => setSelectedTask(task.task)}
+                  onClick={() => { setSelectedTask(task.task); setPage(0); setExpandedSample(null); }}
                   className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
                     selectedTask === task.task
                       ? 'bg-blue-600 text-white'
@@ -602,25 +660,174 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
         const task = detail.tasks.find(t => t.task === selectedTask);
         if (!task) return null;
         return (
-          <Section title={task.display_name || task.task}>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-on-canvas">{Math.round(task.safety_score)}</div>
-                <div className="text-xs text-on-muted">{t('gauge.safetyScore')}</div>
+          <>
+            {/* Task summary */}
+            <Section title={task.display_name || task.task}>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-on-canvas">{Math.round(task.safety_score)}</div>
+                  <div className="text-xs text-on-muted">{t('gauge.safetyScore')}</div>
+                </div>
+                <div className="text-center">
+                  <RiskLevelBadge level={task.risk_level} />
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-on-canvas">{task.samples}</div>
+                  <div className="text-xs text-on-muted">Samples</div>
+                </div>
               </div>
-              <div className="text-center">
-                <RiskLevelBadge level={task.risk_level} />
+              {task.description && (
+                <p className="text-sm text-on-muted mb-3">{task.description}</p>
+              )}
+              <p className="text-sm text-on-surface">{task.interpretation}</p>
+            </Section>
+
+            {/* Sample table */}
+            <Section title={isZh ? `样本详情 (${filteredSamples.length}/${samples.length})` : `Sample Details (${filteredSamples.length}/${samples.length})`}>
+              {/* Risk level filter bar */}
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <span className="text-xs text-on-muted">{isZh ? '风险等级:' : 'Risk Level:'}</span>
+                {ALL_RISK_LEVELS.map(level => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => handleFilterToggle(level)}
+                    className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+                      riskFilter.has(level)
+                        ? 'bg-blue-600/20 border-blue-500/50 text-blue-400'
+                        : 'bg-surface border-edge text-on-dim hover:text-on-muted'
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => { setRiskFilter(new Set(ALL_RISK_LEVELS)); setPage(0); }}
+                  className="px-2 py-0.5 text-[11px] text-on-dim hover:text-on-muted"
+                >
+                  {isZh ? '全部' : 'All'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRiskFilter(new Set(['CRITICAL', 'HIGH'])); setPage(0); }}
+                  className="px-2 py-0.5 text-[11px] text-on-dim hover:text-on-muted"
+                >
+                  {isZh ? '仅高危' : 'High Risk Only'}
+                </button>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-on-canvas">{task.samples}</div>
-                <div className="text-xs text-on-muted">Samples</div>
-              </div>
-            </div>
-            {task.description && (
-              <p className="text-sm text-on-muted mb-3">{task.description}</p>
-            )}
-            <p className="text-sm text-on-surface">{task.interpretation}</p>
-          </Section>
+
+              {/* Table */}
+              {filteredSamples.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-edge">
+                        <th className="text-left py-2 px-2 text-on-muted font-medium w-16 cursor-pointer select-none" onClick={() => handleSort('id')}>
+                          # <SortIcon column="id" />
+                        </th>
+                        <th className="text-right py-2 px-2 text-on-muted font-medium w-20 cursor-pointer select-none" onClick={() => handleSort('score')}>
+                          Score <SortIcon column="score" />
+                        </th>
+                        <th className="text-center py-2 px-2 text-on-muted font-medium w-24 cursor-pointer select-none" onClick={() => handleSort('risk')}>
+                          Risk <SortIcon column="risk" />
+                        </th>
+                        <th className="text-left py-2 px-2 text-on-muted font-medium">Input</th>
+                        <th className="text-left py-2 px-2 text-on-muted font-medium">Output</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageItems.map((sample, i) => {
+                        const sid = sample.sample_id || (page * perPage + i + 1);
+                        const isExpanded = expandedSample === sid;
+                        return (
+                          <tr
+                            key={sid}
+                            onClick={() => setExpandedSample(isExpanded ? null : sid)}
+                            className={`border-b border-edge/50 cursor-pointer transition-colors ${
+                              isExpanded ? 'bg-surface-hover/70' : 'hover:bg-surface-hover/30'
+                            } ${sample.risk_level === 'CRITICAL' ? 'bg-red-900/5' : sample.risk_level === 'HIGH' ? 'bg-orange-900/5' : ''}`}
+                          >
+                            <td className="py-2 px-2 text-xs text-on-dim font-mono">{sid}</td>
+                            <td className={`py-2 px-2 text-right font-medium ${
+                              (sample.score ?? 1) <= 0.3 ? 'text-red-400' :
+                              (sample.score ?? 1) <= 0.5 ? 'text-orange-400' :
+                              (sample.score ?? 1) <= 0.6 ? 'text-yellow-400' :
+                              'text-on-canvas'
+                            }`}>
+                              {sample.score != null ? sample.score.toFixed(2) : '-'}
+                            </td>
+                            <td className="py-2 px-2 text-center"><RiskLevelBadge level={sample.risk_level} /></td>
+                            <td className="py-2 px-2 text-xs text-on-surface max-w-[250px]">
+                              <div className={isExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'}>
+                                {sample.input || '-'}
+                              </div>
+                            </td>
+                            <td className="py-2 px-2 text-xs text-on-surface max-w-[250px]">
+                              <div className={isExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'}>
+                                {sample.output || '-'}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center text-on-muted py-6 text-sm">
+                  {isZh ? '没有匹配的样本' : 'No matching samples'}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <span className="text-xs text-on-dim">
+                    {isZh
+                      ? `显示 ${page * perPage + 1}-${Math.min((page + 1) * perPage, filteredSamples.length)} / ${filteredSamples.length}`
+                      : `Showing ${page * perPage + 1}-${Math.min((page + 1) * perPage, filteredSamples.length)} of ${filteredSamples.length}`
+                    }
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPage(0)}
+                      disabled={page === 0}
+                      className="px-2 py-1 text-xs bg-surface border border-edge rounded hover:bg-surface-hover disabled:opacity-40"
+                    >
+                      ««
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPage(Math.max(0, page - 1))}
+                      disabled={page === 0}
+                      className="px-2 py-1 text-xs bg-surface border border-edge rounded hover:bg-surface-hover disabled:opacity-40"
+                    >
+                      «
+                    </button>
+                    <span className="text-xs text-on-muted">{page + 1} / {totalPages}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+                      disabled={page >= totalPages - 1}
+                      className="px-2 py-1 text-xs bg-surface border border-edge rounded hover:bg-surface-hover disabled:opacity-40"
+                    >
+                      »
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPage(totalPages - 1)}
+                      disabled={page >= totalPages - 1}
+                      className="px-2 py-1 text-xs bg-surface border border-edge rounded hover:bg-surface-hover disabled:opacity-40"
+                    >
+                      »»
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Section>
+          </>
         );
       })()}
     </div>
@@ -632,6 +839,8 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
 function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelectedTask, samples, t, onNavigate }) {
   const highRiskTasks = detail.tasks.filter(t => t.risk_level === 'CRITICAL' || t.risk_level === 'HIGH');
   const groups = groupTasksByHierarchy(highRiskTasks, hierarchy, lang);
+  // Filter to only high-risk samples (client-side since we now load all)
+  const highRiskSamples = samples.filter(s => s.risk_level === 'CRITICAL' || s.risk_level === 'HIGH');
 
   return (
     <div className="space-y-4">
@@ -658,9 +867,9 @@ function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelecte
         ))}
       </div>
 
-      {selectedTask && samples.length > 0 && (
+      {selectedTask && highRiskSamples.length > 0 && (
         <div className="space-y-3">
-          {samples.map((sample, i) => (
+          {highRiskSamples.map((sample, i) => (
             <div key={sample.sample_id || i} className="bg-surface border border-edge rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -704,7 +913,7 @@ function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelecte
         </div>
       )}
 
-      {selectedTask && samples.length === 0 && (
+      {selectedTask && highRiskSamples.length === 0 && (
         <div className="text-center text-on-muted py-8 text-sm">
           {t('results.noResults')}
         </div>
