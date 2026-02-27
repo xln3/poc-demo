@@ -29,6 +29,21 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
     return () => { cancelled = true; };
   }, []);
 
+  // Pre-filter: only keep available benchmarks, drop empty subcategories/categories
+  const availableHierarchy = useMemo(() => {
+    return hierarchy
+      .map(cat => {
+        const subs = cat.subcategories
+          .map(sub => {
+            const bms = sub.benchmarks.filter(bm => bm.available);
+            return bms.length > 0 ? { ...sub, benchmarks: bms } : null;
+          })
+          .filter(Boolean);
+        return subs.length > 0 ? { ...cat, subcategories: subs } : null;
+      })
+      .filter(Boolean);
+  }, [hierarchy]);
+
   // Build a Set of selected "benchmark::task" keys for O(1) lookup
   const selectedSet = useMemo(() => {
     return new Set(value.map(v => `${v.benchmark}::${v.task}`));
@@ -51,7 +66,7 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
   }, [readOnly, selectedSet, value, onChange]);
 
   const toggleBenchmarkAll = useCallback((bm) => {
-    if (readOnly || !bm.available) return;
+    if (readOnly) return;
     const catalogKey = bm.catalog_key;
     const bmTasks = bm.tasks.map(t => t.name);
     const allSelected = bmTasks.every(tn => selectedSet.has(`${catalogKey}::${tn}`));
@@ -74,10 +89,8 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
 
   const toggleSubcategoryAll = useCallback((sub) => {
     if (readOnly) return;
-    // Gather all available tasks in subcategory
     const allTasks = [];
     for (const bm of sub.benchmarks) {
-      if (!bm.available) continue;
       for (const t of bm.tasks) {
         allTasks.push({ benchmark: bm.catalog_key, task: t.name });
       }
@@ -101,7 +114,6 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
     const allTasks = [];
     for (const sub of cat.subcategories) {
       for (const bm of sub.benchmarks) {
-        if (!bm.available) continue;
         for (const t of bm.tasks) {
           allTasks.push({ benchmark: bm.catalog_key, task: t.name });
         }
@@ -132,7 +144,7 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
 
   const expandAll = () => {
     const all = new Set();
-    hierarchy.forEach(cat => {
+    availableHierarchy.forEach(cat => {
       all.add(cat.id);
       cat.subcategories.forEach(sub => {
         all.add(sub.id);
@@ -146,9 +158,9 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
 
   // Filter hierarchy by search
   const filtered = useMemo(() => {
-    if (!search.trim()) return hierarchy;
+    if (!search.trim()) return availableHierarchy;
     const q = search.toLowerCase();
-    return hierarchy
+    return availableHierarchy
       .map(cat => {
         const subs = cat.subcategories
           .map(sub => {
@@ -266,7 +278,6 @@ function CategoryNode({ cat, isZh, expanded, toggle, selectedSet, isTaskSelected
   let totalSelected = 0;
   cat.subcategories.forEach(sub => {
     sub.benchmarks.forEach(bm => {
-      if (!bm.available) return;
       bm.tasks.forEach(tk => {
         totalAvailable++;
         if (selectedSet.has(`${bm.catalog_key}::${tk.name}`)) totalSelected++;
@@ -330,7 +341,6 @@ function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelec
   let totalAvailable = 0;
   let totalSelected = 0;
   sub.benchmarks.forEach(bm => {
-    if (!bm.available) return;
     bm.tasks.forEach(tk => {
       totalAvailable++;
       if (selectedSet.has(`${bm.catalog_key}::${tk.name}`)) totalSelected++;
@@ -395,18 +405,14 @@ function BenchmarkNode({ bm, parentId, expanded, toggle, selectedSet, isTaskSele
   const hasTasks = bm.tasks.length > 0;
 
   let selectedCount = 0;
-  if (bm.available) {
-    bm.tasks.forEach(tk => {
-      if (selectedSet.has(`${bm.catalog_key}::${tk.name}`)) selectedCount++;
-    });
-  }
+  bm.tasks.forEach(tk => {
+    if (selectedSet.has(`${bm.catalog_key}::${tk.name}`)) selectedCount++;
+  });
 
   return (
     <div>
       <div
-        className={`flex items-center gap-2 px-3 py-1 hover:bg-surface-hover cursor-pointer select-none ${
-          !bm.available ? 'opacity-50' : ''
-        }`}
+        className="flex items-center gap-2 px-3 py-1 hover:bg-surface-hover cursor-pointer select-none"
         onClick={() => hasTasks && toggle(nodeId)}
       >
         {hasTasks ? (
@@ -415,29 +421,22 @@ function BenchmarkNode({ bm, parentId, expanded, toggle, selectedSet, isTaskSele
           <span className="w-4" />
         )}
         <span className="text-sm text-on-canvas flex-1">{bm.name}</span>
-        {bm.available ? (
-          <>
-            <span className="text-xs text-green-500">{t('evalManage.available')}</span>
-            {hasTasks && (
-              <span className="text-xs text-on-muted ml-1">
-                {selectedCount}/{bm.tasks.length}
-              </span>
-            )}
-            {!readOnly && hasTasks && (
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); toggleBenchmarkAll(bm); }}
-                className="text-xs text-blue-500 hover:text-blue-400 px-1"
-              >
-                {selectedCount === bm.tasks.length ? t('benchmarks.clearAll') : t('benchmarks.selectAll')}
-              </button>
-            )}
-          </>
-        ) : (
-          <span className="text-xs text-on-muted">{t('evalManage.unavailable')}</span>
+        {hasTasks && (
+          <span className="text-xs text-on-muted ml-1">
+            {selectedCount}/{bm.tasks.length}
+          </span>
+        )}
+        {!readOnly && hasTasks && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); toggleBenchmarkAll(bm); }}
+            className="text-xs text-blue-500 hover:text-blue-400 px-1"
+          >
+            {selectedCount === bm.tasks.length ? t('benchmarks.clearAll') : t('benchmarks.selectAll')}
+          </button>
         )}
       </div>
-      {isOpen && bm.available && (
+      {isOpen && (
         <div className="pl-8 py-1 space-y-0.5">
           {bm.tasks.map(tk => (
             <label

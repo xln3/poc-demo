@@ -29,6 +29,19 @@ export default function RisksPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Pre-filter: only keep available benchmarks, drop empty subcategories/categories
+  const availableHierarchy = hierarchy
+    .map(cat => {
+      const subs = (cat.subcategories || [])
+        .map(sub => {
+          const bms = (sub.benchmarks || []).filter(bm => bm.available);
+          return bms.length > 0 ? { ...sub, benchmarks: bms } : null;
+        })
+        .filter(Boolean);
+      return subs.length > 0 ? { ...cat, subcategories: subs } : null;
+    })
+    .filter(Boolean);
+
   const toggleExpand = (id) => {
     setExpanded(prev => {
       const next = new Set(prev);
@@ -40,7 +53,7 @@ export default function RisksPage() {
 
   const expandAll = () => {
     const all = new Set();
-    hierarchy.forEach(cat => {
+    availableHierarchy.forEach(cat => {
       all.add(cat.id);
       cat.subcategories?.forEach(sub => {
         all.add(sub.id);
@@ -59,7 +72,7 @@ export default function RisksPage() {
   };
 
   const filteredHierarchy = searchQuery.trim()
-    ? hierarchy.map(cat => {
+    ? availableHierarchy.map(cat => {
         const filteredSubs = cat.subcategories?.map(sub => {
           const filteredBms = sub.benchmarks?.filter(bm =>
             matchesSearch(bm.name) || matchesSearch(bm.catalog_key) ||
@@ -77,22 +90,22 @@ export default function RisksPage() {
         }
         return null;
       }).filter(Boolean)
-    : hierarchy;
+    : availableHierarchy;
 
   if (loading) {
     return <div className="p-8 text-center text-on-muted">{t('loading')}</div>;
   }
 
-  // Stats — only count available benchmarks and their tasks
-  const totalCats = hierarchy.length;
-  const totalSubs = hierarchy.reduce((s, c) => s + (c.subcategories?.length || 0), 0);
-  const availableBms = hierarchy.reduce((s, c) =>
+  // Stats — count from available-only hierarchy
+  const totalCats = availableHierarchy.length;
+  const totalSubs = availableHierarchy.reduce((s, c) => s + (c.subcategories?.length || 0), 0);
+  const totalBms = availableHierarchy.reduce((s, c) =>
     s + (c.subcategories?.reduce((ss, sub) =>
-      ss + (sub.benchmarks?.filter(b => b.available).length || 0), 0) || 0), 0);
-  const availableTasks = hierarchy.reduce((s, c) =>
+      ss + (sub.benchmarks?.length || 0), 0) || 0), 0);
+  const totalTasks = availableHierarchy.reduce((s, c) =>
     s + (c.subcategories?.reduce((ss, sub) =>
       ss + (sub.benchmarks?.reduce((bs, bm) =>
-        bs + (bm.available ? (bm.tasks?.length || 0) : 0), 0) || 0), 0) || 0), 0);
+        bs + (bm.tasks?.length || 0), 0) || 0), 0) || 0), 0);
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
@@ -104,8 +117,8 @@ export default function RisksPage() {
       <div className="grid grid-cols-4 gap-3">
         <StatCard label={isZh ? '风险大类' : 'Categories'} value={totalCats} />
         <StatCard label={isZh ? '风险子类' : 'Subcategories'} value={totalSubs} />
-        <StatCard label="Benchmarks" value={availableBms} />
-        <StatCard label="Tasks" value={availableTasks} />
+        <StatCard label="Benchmarks" value={totalBms} />
+        <StatCard label="Tasks" value={totalTasks} />
       </div>
 
       {/* Search + controls */}
@@ -163,7 +176,7 @@ function CategoryNode({ cat, isZh, expanded, toggleExpand, t }) {
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs text-on-dim">
-          <span>{cat.available_count}/{cat.total} {isZh ? '可用' : 'available'}</span>
+          <span>{cat.subcategories?.reduce((s, sub) => s + (sub.benchmarks?.length || 0), 0)} benchmarks</span>
         </div>
       </button>
 
@@ -196,7 +209,7 @@ function SubcategoryNode({ sub, isZh, expanded, toggleExpand, t }) {
           </span>
         </div>
         <span className="text-xs text-on-dim">
-          {sub.available_count}/{sub.total}
+          {sub.benchmarks?.length || 0} benchmarks
         </span>
       </button>
 
@@ -238,15 +251,8 @@ function BenchmarkNode({ bm, parentId, isZh, expanded, toggleExpand, t }) {
       >
         <div className="flex items-center gap-2">
           {hasTasks && <span className="text-xs">{isExpanded ? '▾' : '▸'}</span>}
-          <span className={`text-sm ${bm.available ? 'text-on-surface' : 'text-on-dim'}`}>
+          <span className="text-sm text-on-surface">
             {bm.name}
-          </span>
-          <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${
-            bm.available
-              ? 'bg-green-500/20 text-green-400'
-              : 'bg-gray-500/20 text-gray-400'
-          }`}>
-            {bm.available ? (t('evalManage.available')) : (t('evalManage.unavailable'))}
           </span>
         </div>
         <span className="text-xs text-on-dim">
