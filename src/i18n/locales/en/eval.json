@@ -7,7 +7,8 @@
     "agents": "Agent Management",
     "newEval": "New Evaluation",
     "evalHistory": "Eval History",
-    "results": "Results & Reports",
+    "results": "Results",
+    "reports": "Reports",
     "evalManage": "Eval Templates"
   },
 
@@ -120,14 +121,23 @@
   "results": {
     "title": "Evaluation Results",
     "noResults": "No evaluation results yet",
+    "noJobs": "No evaluations have been run yet",
     "avgScore": "Overall Score",
     "taskCount": "Tasks Evaluated",
     "evalDate": "Eval Date",
     "viewDetail": "View Details",
+    "viewReport": "View Report",
     "generateReport": "Generate Report",
     "perTask": "Per-Task Scores",
     "riskDistribution": "Risk Distribution",
-    "reproduce": "Reproduce"
+    "reproduce": "Reproduce",
+    "model": "Model",
+    "score": "Score",
+    "tasks": "Tasks",
+    "status": "Status",
+    "startTime": "Start Time",
+    "duration": "Duration",
+    "actions": "Actions"
   },
 
   "evalManage": {
@@ -189,6 +199,22 @@
     "modelResponse": "Model Response",
     "scoreDetail": "Score Details",
     "vulnerabilityAnalysis": "Vulnerability Analysis",
-    "reproGuide": "Reproduction Guide"
+    "reproGuide": "Reproduction Guide",
+    "selectModel": "Select a model to view report",
+    "level4": "Dataset Examples"
+  },
+
+  "dataset": {
+    "title": "Evaluation Dataset Examples",
+    "loading": "Loading dataset...",
+    "totalCategories": "Risk Categories",
+    "totalSamples": "Test Samples",
+    "totalBenchmarks": "Benchmarks",
+    "downloadJson": "Download JSON",
+    "riskPoint": "Risk Point",
+    "input": "Input",
+    "expectedBehavior": "Expected Behavior",
+    "riskDescription": "Risk Description",
+    "noData": "No dataset documentation available"
   }
 }

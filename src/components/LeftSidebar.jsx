@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../i18n/LanguageSwitcher';
 
 /**
- * LeftSidebar - 垂直 tab bar 导航
- * 包含测试/演示模式切换 + 4 个 tab 按钮
+ * LeftSidebar — vertical tab bar navigation
+ * Tabs: Risks, Evals, Reports, Cases (with Config/Run sub-items)
  */
 export default function LeftSidebar({
   activeTab, setActiveTab,
@@ -13,13 +14,34 @@ export default function LeftSidebar({
   const { isDark, toggleTheme } = useTheme();
   const { t } = useTranslation();
   const { t: tEval } = useTranslation('eval');
+  const [casesExpanded, setCasesExpanded] = useState(false);
+
   const tabs = [
-    { id: 'config', label: t('nav.config'), icon: '\u2699\uFE0F' },
-    { id: 'run', label: t('nav.run'), icon: '\u25B6\uFE0F' },
+    { id: 'risks', label: t('nav.risks'), icon: '\uD83D\uDEE1\uFE0F' },
     { id: 'eval', label: tEval('nav.eval'), icon: '\uD83D\uDD2C' },
     { id: 'report', label: t('nav.report'), icon: '\uD83D\uDCCA' },
-    { id: 'risk-items', label: t('nav.riskItems'), icon: '\uD83D\uDEE1\uFE0F' },
+    { id: 'cases', label: t('nav.cases'), icon: '\uD83D\uDCCB', expandable: true },
   ];
+
+  const casesSubItems = [
+    { id: 'config', label: t('nav.config'), icon: '\u2699\uFE0F' },
+    { id: 'run', label: t('nav.run'), icon: '\u25B6\uFE0F' },
+  ];
+
+  const handleTabClick = (tabId) => {
+    if (tabId === 'cases') {
+      setCasesExpanded(!casesExpanded);
+      // If not already on a cases sub-tab, navigate to cases list
+      if (activeTab !== 'config' && activeTab !== 'run' && activeTab !== 'cases') {
+        setActiveTab('cases');
+      }
+    } else {
+      setCasesExpanded(false);
+      setActiveTab(tabId);
+    }
+  };
+
+  const isCasesActive = activeTab === 'cases' || activeTab === 'config' || activeTab === 'run';
 
   return (
     <div className="w-12 sm:w-[72px] bg-surface flex flex-col items-center py-3 flex-shrink-0 border-r border-edge">
@@ -50,22 +72,46 @@ export default function LeftSidebar({
       {/* Tab buttons */}
       <div className="flex flex-col gap-0.5 w-full" role="tablist">
         {tabs.map(tab => {
-          const isActive = activeTab === tab.id;
+          const isActive = tab.id === 'cases' ? isCasesActive : activeTab === tab.id;
           return (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center gap-0.5 py-2.5 mx-1 rounded-lg transition-colors ${
-                isActive
-                  ? 'bg-canvas text-on-canvas'
-                  : 'text-on-muted hover:text-on-canvas hover:bg-surface-muted/50'
-              }`}
-            >
-              <span className="text-xl leading-none">{tab.icon}</span>
-              <span className="text-[11px] font-medium hidden sm:block">{tab.label}</span>
-            </button>
+            <div key={tab.id}>
+              <button
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => handleTabClick(tab.id)}
+                className={`w-full flex flex-col items-center gap-0.5 py-2.5 mx-1 rounded-lg transition-colors ${
+                  isActive
+                    ? 'bg-canvas text-on-canvas'
+                    : 'text-on-muted hover:text-on-canvas hover:bg-surface-muted/50'
+                }`}
+              >
+                <span className="text-xl leading-none">{tab.icon}</span>
+                <span className="text-[11px] font-medium hidden sm:block">{tab.label}</span>
+              </button>
+
+              {/* Cases sub-items */}
+              {tab.id === 'cases' && (casesExpanded || isCasesActive) && (
+                <div className="flex flex-col gap-0.5 mt-0.5">
+                  {casesSubItems.map(sub => {
+                    const isSubActive = activeTab === sub.id;
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => setActiveTab(sub.id)}
+                        className={`flex flex-col items-center gap-0.5 py-1.5 mx-1 rounded-lg transition-colors ${
+                          isSubActive
+                            ? 'bg-blue-600/20 text-blue-400'
+                            : 'text-on-dim hover:text-on-muted hover:bg-surface-muted/30'
+                        }`}
+                      >
+                        <span className="text-sm leading-none">{sub.icon}</span>
+                        <span className="text-[10px] hidden sm:block">{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

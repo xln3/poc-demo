@@ -1,209 +1,239 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fetchResults, fetchResultDetail, getReproduceConfig } from '../../api/evalBridgeApi';
-import SafetyScoreGauge from '../eval/SafetyScoreGauge';
-import RadarChart from '../eval/RadarChart';
+import { listEvaluations, fetchResults } from '../../api/evalBridgeApi';
 import RiskLevelBadge from '../eval/RiskLevelBadge';
-import ScoreBar from '../eval/ScoreBar';
 
 /**
- * EvalResultsPage — evaluation results dashboard
+ * EvalResultsPage — evaluation job status table
+ * Shows all past and running evaluations with status, progress, duration.
  */
-export default function EvalResultsPage({ initialModel, onNavigate }) {
+export default function EvalResultsPage({ onNavigate }) {
   const { t } = useTranslation('eval');
-  const [results, setResults] = useState([]);
-  const [detail, setDetail] = useState(null);
-  const [selectedModel, setSelectedModel] = useState(initialModel || '');
+  const [jobs, setJobs] = useState([]);
+  const [resultMap, setResultMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const pollRef = useRef(null);
 
-  // Load all results
-  useEffect(() => {
-    fetchResults()
-      .then(data => {
-        setResults(data);
-        if (!selectedModel && data.length > 0) {
-          setSelectedModel(data[0].model);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Load detail when model selected
-  useEffect(() => {
-    if (!selectedModel) return;
-    setDetail(null);
-    fetchResultDetail(selectedModel)
-      .then(setDetail)
-      .catch(() => {});
-  }, [selectedModel]);
-
-  const handleReproduce = async (task) => {
+  const loadData = async () => {
     try {
-      const config = await getReproduceConfig(selectedModel, task);
-      onNavigate?.('run-reproduce', config);
-    } catch (err) {
-      console.error('Reproduce failed:', err);
+      const [jobList, results] = await Promise.all([
+        listEvaluations().catch(() => []),
+        fetchResults().catch(() => []),
+      ]);
+      // Build model→result lookup
+      const rmap = {};
+      for (const r of results) {
+        rmap[r.model] = r;
+      }
+      setResultMap(rmap);
+      // Sort jobs: running first, then by start time desc
+      const sorted = [...(Array.isArray(jobList) ? jobList : [])].sort((a, b) => {
+        if (a.status === 'running' && b.status !== 'running') return -1;
+        if (b.status === 'running' && a.status !== 'running') return 1;
+        return new Date(b.started_at || 0) - new Date(a.started_at || 0);
+      });
+      setJobs(sorted);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadData();
+    // Poll every 5s if there are running jobs
+    pollRef.current = setInterval(loadData, 5000);
+    return () => clearInterval(pollRef.current);
+  }, []);
+
+  // Stop polling when no running jobs
+  useEffect(() => {
+    const hasRunning = jobs.some(j => j.status === 'running' || j.status === 'pending');
+    if (!hasRunning && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, [jobs]);
 
   if (loading) {
     return <div className="p-8 text-center text-on-muted">{t('loading')}</div>;
   }
 
-  if (results.length === 0) {
+  if (jobs.length === 0) {
     return (
       <div className="p-8 text-center text-on-muted">
         <div className="text-4xl mb-4">📊</div>
-        <div>{t('results.noResults')}</div>
+        <div>{t('results.noJobs')}</div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-6 max-w-6xl mx-auto space-y-4">
       <h1 className="text-xl font-bold text-on-canvas">{t('results.title')}</h1>
 
-      {/* Model selector */}
-      <div className="flex gap-2 flex-wrap">
-        {results.map(r => (
-          <button
-            key={r.model}
-            onClick={() => setSelectedModel(r.model)}
-            className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-              selectedModel === r.model
-                ? 'bg-blue-600 text-white'
-                : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
-            }`}
-          >
-            {r.model}
-            <span className="ml-2 opacity-70">{Math.round(r.avg_score)}</span>
-          </button>
-        ))}
+      <div className="bg-surface border border-edge rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-edge bg-surface-raised/50">
+              <th className="text-left py-3 px-4 text-on-muted font-medium">{t('results.model')}</th>
+              <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.score')}</th>
+              <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.tasks')}</th>
+              <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.status')}</th>
+              <th className="text-left py-3 px-3 text-on-muted font-medium">{t('results.startTime')}</th>
+              <th className="text-left py-3 px-3 text-on-muted font-medium">{t('results.duration')}</th>
+              <th className="text-center py-3 px-3 text-on-muted font-medium">{t('results.actions')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {jobs.map((job) => {
+              const result = resultMap[job.model_id || job.model];
+              return (
+                <JobRow
+                  key={job.job_id || job.id}
+                  job={job}
+                  result={result}
+                  t={t}
+                  onNavigate={onNavigate}
+                />
+              );
+            })}
+          </tbody>
+        </table>
       </div>
+    </div>
+  );
+}
 
-      {detail && (
-        <>
-          {/* Top summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Gauge */}
-            <div className="bg-surface border border-edge rounded-xl p-5 flex flex-col items-center justify-center">
-              <SafetyScoreGauge score={detail.avg_score} riskLevel={detail.risk_level} />
-              <div className="mt-3 flex items-center gap-2">
-                <RiskLevelBadge level={detail.risk_level} />
-                <span className="text-sm text-on-muted">{detail.rating}</span>
-                <span className="text-sm text-on-dim">{'★'.repeat(detail.stars)}{'☆'.repeat(5 - detail.stars)}</span>
-              </div>
-            </div>
+function JobRow({ job, result, t, onNavigate }) {
+  const modelName = job.model_id || job.model || '-';
+  const status = job.status || 'pending';
+  const startedAt = job.started_at ? new Date(job.started_at) : null;
+  const completedAt = job.completed_at ? new Date(job.completed_at) : null;
 
-            {/* Radar chart */}
-            <div className="bg-surface border border-edge rounded-xl p-5 flex items-center justify-center">
-              <RadarChart
-                data={detail.tasks.slice(0, 8).map(t => ({
-                  label: t.display_name || t.task,
-                  score: t.safety_score,
-                }))}
-                size={240}
-              />
-            </div>
+  // Calculate duration
+  let durationStr = '-';
+  if (startedAt) {
+    const end = completedAt || new Date();
+    const diffSec = Math.floor((end - startedAt) / 1000);
+    if (diffSec < 60) durationStr = `${diffSec}s`;
+    else if (diffSec < 3600) durationStr = `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`;
+    else durationStr = `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`;
+  }
 
-            {/* Stats */}
-            <div className="bg-surface border border-edge rounded-xl p-5 space-y-4">
-              <StatRow label={t('results.avgScore')} value={`${Math.round(detail.avg_score)} / 100`} />
-              <StatRow label={t('results.taskCount')} value={detail.tasks.length} />
-              <StatRow label={t('results.evalDate')} value={detail.eval_date || '-'} />
-              <RiskDistribution tasks={detail.tasks} />
-            </div>
+  // Progress for running jobs
+  const progress = job.progress;
+  const tasksDone = progress?.completed ?? job.tasks_completed ?? 0;
+  const tasksTotal = progress?.total ?? job.tasks_total ?? 0;
+
+  // Score from result data
+  const score = result ? Math.round(result.avg_score) : null;
+  const riskLevel = result?.risk_level;
+  const taskCount = result?.task_count ?? job.benchmarks?.length ?? tasksTotal;
+
+  return (
+    <tr className="border-b border-edge/50 hover:bg-surface-hover/50 transition-colors">
+      {/* Model */}
+      <td className="py-3 px-4">
+        <div className="font-medium text-on-canvas">{modelName}</div>
+        {job.benchmarks && job.benchmarks.length > 0 && (
+          <div className="text-xs text-on-dim mt-0.5 truncate max-w-[200px]">
+            {job.benchmarks.slice(0, 3).join(', ')}{job.benchmarks.length > 3 ? '...' : ''}
           </div>
+        )}
+      </td>
 
-          {/* Per-task scores */}
-          <div className="bg-surface border border-edge rounded-xl p-5 space-y-3">
-            <h2 className="text-base font-semibold text-on-canvas">{t('results.perTask')}</h2>
-            <div className="space-y-2">
-              {detail.tasks.map(task => (
-                <div key={task.task} className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <ScoreBar
-                      score={task.safety_score}
-                      label={task.display_name || task.task}
-                    />
-                  </div>
-                  <RiskLevelBadge level={task.risk_level} className="flex-shrink-0" />
-                  {(task.risk_level === 'CRITICAL' || task.risk_level === 'HIGH') && (
-                    <button
-                      onClick={() => handleReproduce(task.task)}
-                      className="px-2 py-1 text-xs bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 flex-shrink-0"
-                    >
-                      {t('results.reproduce')}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+      {/* Score */}
+      <td className="py-3 px-3 text-center">
+        {score !== null ? (
+          <div className="flex items-center justify-center gap-1.5">
+            <span className="font-semibold text-on-canvas">{score}</span>
+            {riskLevel && <RiskLevelBadge level={riskLevel} />}
           </div>
+        ) : (
+          <span className="text-on-dim">-</span>
+        )}
+      </td>
 
-          {/* Action buttons */}
-          <div className="flex gap-3">
+      {/* Tasks */}
+      <td className="py-3 px-3 text-center text-on-surface">
+        {taskCount || '-'}
+      </td>
+
+      {/* Status */}
+      <td className="py-3 px-3 text-center">
+        <StatusBadge status={status} t={t} tasksDone={tasksDone} tasksTotal={tasksTotal} />
+      </td>
+
+      {/* Start time */}
+      <td className="py-3 px-3 text-on-muted text-xs">
+        {startedAt ? formatDateTime(startedAt) : '-'}
+      </td>
+
+      {/* Duration */}
+      <td className="py-3 px-3 text-on-muted text-xs">
+        {status === 'running' ? (
+          <span className="text-blue-400">{durationStr}</span>
+        ) : durationStr}
+      </td>
+
+      {/* Actions */}
+      <td className="py-3 px-3 text-center">
+        <div className="flex items-center justify-center gap-1.5">
+          {status === 'completed' && (
+            <>
+              <button
+                onClick={() => onNavigate?.('eval-report', { model: modelName })}
+                className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30"
+              >
+                {t('results.viewReport')}
+              </button>
+            </>
+          )}
+          {status === 'running' && (
             <button
-              onClick={() => onNavigate?.('eval-report', { model: selectedModel })}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+              onClick={() => onNavigate?.('eval-progress', { jobId: job.job_id || job.id })}
+              className="px-2 py-1 text-xs bg-amber-600/20 text-amber-400 rounded hover:bg-amber-600/30"
             >
-              {t('results.generateReport')}
+              {t('results.viewDetail')}
             </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function StatusBadge({ status, t, tasksDone, tasksTotal }) {
+  const styles = {
+    pending: 'bg-gray-500/20 text-gray-400',
+    running: 'bg-blue-500/20 text-blue-400',
+    completed: 'bg-green-500/20 text-green-400',
+    failed: 'bg-red-500/20 text-red-400',
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
+        {t(`status.${status}`)}
+      </span>
+      {status === 'running' && tasksTotal > 0 && (
+        <div className="w-full max-w-[80px]">
+          <div className="h-1.5 bg-surface-raised rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all"
+              style={{ width: `${Math.round((tasksDone / tasksTotal) * 100)}%` }}
+            />
           </div>
-        </>
+          <div className="text-[10px] text-on-dim mt-0.5">{tasksDone}/{tasksTotal}</div>
+        </div>
       )}
     </div>
   );
 }
 
-function StatRow({ label, value }) {
-  return (
-    <div className="flex justify-between items-center">
-      <span className="text-sm text-on-muted">{label}</span>
-      <span className="text-sm font-medium text-on-canvas">{value}</span>
-    </div>
-  );
-}
-
-function RiskDistribution({ tasks }) {
-  const { t } = useTranslation('eval');
-  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, MINIMAL: 0 };
-  tasks.forEach(task => { counts[task.risk_level] = (counts[task.risk_level] || 0) + 1; });
-
-  const colors = {
-    CRITICAL: 'bg-red-500',
-    HIGH: 'bg-orange-500',
-    MEDIUM: 'bg-yellow-500',
-    LOW: 'bg-green-500',
-    MINIMAL: 'bg-blue-500',
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <span className="text-xs font-medium text-on-muted">{t('results.riskDistribution')}</span>
-      <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-surface-raised">
-        {Object.entries(counts).map(([level, count]) => {
-          if (count === 0) return null;
-          const pct = (count / tasks.length) * 100;
-          return (
-            <div
-              key={level}
-              className={`${colors[level]} transition-all`}
-              style={{ width: `${pct}%` }}
-              title={`${t(`risk.${level}`)}: ${count}`}
-            />
-          );
-        })}
-      </div>
-      <div className="flex gap-3 flex-wrap">
-        {Object.entries(counts).filter(([, c]) => c > 0).map(([level, count]) => (
-          <span key={level} className="text-xs text-on-dim">
-            <span className={`inline-block w-2 h-2 rounded-full ${colors[level]} mr-1`} />
-            {t(`risk.${level}`)} {count}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
+function formatDateTime(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

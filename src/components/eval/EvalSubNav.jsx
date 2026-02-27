@@ -5,6 +5,7 @@ const SUB_PAGES = [
   { id: 'eval-manage', icon: '📋' },
   { id: 'eval-new', icon: '➕' },
   { id: 'eval-results', icon: '📊' },
+  { id: 'eval-report', icon: '📝' },
 ];
 
 /**
@@ -18,10 +19,11 @@ export default function EvalSubNav({ active, onChange }) {
     'eval-manage': t('nav.evalManage'),
     'eval-new': t('nav.newEval'),
     'eval-results': t('nav.results'),
+    'eval-report': t('nav.reports'),
   };
 
   return (
-    <div className="px-6 pt-4 pb-2 border-b border-edge flex gap-1">
+    <div className="px-6 pt-4 pb-2 border-b border-edge flex gap-1 flex-wrap">
       {SUB_PAGES.map(({ id, icon }) => (
         <button
           key={id}

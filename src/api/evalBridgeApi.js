@@ -105,6 +105,15 @@ export function getReproduceConfig(model, task, sampleId = null) {
   });
 }
 
+// ---- Dataset Description ----
+
+export function fetchDatasetDescription(benchmarks = '', lang = 'zh') {
+  const params = new URLSearchParams();
+  if (benchmarks) params.set('benchmarks', benchmarks);
+  if (lang) params.set('lang', lang);
+  return request('GET', `/eval/dataset-description?${params}`);
+}
+
 // ---- Risk Hierarchy ----
 
 export function fetchRiskHierarchy() {

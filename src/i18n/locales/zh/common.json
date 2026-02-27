@@ -6,7 +6,9 @@
     "config": "配置",
     "run": "运行",
     "report": "报告",
-    "riskItems": "风险项"
+    "riskItems": "风险项",
+    "risks": "风险",
+    "cases": "案例"
   },
   "modes": {
     "test": "测试",

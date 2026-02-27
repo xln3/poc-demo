@@ -25,6 +25,8 @@ import RunPage from './components/pages/RunPage.jsx';
 import ConfigPage from './components/pages/ConfigPage.jsx';
 import ReportPage from './components/pages/ReportPage.jsx';
 import RiskItemsPage from './components/pages/RiskItemsPage.jsx';
+import RisksPage from './components/pages/RisksPage.jsx';
+import CasesPage from './components/pages/CasesPage.jsx';
 import EvalSubNav from './components/eval/EvalSubNav.jsx';
 import AgentConfigPage from './components/pages/AgentConfigPage.jsx';
 import EvalNewPage from './components/pages/EvalNewPage.jsx';
@@ -59,7 +61,7 @@ export default function App() {
   } = useScenarioTranslation(selectedAttack?.scenario, currentScenario, currentAttack);
 
   // Tab navigation: 5 tabs (config, run, eval, report, risk-items)
-  const [activeTab, setActiveTab] = useState('run');
+  const [activeTab, setActiveTab] = useState('risks');
   // App mode: test vs demo
   const [appMode, setAppMode] = useState('test');
 
@@ -1657,7 +1659,14 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
           />
         )}
 
-        {/* 风险项 tab */}
+        {/* 风险分类 tab */}
+        {activeTab === 'risks' && (
+          <div className="flex-1 overflow-y-auto custom-scroll">
+            <RisksPage />
+          </div>
+        )}
+
+        {/* 风险项 tab (legacy) */}
         {activeTab === 'risk-items' && (
           <RiskItemsPage
             appMode={appMode}
@@ -1702,7 +1711,6 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
             )}
             {evalSubPage === 'eval-results' && (
               <EvalResultsPage
-                initialModel={evalContext.model}
                 onNavigate={evalNavigate}
               />
             )}
@@ -1712,6 +1720,13 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
                 onNavigate={evalNavigate}
               />
             )}
+          </div>
+        )}
+
+        {/* 案例 tab */}
+        {activeTab === 'cases' && (
+          <div className="flex-1 overflow-y-auto custom-scroll">
+            <CasesPage setActiveTab={setActiveTab} />
           </div>
         )}
 

@@ -55,6 +55,84 @@ async def get_risk_hierarchy(user: User = Depends(require_user)):
         return merge([], {})
 
 
+# ---- Dataset description ----
+
+@router.get("/dataset-description")
+async def get_dataset_description(
+    benchmarks: str = "",
+    lang: str = "zh",
+    user: User = Depends(require_user),
+):
+    """Generate anonymized dataset description from eval-poc benchmark docs."""
+    import json
+    from pathlib import Path
+
+    DOCS_DIR = Path("/home/xln/agent-safety-platform/eval-poc/benchmarks/docs")
+    if not DOCS_DIR.exists():
+        return {"report": "", "samples": [], "error": "Docs directory not found"}
+
+    # If no benchmarks specified, auto-discover all available
+    if not benchmarks.strip():
+        bm_list = sorted([
+            d.name for d in DOCS_DIR.iterdir()
+            if d.is_dir() and (d / f"{d.name}_3.json").exists()
+        ])
+    else:
+        bm_list = [b.strip() for b in benchmarks.split(",") if b.strip()]
+
+    # Load docs
+    docs = []
+    for name in bm_list:
+        json_path = DOCS_DIR / name / f"{name}_3.json"
+        if not json_path.exists():
+            continue
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                docs.append(json.load(f))
+        except Exception:
+            continue
+
+    # Build anonymized samples (no benchmark names)
+    samples = []
+    for doc in docs:
+        risk_cat = doc.get("risk_category", "")
+        risk_point = doc.get("risk_point_zh" if lang == "zh" else "risk_point_en", "")
+        for s in doc.get("samples", []):
+            samples.append({
+                "risk_category": risk_cat,
+                "risk_point": risk_point,
+                "input": s.get("input", ""),
+                "expected_behavior": s.get("expected_behavior", ""),
+                "risk_description": s.get(
+                    f"risk_description_{lang}",
+                    s.get("risk_description_zh", s.get("risk_description_en", ""))
+                ),
+            })
+
+    # Build summary stats
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for doc in docs:
+        cat = doc.get("risk_category", "")
+        if cat not in groups:
+            groups[cat] = []
+        groups[cat].append({
+            "risk_point": doc.get("risk_point_zh" if lang == "zh" else "risk_point_en", ""),
+            "sample_count": doc.get("sample_count", len(doc.get("samples", []))),
+        })
+
+    return {
+        "total_benchmarks": len(docs),
+        "total_samples": len(samples),
+        "total_categories": len(groups),
+        "categories": [
+            {"name": cat, "items": items}
+            for cat, items in groups.items()
+        ],
+        "samples": samples,
+    }
+
+
 # ---- Benchmark endpoints ----
 
 @router.get("/benchmarks")

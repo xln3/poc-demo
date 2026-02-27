@@ -5,8 +5,10 @@
   "nav": {
     "config": "Config",
     "run": "Run",
-    "report": "Report",
-    "riskItems": "Risks"
+    "report": "Reports",
+    "riskItems": "Risks",
+    "risks": "Risks",
+    "cases": "Cases"
   },
   "modes": {
     "test": "Test",

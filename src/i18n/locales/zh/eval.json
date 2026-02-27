@@ -7,7 +7,8 @@
     "agents": "智能体管理",
     "newEval": "新建评测",
     "evalHistory": "评测历史",
-    "results": "结果与报告",
+    "results": "评测结果",
+    "reports": "评测报告",
     "evalManage": "评测模板"
   },
 
@@ -120,14 +121,23 @@
   "results": {
     "title": "评测结果",
     "noResults": "暂无评测结果",
+    "noJobs": "暂无评测记录",
     "avgScore": "综合评分",
     "taskCount": "评测任务数",
     "evalDate": "评测日期",
     "viewDetail": "查看详情",
+    "viewReport": "查看报告",
     "generateReport": "生成报告",
     "perTask": "各任务得分",
     "riskDistribution": "风险分布",
-    "reproduce": "复现演示"
+    "reproduce": "复现演示",
+    "model": "模型",
+    "score": "评分",
+    "tasks": "任务数",
+    "status": "状态",
+    "startTime": "开始时间",
+    "duration": "用时",
+    "actions": "操作"
   },
 
   "evalManage": {
@@ -189,6 +199,22 @@
     "modelResponse": "模型响应",
     "scoreDetail": "评分详情",
     "vulnerabilityAnalysis": "漏洞分析",
-    "reproGuide": "复现指引"
+    "reproGuide": "复现指引",
+    "selectModel": "请选择模型查看报告",
+    "level4": "数据集示例"
+  },
+
+  "dataset": {
+    "title": "评测数据集示例",
+    "loading": "加载数据集...",
+    "totalCategories": "风险维度",
+    "totalSamples": "测试样本",
+    "totalBenchmarks": "基准数量",
+    "downloadJson": "下载 JSON",
+    "riskPoint": "风险点",
+    "input": "输入",
+    "expectedBehavior": "期望行为",
+    "riskDescription": "风险说明",
+    "noData": "暂无数据集文档"
   }
 }
