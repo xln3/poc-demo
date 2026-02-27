@@ -70,7 +70,10 @@
     "cancel": "取消",
     "evaluate": "开始评测",
     "noAgents": "暂无智能体配置，点击上方按钮创建",
-    "capabilities": "能力配置"
+    "capabilities": "能力配置",
+    "showApiKey": "显示 API Key",
+    "hideApiKey": "隐藏 API Key",
+    "modelIdHint": "格式：provider/model（如 openai/gpt-4o），用于评测时识别模型。"
   },
 
   "newEval": {

@@ -70,7 +70,10 @@
     "cancel": "Cancel",
     "evaluate": "Start Evaluation",
     "noAgents": "No agents configured. Click the button above to create one.",
-    "capabilities": "Capabilities"
+    "capabilities": "Capabilities",
+    "showApiKey": "Show API Key",
+    "hideApiKey": "Hide API Key",
+    "modelIdHint": "Format: provider/model (e.g. openai/gpt-4o). Used to identify the model when running evaluations."
   },
 
   "newEval": {

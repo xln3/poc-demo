@@ -75,6 +75,8 @@
 
 html, body, #root {
   height: 100%;
+  background-color: var(--color-canvas-deep);
+  color: var(--color-on-canvas);
 }
 
 *:focus-visible {

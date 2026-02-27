@@ -135,6 +135,7 @@ function AgentCard({ agent, onEdit, onDelete, onEvaluate }) {
 
 function AgentForm({ initial, onSave, onCancel }) {
   const { t } = useTranslation('eval');
+  const [showApiKey, setShowApiKey] = useState(false);
   const [form, setForm] = useState({
     name: initial?.name || '',
     api_base: initial?.api_base || '',
@@ -165,7 +166,7 @@ function AgentForm({ initial, onSave, onCancel }) {
             <input value={form.name} onChange={e => update('name', e.target.value)} required
               className="w-full px-3 py-2 text-sm rounded-lg border border-edge bg-canvas text-on-canvas" />
           </Field>
-          <Field label={t('agents.modelId')}>
+          <Field label={t('agents.modelId')} hint={t('agents.modelIdHint')}>
             <input value={form.model_id} onChange={e => update('model_id', e.target.value)} required
               placeholder="openai/gpt-4o"
               className="w-full px-3 py-2 text-sm rounded-lg border border-edge bg-canvas text-on-canvas" />
@@ -176,9 +177,27 @@ function AgentForm({ initial, onSave, onCancel }) {
               className="w-full px-3 py-2 text-sm rounded-lg border border-edge bg-canvas text-on-canvas" />
           </Field>
           <Field label={t('agents.apiKey')}>
-            <input type="password" value={form.api_key} onChange={e => update('api_key', e.target.value)}
-              placeholder={initial ? '(unchanged)' : 'sk-...'}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-edge bg-canvas text-on-canvas" />
+            <div className="relative">
+              <input type={showApiKey ? 'text' : 'password'} value={form.api_key} onChange={e => update('api_key', e.target.value)}
+                placeholder={initial ? '(unchanged)' : 'sk-...'}
+                className="w-full px-3 py-2 pr-9 text-sm rounded-lg border border-edge bg-canvas text-on-canvas" />
+              <button type="button" onClick={() => setShowApiKey(v => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-on-muted hover:text-on-canvas transition-colors"
+                title={showApiKey ? t('agents.hideApiKey') : t('agents.showApiKey')}>
+                {showApiKey ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                )}
+              </button>
+            </div>
           </Field>
         </div>
 
@@ -213,11 +232,12 @@ function AgentForm({ initial, onSave, onCancel }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, hint, children }) {
   return (
     <div>
       <label className="block text-xs font-medium text-on-muted mb-1">{label}</label>
       {children}
+      {hint && <p className="text-xs text-on-dim mt-1">{hint}</p>}
     </div>
   );
 }
