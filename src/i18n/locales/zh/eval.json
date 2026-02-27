@@ -71,9 +71,24 @@
     "evaluate": "开始评测",
     "noAgents": "暂无智能体配置，点击上方按钮创建",
     "capabilities": "能力配置",
+    "features": "模型特性",
     "showApiKey": "显示 API Key",
     "hideApiKey": "隐藏 API Key",
-    "modelIdHint": "格式：provider/model（如 openai/gpt-4o），用于评测时识别模型。"
+    "modelIdHint": "格式：provider/model（如 openai/gpt-4o），用于评测时识别模型。",
+    "feat": {
+      "thinking": "思考",
+      "thinkingMode": "模式",
+      "thinkingOn": "开启",
+      "thinkingAuto": "自动",
+      "thinkingBudget": "预算",
+      "thinkingBudgetPlaceholder": "如 10000",
+      "web": "Web",
+      "tools": "工具",
+      "function_calling": "函数调用",
+      "structured_outputs": "结构化输出",
+      "vision": "视觉",
+      "video": "视频"
+    }
   },
 
   "newEval": {

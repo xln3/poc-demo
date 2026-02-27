@@ -71,9 +71,24 @@
     "evaluate": "Start Evaluation",
     "noAgents": "No agents configured. Click the button above to create one.",
     "capabilities": "Capabilities",
+    "features": "Features",
     "showApiKey": "Show API Key",
     "hideApiKey": "Hide API Key",
-    "modelIdHint": "Format: provider/model (e.g. openai/gpt-4o). Used to identify the model when running evaluations."
+    "modelIdHint": "Format: provider/model (e.g. openai/gpt-4o). Used to identify the model when running evaluations.",
+    "feat": {
+      "thinking": "Thinking",
+      "thinkingMode": "Mode",
+      "thinkingOn": "On",
+      "thinkingAuto": "Auto",
+      "thinkingBudget": "Budget",
+      "thinkingBudgetPlaceholder": "e.g. 10000",
+      "web": "Web",
+      "tools": "Tools",
+      "function_calling": "Function Calling",
+      "structured_outputs": "Structured Outputs",
+      "vision": "Vision",
+      "video": "Video"
+    }
   },
 
   "newEval": {

@@ -110,6 +110,7 @@ class AgentConfig(Base):
     rag_config = Column(JSON, default=dict)
     mcp_enabled = Column(Boolean, default=False)
     mcp_servers = Column(JSON, default=list)
+    features = Column(JSON, default=dict)  # {thinking:{enabled,mode,budget},web,tools,...}
     eval_model_id = Column(String(256), nullable=True)  # ID in eval-poc
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

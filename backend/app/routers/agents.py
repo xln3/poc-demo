@@ -32,6 +32,7 @@ class AgentCreateRequest(BaseModel):
     rag_config: dict = {}
     mcp_enabled: bool = False
     mcp_servers: list = []
+    features: dict = {}
 
 
 class AgentUpdateRequest(BaseModel):
@@ -46,6 +47,7 @@ class AgentUpdateRequest(BaseModel):
     rag_config: Optional[dict] = None
     mcp_enabled: Optional[bool] = None
     mcp_servers: Optional[list] = None
+    features: Optional[dict] = None
 
 
 class EvalTriggerRequest(BaseModel):
@@ -66,6 +68,7 @@ class AgentResponse(BaseModel):
     rag_config: dict = {}
     mcp_enabled: bool = False
     mcp_servers: list = []
+    features: dict = {}
     eval_model_id: Optional[str] = None
     created_at: str = ""
 
@@ -86,6 +89,7 @@ def _agent_to_response(agent: AgentConfig) -> dict:
         "rag_config": agent.rag_config or {},
         "mcp_enabled": agent.mcp_enabled or False,
         "mcp_servers": agent.mcp_servers or [],
+        "features": agent.features or {},
         "eval_model_id": agent.eval_model_id,
         "created_at": agent.created_at.isoformat() if agent.created_at else "",
     }
@@ -141,6 +145,7 @@ async def create_agent(
         rag_config=req.rag_config,
         mcp_enabled=req.mcp_enabled,
         mcp_servers=req.mcp_servers,
+        features=req.features,
         created_by=user.id,
     )
     db.add(agent)

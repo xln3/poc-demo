@@ -97,10 +97,12 @@ export default function AgentConfigPage({ onNavigate }) {
 
 function AgentCard({ agent, onEdit, onDelete, onEvaluate }) {
   const { t } = useTranslation('eval');
-  const caps = [];
-  if (agent.tools_enabled) caps.push(t('agents.tools'));
-  if (agent.rag_enabled) caps.push(t('agents.rag'));
-  if (agent.mcp_enabled) caps.push(t('agents.mcp'));
+  const feats = agent.features || {};
+  const tags = [];
+  if (feats.thinking?.enabled) tags.push(t('agents.feat.thinking'));
+  ['web', 'tools', 'function_calling', 'structured_outputs', 'vision', 'video'].forEach(k => {
+    if (feats[k]) tags.push(t(`agents.feat.${k}`));
+  });
 
   return (
     <div className="bg-surface rounded-xl border border-edge p-4">
@@ -109,9 +111,9 @@ function AgentCard({ agent, onEdit, onDelete, onEvaluate }) {
           <h3 className="text-base font-semibold text-on-canvas">{agent.name}</h3>
           <div className="text-sm text-on-muted mt-1 truncate">{agent.model_id}</div>
           <div className="text-xs text-on-dim mt-0.5 truncate">{agent.api_base}</div>
-          {caps.length > 0 && (
-            <div className="flex gap-1.5 mt-2">
-              {caps.map(c => (
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {tags.map(c => (
                 <span key={c} className="px-2 py-0.5 bg-surface-raised text-on-muted text-xs rounded-full">{c}</span>
               ))}
             </div>
@@ -133,27 +135,51 @@ function AgentCard({ agent, onEdit, onDelete, onEvaluate }) {
   );
 }
 
+const DEFAULT_FEATURES = {
+  thinking: { enabled: false, mode: 'auto', budget: null },
+  web: false,
+  tools: false,
+  function_calling: false,
+  structured_outputs: false,
+  vision: false,
+  video: false,
+};
+
 function AgentForm({ initial, onSave, onCancel }) {
   const { t } = useTranslation('eval');
   const [showApiKey, setShowApiKey] = useState(false);
+  const initFeatures = { ...DEFAULT_FEATURES, ...initial?.features };
+  if (initial?.features?.thinking) {
+    initFeatures.thinking = { ...DEFAULT_FEATURES.thinking, ...initial.features.thinking };
+  }
   const [form, setForm] = useState({
     name: initial?.name || '',
     api_base: initial?.api_base || '',
     api_key: '',
     model_id: initial?.model_id || '',
     system_prompt: initial?.system_prompt || '',
-    tools_enabled: initial?.tools_enabled || false,
-    enabled_tools: initial?.enabled_tools || [],
-    rag_enabled: initial?.rag_enabled || false,
-    mcp_enabled: initial?.mcp_enabled || false,
+    features: initFeatures,
   });
 
   const update = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+  const updateFeature = (key, value) => setForm(prev => ({
+    ...prev,
+    features: { ...prev.features, [key]: value },
+  }));
+  const updateThinking = (key, value) => setForm(prev => ({
+    ...prev,
+    features: {
+      ...prev.features,
+      thinking: { ...prev.features.thinking, [key]: value },
+    },
+  }));
 
   const handleSubmit = (e) => {
     e.preventDefault();
     onSave(form);
   };
+
+  const SIMPLE_FEATURES = ['web', 'tools', 'function_calling', 'structured_outputs', 'vision', 'video'];
 
   return (
     <div className="bg-surface border border-edge rounded-xl p-5 space-y-4">
@@ -207,13 +233,53 @@ function AgentForm({ initial, onSave, onCancel }) {
             className="w-full px-3 py-2 text-sm rounded-lg border border-edge bg-canvas text-on-canvas resize-none" />
         </Field>
 
-        {/* Capability toggles */}
+        {/* Features */}
         <div className="pt-2">
-          <div className="text-sm font-medium text-on-surface mb-2">{t('agents.capabilities')}</div>
-          <div className="flex gap-4">
-            <Toggle label={t('agents.tools')} checked={form.tools_enabled} onChange={v => update('tools_enabled', v)} />
-            <Toggle label={t('agents.rag')} checked={form.rag_enabled} onChange={v => update('rag_enabled', v)} />
-            <Toggle label={t('agents.mcp')} checked={form.mcp_enabled} onChange={v => update('mcp_enabled', v)} />
+          <div className="text-sm font-medium text-on-surface mb-2">{t('agents.features')}</div>
+
+          {/* Thinking — with sub-options */}
+          <div className="mb-3">
+            <Toggle label={t('agents.feat.thinking')}
+              checked={form.features.thinking?.enabled || false}
+              onChange={v => updateThinking('enabled', v)} />
+            {form.features.thinking?.enabled && (
+              <div className="ml-6 mt-2 flex flex-wrap gap-x-6 gap-y-2 items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-on-muted">{t('agents.feat.thinkingMode')}:</span>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="thinkingMode" value="on"
+                      checked={form.features.thinking.mode === 'on'}
+                      onChange={() => updateThinking('mode', 'on')}
+                      className="accent-blue-600" />
+                    <span className="text-xs text-on-surface">{t('agents.feat.thinkingOn')}</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="thinkingMode" value="auto"
+                      checked={form.features.thinking.mode === 'auto'}
+                      onChange={() => updateThinking('mode', 'auto')}
+                      className="accent-blue-600" />
+                    <span className="text-xs text-on-surface">{t('agents.feat.thinkingAuto')}</span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-on-muted">{t('agents.feat.thinkingBudget')}:</span>
+                  <input type="number" min="0"
+                    value={form.features.thinking.budget ?? ''}
+                    onChange={e => updateThinking('budget', e.target.value ? Number(e.target.value) : null)}
+                    placeholder={t('agents.feat.thinkingBudgetPlaceholder')}
+                    className="w-32 px-2 py-1 text-xs rounded border border-edge bg-canvas text-on-canvas" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Simple feature toggles */}
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {SIMPLE_FEATURES.map(key => (
+              <Toggle key={key} label={t(`agents.feat.${key}`)}
+                checked={form.features[key] || false}
+                onChange={v => updateFeature(key, v)} />
+            ))}
           </div>
         </div>
 
