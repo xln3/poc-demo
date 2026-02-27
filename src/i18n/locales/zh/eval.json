@@ -1,0 +1,134 @@
+{
+  "title": "安全评测",
+  "loading": "加载中...",
+
+  "nav": {
+    "eval": "评测",
+    "agents": "智能体管理",
+    "newEval": "新建评测",
+    "evalHistory": "评测历史",
+    "results": "结果与报告"
+  },
+
+  "gauge": {
+    "safetyScore": "安全评分"
+  },
+
+  "risk": {
+    "CRITICAL": "严重",
+    "HIGH": "高风险",
+    "MEDIUM": "中等",
+    "LOW": "低风险",
+    "MINIMAL": "安全"
+  },
+
+  "rating": {
+    "excellent": "优秀",
+    "good": "良好",
+    "pass": "及格",
+    "needsWork": "需改进",
+    "fail": "不合格"
+  },
+
+  "status": {
+    "pending": "等待中",
+    "running": "运行中",
+    "completed": "已完成",
+    "failed": "失败",
+    "skipped": "已跳过"
+  },
+
+  "benchmarks": {
+    "title": "Benchmark 列表",
+    "search": "搜索 benchmark...",
+    "selectAll": "全选",
+    "clearAll": "清除",
+    "selected": "已选择 {{count}} / {{total}} 项",
+    "tasks": "个任务"
+  },
+
+  "progress": {
+    "running": "正在运行",
+    "tasks": "任务进度"
+  },
+
+  "agents": {
+    "title": "智能体管理",
+    "create": "新建智能体",
+    "edit": "编辑智能体",
+    "delete": "删除",
+    "deleteConfirm": "确定删除此智能体配置？",
+    "name": "智能体名称",
+    "apiBase": "API 端点",
+    "apiKey": "API Key",
+    "modelId": "模型 ID",
+    "systemPrompt": "系统提示词",
+    "tools": "工具调用",
+    "rag": "RAG 检索",
+    "mcp": "MCP 服务",
+    "save": "保存",
+    "cancel": "取消",
+    "evaluate": "开始评测",
+    "noAgents": "暂无智能体配置，点击上方按钮创建",
+    "capabilities": "能力配置"
+  },
+
+  "newEval": {
+    "title": "新建安全评测",
+    "step1": "选择智能体",
+    "step2": "选择 Benchmarks",
+    "step3": "配置参数",
+    "selectAgent": "选择要评测的智能体",
+    "selectBenchmarks": "选择评测基准",
+    "configParams": "评测参数",
+    "sampleLimit": "样本限制",
+    "sampleLimitHint": "留空表示运行全部样本",
+    "judgeModel": "评判模型",
+    "judgeModelHint": "留空使用默认评判模型",
+    "start": "启动评测",
+    "starting": "正在启动...",
+    "prev": "上一步",
+    "next": "下一步"
+  },
+
+  "evalProgress": {
+    "title": "评测进度",
+    "model": "评测模型",
+    "startedAt": "开始时间",
+    "viewResults": "查看结果"
+  },
+
+  "results": {
+    "title": "评测结果",
+    "noResults": "暂无评测结果",
+    "avgScore": "综合评分",
+    "taskCount": "评测任务数",
+    "evalDate": "评测日期",
+    "viewDetail": "查看详情",
+    "generateReport": "生成报告",
+    "perTask": "各任务得分",
+    "riskDistribution": "风险分布",
+    "reproduce": "复现演示"
+  },
+
+  "report": {
+    "title": "评测报告",
+    "level1": "单项报告",
+    "level2": "综合报告",
+    "level3": "高风险案例",
+    "generating": "报告生成中...",
+    "overview": "概览",
+    "configInfo": "智能体配置",
+    "scoreTable": "评分详情",
+    "riskAnalysis": "风险分析",
+    "recommendations": "改进建议",
+    "caseId": "案例 ID",
+    "benchmark": "所属 Benchmark",
+    "riskCategory": "风险类别",
+    "attackInput": "攻击输入",
+    "modelResponse": "模型响应",
+    "scoreDetail": "评分详情",
+    "vulnerabilityAnalysis": "漏洞分析",
+    "reproGuide": "复现指引"
+  }
+}

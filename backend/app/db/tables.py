@@ -94,6 +94,28 @@ class TestResult(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
+class AgentConfig(Base):
+    """Persisted agent configuration for eval integration."""
+    __tablename__ = "agent_configs"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    name = Column(String(256), nullable=False)
+    api_base = Column(String(512), nullable=False)
+    api_key_encrypted = Column(Text, nullable=True)
+    model_id = Column(String(256), nullable=False)  # openai/xxx format
+    system_prompt = Column(Text, nullable=True)
+    tools_enabled = Column(Boolean, default=False)
+    enabled_tools = Column(JSON, default=list)
+    rag_enabled = Column(Boolean, default=False)
+    rag_config = Column(JSON, default=dict)
+    mcp_enabled = Column(Boolean, default=False)
+    mcp_servers = Column(JSON, default=list)
+    eval_model_id = Column(String(256), nullable=True)  # ID in eval-poc
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
+
+
 class ApiUsage(Base):
     """Tracks per-call LLM API usage for cost analysis."""
     __tablename__ = "api_usage"

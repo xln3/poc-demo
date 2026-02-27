@@ -1,0 +1,134 @@
+{
+  "title": "Safety Evaluation",
+  "loading": "Loading...",
+
+  "nav": {
+    "eval": "Eval",
+    "agents": "Agent Management",
+    "newEval": "New Evaluation",
+    "evalHistory": "Eval History",
+    "results": "Results & Reports"
+  },
+
+  "gauge": {
+    "safetyScore": "Safety Score"
+  },
+
+  "risk": {
+    "CRITICAL": "Critical",
+    "HIGH": "High",
+    "MEDIUM": "Medium",
+    "LOW": "Low",
+    "MINIMAL": "Minimal"
+  },
+
+  "rating": {
+    "excellent": "Excellent",
+    "good": "Good",
+    "pass": "Pass",
+    "needsWork": "Needs Improvement",
+    "fail": "Fail"
+  },
+
+  "status": {
+    "pending": "Pending",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "skipped": "Skipped"
+  },
+
+  "benchmarks": {
+    "title": "Benchmarks",
+    "search": "Search benchmarks...",
+    "selectAll": "Select All",
+    "clearAll": "Clear",
+    "selected": "{{count}} / {{total}} selected",
+    "tasks": "tasks"
+  },
+
+  "progress": {
+    "running": "Running",
+    "tasks": "Task Progress"
+  },
+
+  "agents": {
+    "title": "Agent Management",
+    "create": "New Agent",
+    "edit": "Edit Agent",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this agent?",
+    "name": "Agent Name",
+    "apiBase": "API Endpoint",
+    "apiKey": "API Key",
+    "modelId": "Model ID",
+    "systemPrompt": "System Prompt",
+    "tools": "Tool Calling",
+    "rag": "RAG Retrieval",
+    "mcp": "MCP Services",
+    "save": "Save",
+    "cancel": "Cancel",
+    "evaluate": "Start Evaluation",
+    "noAgents": "No agents configured. Click the button above to create one.",
+    "capabilities": "Capabilities"
+  },
+
+  "newEval": {
+    "title": "New Safety Evaluation",
+    "step1": "Select Agent",
+    "step2": "Select Benchmarks",
+    "step3": "Configure",
+    "selectAgent": "Select the agent to evaluate",
+    "selectBenchmarks": "Select evaluation benchmarks",
+    "configParams": "Evaluation Parameters",
+    "sampleLimit": "Sample Limit",
+    "sampleLimitHint": "Leave empty to run all samples",
+    "judgeModel": "Judge Model",
+    "judgeModelHint": "Leave empty for default judge",
+    "start": "Start Evaluation",
+    "starting": "Starting...",
+    "prev": "Previous",
+    "next": "Next"
+  },
+
+  "evalProgress": {
+    "title": "Evaluation Progress",
+    "model": "Model",
+    "startedAt": "Started At",
+    "viewResults": "View Results"
+  },
+
+  "results": {
+    "title": "Evaluation Results",
+    "noResults": "No evaluation results yet",
+    "avgScore": "Overall Score",
+    "taskCount": "Tasks Evaluated",
+    "evalDate": "Eval Date",
+    "viewDetail": "View Details",
+    "generateReport": "Generate Report",
+    "perTask": "Per-Task Scores",
+    "riskDistribution": "Risk Distribution",
+    "reproduce": "Reproduce"
+  },
+
+  "report": {
+    "title": "Evaluation Report",
+    "level1": "Single Benchmark",
+    "level2": "Full Report",
+    "level3": "High-Risk Cases",
+    "generating": "Generating report...",
+    "overview": "Overview",
+    "configInfo": "Agent Configuration",
+    "scoreTable": "Score Details",
+    "riskAnalysis": "Risk Analysis",
+    "recommendations": "Recommendations",
+    "caseId": "Case ID",
+    "benchmark": "Benchmark",
+    "riskCategory": "Risk Category",
+    "attackInput": "Attack Input",
+    "modelResponse": "Model Response",
+    "scoreDetail": "Score Details",
+    "vulnerabilityAnalysis": "Vulnerability Analysis",
+    "reproGuide": "Reproduction Guide"
+  }
+}

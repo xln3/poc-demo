@@ -25,6 +25,12 @@ import RunPage from './components/pages/RunPage.jsx';
 import ConfigPage from './components/pages/ConfigPage.jsx';
 import ReportPage from './components/pages/ReportPage.jsx';
 import RiskItemsPage from './components/pages/RiskItemsPage.jsx';
+import EvalSubNav from './components/eval/EvalSubNav.jsx';
+import AgentConfigPage from './components/pages/AgentConfigPage.jsx';
+import EvalNewPage from './components/pages/EvalNewPage.jsx';
+import EvalProgressPage from './components/pages/EvalProgressPage.jsx';
+import EvalResultsPage from './components/pages/EvalResultsPage.jsx';
+import EvalReportPage from './components/pages/EvalReportPage.jsx';
 import {
   TerminalItem,
   DeletedTerminalsPanel,
@@ -51,10 +57,24 @@ export default function App() {
     translatedScenario, translatedAttack,
   } = useScenarioTranslation(selectedAttack?.scenario, currentScenario, currentAttack);
 
-  // Tab navigation: 4 tabs
+  // Tab navigation: 5 tabs (config, run, eval, report, risk-items)
   const [activeTab, setActiveTab] = useState('run');
   // App mode: test vs demo
   const [appMode, setAppMode] = useState('test');
+
+  // Eval sub-navigation state
+  const [evalSubPage, setEvalSubPage] = useState('agents'); // agents | eval-new | eval-progress | eval-results | eval-report
+  const [evalContext, setEvalContext] = useState({}); // jobId, model, agentId, etc.
+
+  const evalNavigate = (page, ctx = {}) => {
+    setEvalSubPage(page);
+    setEvalContext(prev => ({ ...prev, ...ctx }));
+    if (page === 'run-reproduce' && ctx) {
+      // Jump to Run tab with pre-config
+      setActiveTab('run');
+      // TODO: inject reproduce config into run page state
+    }
+  };
 
   const [messages, setMessages] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -1640,6 +1660,43 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
             applyImportedTestCase={applyImportedTestCase}
             setActiveTab={setActiveTab}
           />
+        )}
+
+        {/* 评测 tab */}
+        {activeTab === 'eval' && (
+          <div className="flex-1 overflow-y-auto custom-scroll">
+            {/* Eval sub-navigation */}
+            <EvalSubNav active={evalSubPage} onChange={page => { setEvalSubPage(page); setEvalContext({}); }} />
+
+            {evalSubPage === 'agents' && (
+              <AgentConfigPage onNavigate={evalNavigate} />
+            )}
+            {evalSubPage === 'eval-new' && (
+              <EvalNewPage
+                onNavigate={evalNavigate}
+                initialAgentId={evalContext.agentId}
+                initialModelId={evalContext.modelId}
+              />
+            )}
+            {evalSubPage === 'eval-progress' && (
+              <EvalProgressPage
+                jobId={evalContext.jobId}
+                onNavigate={evalNavigate}
+              />
+            )}
+            {evalSubPage === 'eval-results' && (
+              <EvalResultsPage
+                initialModel={evalContext.model}
+                onNavigate={evalNavigate}
+              />
+            )}
+            {evalSubPage === 'eval-report' && (
+              <EvalReportPage
+                model={evalContext.model}
+                onNavigate={evalNavigate}
+              />
+            )}
+          </div>
         )}
 
         {/* 文件浏览器 Modal */}

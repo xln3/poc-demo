@@ -5,20 +5,22 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 // Eagerly loaded namespaces
 import zhCommon from './locales/zh/common.json';
 import zhConfig from './locales/zh/config.json';
+import zhEval from './locales/zh/eval.json';
 import enCommon from './locales/en/common.json';
 import enConfig from './locales/en/config.json';
+import enEval from './locales/en/eval.json';
 
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
-      zh: { common: zhCommon, config: zhConfig },
-      en: { common: enCommon, config: enConfig },
+      zh: { common: zhCommon, config: zhConfig, eval: zhEval },
+      en: { common: enCommon, config: enConfig, eval: enEval },
     },
     fallbackLng: 'zh',
     defaultNS: 'common',
-    ns: ['common', 'config'],
+    ns: ['common', 'config', 'eval'],
     interpolation: { escapeValue: false },
     detection: {
       order: ['localStorage', 'navigator'],
@@ -29,7 +31,7 @@ i18n
   });
 
 // Cache for loaded scenario namespaces
-const loadedNamespaces = new Set(['common', 'config']);
+const loadedNamespaces = new Set(['common', 'config', 'eval']);
 
 /**
  * Dynamically load a scenario translation namespace.

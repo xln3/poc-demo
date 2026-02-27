@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 // If you explicitly need LAN access, set VITE_DEV_HOST=0.0.0.0 (and restrict the port via firewall/security group).
 const devHost = process.env.VITE_DEV_HOST || '127.0.0.1'
 const backendTarget = process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
+const evalBackendTarget = process.env.VITE_EVAL_BACKEND_URL || 'http://127.0.0.1:8001'
 
 export default defineConfig({
   plugins: [
@@ -103,6 +104,21 @@ export default defineConfig({
       '/benchmarks': {
         target: backendTarget,
         changeOrigin: true,
+      },
+      // eval bridge routes (proxied through poc-demo backend)
+      '/eval': {
+        target: backendTarget,
+        changeOrigin: true,
+      },
+      '/agents': {
+        target: backendTarget,
+        changeOrigin: true,
+      },
+      // direct eval-poc backend access (for dev debugging)
+      '/eval-api': {
+        target: evalBackendTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/eval-api/, '/api'),
       },
     },
   },

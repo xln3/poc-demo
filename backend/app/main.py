@@ -12,8 +12,11 @@ from .routers import sandbox, mcp, rag, cases, datasets, test_results, report_te
 from .auth.router import router as auth_router
 from .routers.llm_proxy import router as llm_proxy_router
 from .routers.usage import router as usage_router
+from .routers.eval_proxy import router as eval_proxy_router
+from .routers.agents import router as agents_router
 from .services.container import container_manager
 from .services.logging_config import setup_logging
+from .services.eval_bridge import close_client as close_eval_client
 from .db.engine import engine
 from .db.tables import Base
 
@@ -50,6 +53,7 @@ async def lifespan(app: FastAPI):
     # Shutdown - cleanup all containers
     logging.getLogger(__name__).info("Application shutting down")
     container_manager.cleanup_all()
+    await close_eval_client()
     await engine.dispose()
 
 
@@ -85,6 +89,8 @@ app.include_router(eval_import.router)
 app.include_router(simulator.router)
 app.include_router(benchmarks.router)
 app.include_router(usage_router)
+app.include_router(eval_proxy_router)
+app.include_router(agents_router)
 
 # ---------- Rate limiting ----------
 from slowapi import Limiter, _rate_limit_exceeded_handler

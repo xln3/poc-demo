@@ -12,9 +12,11 @@ export default function LeftSidebar({
 }) {
   const { isDark, toggleTheme } = useTheme();
   const { t } = useTranslation();
+  const { t: tEval } = useTranslation('eval');
   const tabs = [
     { id: 'config', label: t('nav.config'), icon: '\u2699\uFE0F' },
     { id: 'run', label: t('nav.run'), icon: '\u25B6\uFE0F' },
+    { id: 'eval', label: tEval('nav.eval'), icon: '\uD83D\uDD2C' },
     { id: 'report', label: t('nav.report'), icon: '\uD83D\uDCCA' },
     { id: 'risk-items', label: t('nav.riskItems'), icon: '\uD83D\uDEE1\uFE0F' },
   ];
