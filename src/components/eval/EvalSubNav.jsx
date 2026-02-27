@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 const SUB_PAGES = [
   { id: 'agents', icon: '🤖' },
+  { id: 'eval-manage', icon: '📋' },
   { id: 'eval-new', icon: '➕' },
   { id: 'eval-results', icon: '📊' },
 ];
@@ -14,6 +15,7 @@ export default function EvalSubNav({ active, onChange }) {
 
   const labels = {
     'agents': t('nav.agents'),
+    'eval-manage': t('nav.evalManage'),
     'eval-new': t('nav.newEval'),
     'eval-results': t('nav.results'),
   };

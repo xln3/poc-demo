@@ -117,6 +117,19 @@ class AgentConfig(Base):
     updated_at = Column(DateTime, nullable=True)
 
 
+class EvalTemplate(Base):
+    """Reusable evaluation configuration template."""
+    __tablename__ = "eval_templates"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    name = Column(String(256), nullable=False)
+    description = Column(Text, nullable=True)
+    config_json = Column(JSON, nullable=False, default=dict)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
+
+
 class ApiUsage(Base):
     """Tracks per-call LLM API usage for cost analysis."""
     __tablename__ = "api_usage"

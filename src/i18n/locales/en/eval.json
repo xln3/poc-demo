@@ -7,7 +7,8 @@
     "agents": "Agent Management",
     "newEval": "New Evaluation",
     "evalHistory": "Eval History",
-    "results": "Results & Reports"
+    "results": "Results & Reports",
+    "evalManage": "Eval Templates"
   },
 
   "gauge": {
@@ -127,6 +128,47 @@
     "perTask": "Per-Task Scores",
     "riskDistribution": "Risk Distribution",
     "reproduce": "Reproduce"
+  },
+
+  "evalManage": {
+    "title": "Evaluation Templates",
+    "create": "New Template",
+    "edit": "Edit Template",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this template?",
+    "copy": "Duplicate",
+    "run": "Run",
+    "name": "Template Name",
+    "namePlaceholder": "e.g. Full Safety Assessment",
+    "description": "Description",
+    "descriptionPlaceholder": "Describe the evaluation purpose...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "noTemplates": "No evaluation templates yet. Create one to get started.",
+    "benchmarkCount": "{{count}} benchmarks",
+    "taskCount": "{{count}} tasks",
+    "riskCategories": "Risk Categories",
+    "selectTasks": "Select Tasks",
+    "expandAll": "Expand All",
+    "collapseAll": "Collapse All",
+    "searchPlaceholder": "Search benchmarks or tasks...",
+    "available": "Available",
+    "unavailable": "Not Available",
+    "selectedSummary": "{{tasks}} tasks from {{benchmarks}} benchmarks selected",
+    "noSelection": "No tasks selected"
+  },
+
+  "runDialog": {
+    "title": "Run Evaluation",
+    "selectAgent": "Select Agent",
+    "noAgents": "No agents configured",
+    "sampleLimit": "Sample Limit",
+    "sampleLimitHint": "Leave empty for all samples",
+    "judgeModel": "Judge Model",
+    "judgeModelHint": "Leave empty for default",
+    "start": "Start Evaluation",
+    "starting": "Starting...",
+    "cancel": "Cancel"
   },
 
   "report": {

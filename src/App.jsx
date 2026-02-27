@@ -31,6 +31,7 @@ import EvalNewPage from './components/pages/EvalNewPage.jsx';
 import EvalProgressPage from './components/pages/EvalProgressPage.jsx';
 import EvalResultsPage from './components/pages/EvalResultsPage.jsx';
 import EvalReportPage from './components/pages/EvalReportPage.jsx';
+import EvalManagePage from './components/pages/EvalManagePage.jsx';
 import {
   TerminalItem,
   DeletedTerminalsPanel,
@@ -1682,6 +1683,9 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
 
             {evalSubPage === 'agents' && (
               <AgentConfigPage onNavigate={evalNavigate} />
+            )}
+            {evalSubPage === 'eval-manage' && (
+              <EvalManagePage onNavigate={evalNavigate} />
             )}
             {evalSubPage === 'eval-new' && (
               <EvalNewPage

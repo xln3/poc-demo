@@ -105,6 +105,42 @@ export function getReproduceConfig(model, task, sampleId = null) {
   });
 }
 
+// ---- Risk Hierarchy ----
+
+export function fetchRiskHierarchy() {
+  return request('GET', '/eval/risk-hierarchy');
+}
+
+// ---- Eval Templates ----
+
+export function fetchEvalTemplates() {
+  return request('GET', '/eval-templates');
+}
+
+export function createEvalTemplate(data) {
+  return request('POST', '/eval-templates', data);
+}
+
+export function getEvalTemplate(id) {
+  return request('GET', `/eval-templates/${id}`);
+}
+
+export function updateEvalTemplate(id, data) {
+  return request('PUT', `/eval-templates/${id}`, data);
+}
+
+export function deleteEvalTemplate(id) {
+  return request('DELETE', `/eval-templates/${id}`);
+}
+
+export function copyEvalTemplate(id) {
+  return request('POST', `/eval-templates/${id}/copy`);
+}
+
+export function runEvalTemplate(id, payload) {
+  return request('POST', `/eval-templates/${id}/run`, payload);
+}
+
 // ---- Agents ----
 
 export function fetchAgents() {

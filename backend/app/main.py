@@ -14,6 +14,7 @@ from .routers.llm_proxy import router as llm_proxy_router
 from .routers.usage import router as usage_router
 from .routers.eval_proxy import router as eval_proxy_router
 from .routers.agents import router as agents_router
+from .routers.eval_templates import router as eval_templates_router
 from .services.container import container_manager
 from .services.logging_config import setup_logging
 from .services.eval_bridge import close_client as close_eval_client
@@ -91,6 +92,7 @@ app.include_router(benchmarks.router)
 app.include_router(usage_router)
 app.include_router(eval_proxy_router)
 app.include_router(agents_router)
+app.include_router(eval_templates_router)
 
 # ---------- Rate limiting ----------
 from slowapi import Limiter, _rate_limit_exceeded_handler

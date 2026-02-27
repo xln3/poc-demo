@@ -7,7 +7,8 @@
     "agents": "智能体管理",
     "newEval": "新建评测",
     "evalHistory": "评测历史",
-    "results": "结果与报告"
+    "results": "结果与报告",
+    "evalManage": "评测模板"
   },
 
   "gauge": {
@@ -127,6 +128,47 @@
     "perTask": "各任务得分",
     "riskDistribution": "风险分布",
     "reproduce": "复现演示"
+  },
+
+  "evalManage": {
+    "title": "评测模板管理",
+    "create": "新建模板",
+    "edit": "编辑模板",
+    "delete": "删除",
+    "deleteConfirm": "确定删除此评测模板？",
+    "copy": "复制",
+    "run": "运行",
+    "name": "模板名称",
+    "namePlaceholder": "如：完整安全评估",
+    "description": "描述",
+    "descriptionPlaceholder": "描述评测目的...",
+    "save": "保存",
+    "cancel": "取消",
+    "noTemplates": "暂无评测模板，点击上方按钮创建。",
+    "benchmarkCount": "{{count}} 个基准",
+    "taskCount": "{{count}} 个任务",
+    "riskCategories": "风险类别",
+    "selectTasks": "选择任务",
+    "expandAll": "展开全部",
+    "collapseAll": "收起全部",
+    "searchPlaceholder": "搜索基准或任务...",
+    "available": "可用",
+    "unavailable": "不可用",
+    "selectedSummary": "已选择 {{tasks}} 个任务，来自 {{benchmarks}} 个基准",
+    "noSelection": "未选择任何任务"
+  },
+
+  "runDialog": {
+    "title": "运行评测",
+    "selectAgent": "选择智能体",
+    "noAgents": "暂无智能体配置",
+    "sampleLimit": "样本限制",
+    "sampleLimitHint": "留空运行全部样本",
+    "judgeModel": "评判模型",
+    "judgeModelHint": "留空使用默认模型",
+    "start": "启动评测",
+    "starting": "正在启动...",
+    "cancel": "取消"
   },
 
   "report": {

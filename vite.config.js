@@ -114,6 +114,10 @@ export default defineConfig({
         target: backendTarget,
         changeOrigin: true,
       },
+      '/eval-templates': {
+        target: backendTarget,
+        changeOrigin: true,
+      },
       // direct eval-poc backend access (for dev debugging)
       '/eval-api': {
         target: evalBackendTarget,

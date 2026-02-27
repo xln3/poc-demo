@@ -38,6 +38,23 @@ class ReproduceRequest(BaseModel):
     sample_id: Optional[str] = None
 
 
+# ---- Risk hierarchy ----
+
+@router.get("/risk-hierarchy")
+async def get_risk_hierarchy(user: User = Depends(require_user)):
+    """Get merged 4-level risk hierarchy (static taxonomy + live catalog)."""
+    from ..services.risk_hierarchy import build_merged_hierarchy
+    try:
+        benchmarks = await eval_bridge.list_eval_benchmarks()
+        task_meta = await eval_bridge.get_task_meta()
+        return build_merged_hierarchy(benchmarks, task_meta)
+    except Exception as e:
+        logger.error("Failed to build risk hierarchy: %s", e)
+        # Return hierarchy with everything marked unavailable
+        from ..services.risk_hierarchy import build_merged_hierarchy as merge
+        return merge([], {})
+
+
 # ---- Benchmark endpoints ----
 
 @router.get("/benchmarks")
