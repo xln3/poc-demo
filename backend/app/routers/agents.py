@@ -89,7 +89,7 @@ def _agent_to_response(agent: AgentConfig) -> dict:
         "rag_config": agent.rag_config or {},
         "mcp_enabled": agent.mcp_enabled or False,
         "mcp_servers": agent.mcp_servers or [],
-        "features": agent.features or {},
+        "features": getattr(agent, 'features', None) or {},
         "eval_model_id": agent.eval_model_id,
         "created_at": agent.created_at.isoformat() if agent.created_at else "",
     }
