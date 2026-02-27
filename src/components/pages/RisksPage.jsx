@@ -83,14 +83,16 @@ export default function RisksPage() {
     return <div className="p-8 text-center text-on-muted">{t('loading')}</div>;
   }
 
-  // Stats
+  // Stats — only count available benchmarks and their tasks
   const totalCats = hierarchy.length;
   const totalSubs = hierarchy.reduce((s, c) => s + (c.subcategories?.length || 0), 0);
-  const totalBms = hierarchy.reduce((s, c) =>
-    s + (c.subcategories?.reduce((ss, sub) => ss + (sub.benchmarks?.length || 0), 0) || 0), 0);
   const availableBms = hierarchy.reduce((s, c) =>
     s + (c.subcategories?.reduce((ss, sub) =>
       ss + (sub.benchmarks?.filter(b => b.available).length || 0), 0) || 0), 0);
+  const availableTasks = hierarchy.reduce((s, c) =>
+    s + (c.subcategories?.reduce((ss, sub) =>
+      ss + (sub.benchmarks?.reduce((bs, bm) =>
+        bs + (bm.available ? (bm.tasks?.length || 0) : 0), 0) || 0), 0) || 0), 0);
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
@@ -102,8 +104,8 @@ export default function RisksPage() {
       <div className="grid grid-cols-4 gap-3">
         <StatCard label={isZh ? '风险大类' : 'Categories'} value={totalCats} />
         <StatCard label={isZh ? '风险子类' : 'Subcategories'} value={totalSubs} />
-        <StatCard label={isZh ? 'Benchmarks' : 'Benchmarks'} value={totalBms} />
-        <StatCard label={isZh ? '可用' : 'Available'} value={`${availableBms}/${totalBms}`} />
+        <StatCard label="Benchmarks" value={availableBms} />
+        <StatCard label="Tasks" value={availableTasks} />
       </div>
 
       {/* Search + controls */}

@@ -217,10 +217,10 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
             className="flex-1 min-w-[200px] px-3 py-1.5 text-sm rounded-lg border border-edge bg-canvas text-on-canvas"
           />
         )}
-        <button onClick={expandAll} className="px-2 py-1 text-xs text-on-muted hover:text-on-canvas">
+        <button type="button" onClick={expandAll} className="px-2 py-1 text-xs text-on-muted hover:text-on-canvas">
           {t('evalManage.expandAll')}
         </button>
-        <button onClick={collapseAll} className="px-2 py-1 text-xs text-on-muted hover:text-on-canvas">
+        <button type="button" onClick={collapseAll} className="px-2 py-1 text-xs text-on-muted hover:text-on-canvas">
           {t('evalManage.collapseAll')}
         </button>
       </div>
@@ -291,6 +291,7 @@ function CategoryNode({ cat, isZh, expanded, toggle, selectedSet, isTaskSelected
         )}
         {!readOnly && totalAvailable > 0 && (
           <button
+            type="button"
             onClick={e => { e.stopPropagation(); toggleCategoryAll(cat); }}
             className="text-xs text-blue-500 hover:text-blue-400 px-1"
           >
@@ -353,6 +354,7 @@ function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelec
         )}
         {!readOnly && totalAvailable > 0 && (
           <button
+            type="button"
             onClick={e => { e.stopPropagation(); toggleSubcategoryAll(sub); }}
             className="text-xs text-blue-500 hover:text-blue-400 px-1"
           >
@@ -423,6 +425,7 @@ function BenchmarkNode({ bm, parentId, expanded, toggle, selectedSet, isTaskSele
             )}
             {!readOnly && hasTasks && (
               <button
+                type="button"
                 onClick={e => { e.stopPropagation(); toggleBenchmarkAll(bm); }}
                 className="text-xs text-blue-500 hover:text-blue-400 px-1"
               >

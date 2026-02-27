@@ -155,6 +155,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "noTemplates": "No evaluation templates yet. Create one to get started.",
+    "riskCount": "{{count}} risks",
     "benchmarkCount": "{{count}} benchmarks",
     "taskCount": "{{count}} tasks",
     "riskCategories": "Risk Categories",

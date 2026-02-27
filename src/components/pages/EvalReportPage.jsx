@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   fetchResults, fetchResultDetail, fetchResultSamples,
-  generateReport, fetchDatasetDescription,
+  generateReport, fetchDatasetDescription, fetchRiskHierarchy,
 } from '../../api/evalBridgeApi';
 import SafetyScoreGauge from '../eval/SafetyScoreGauge';
 import RiskLevelBadge from '../eval/RiskLevelBadge';
@@ -27,6 +27,9 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
   const [generating, setGenerating] = useState(false);
   const [loadingModels, setLoadingModels] = useState(true);
 
+  // Risk hierarchy for grouping tasks
+  const [hierarchy, setHierarchy] = useState([]);
+
   // Dataset examples state
   const [datasetData, setDatasetData] = useState(null);
   const [datasetLoading, setDatasetLoading] = useState(false);
@@ -36,7 +39,12 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
     fetchResults()
       .then(data => {
         setModels(data);
-        if (!selectedModel && data.length > 0) {
+        // If initialModel was given, check it exists in results
+        const trimmedInit = initialModel?.trim();
+        const match = trimmedInit && data.find(r => r.model === trimmedInit || r.model.trim() === trimmedInit);
+        if (match) {
+          setSelectedModel(match.model);
+        } else if (!selectedModel && data.length > 0) {
           setSelectedModel(data[0].model);
         }
       })
@@ -44,9 +52,14 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
       .finally(() => setLoadingModels(false));
   }, []);
 
+  // Load risk hierarchy for grouping
+  useEffect(() => {
+    fetchRiskHierarchy().then(setHierarchy).catch(() => {});
+  }, []);
+
   // Set initial model from prop
   useEffect(() => {
-    if (initialModel) setSelectedModel(initialModel);
+    if (initialModel) setSelectedModel(initialModel?.trim());
   }, [initialModel]);
 
   // Load detail when model selected
@@ -165,6 +178,8 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
             <FullReportView
               detail={detail}
               model={selectedModel}
+              hierarchy={hierarchy}
+              lang={i18n.language}
               t={t}
               onSelectTask={(task) => { setSelectedTask(task); setActiveLevel(1); }}
               onHighRiskDetail={(task) => { setSelectedTask(task); setActiveLevel(3); }}
@@ -178,6 +193,8 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
           {activeLevel === 1 && (
             <SingleBenchmarkView
               detail={detail}
+              hierarchy={hierarchy}
+              lang={i18n.language}
               selectedTask={selectedTask}
               setSelectedTask={setSelectedTask}
               t={t}
@@ -189,6 +206,8 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
             <HighRiskView
               detail={detail}
               model={selectedModel}
+              hierarchy={hierarchy}
+              lang={i18n.language}
               selectedTask={selectedTask}
               setSelectedTask={setSelectedTask}
               samples={samples}
@@ -212,9 +231,83 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
   );
 }
 
+// ---- Task grouping by risk hierarchy ----
+
+/**
+ * Groups tasks by risk hierarchy categories.
+ * Returns: [{ category, subcategory, tasks: [taskObj] }]
+ * Tasks not matching any hierarchy entry go into an "Other" group.
+ */
+function groupTasksByHierarchy(tasks, hierarchy, lang) {
+  const isZh = lang?.startsWith('zh');
+  // Build task→group mapping from hierarchy
+  const taskGroupMap = {};
+  for (const cat of hierarchy) {
+    for (const sub of cat.subcategories || []) {
+      for (const bm of sub.benchmarks || []) {
+        for (const t of bm.tasks || []) {
+          if (!taskGroupMap[t.name]) {
+            taskGroupMap[t.name] = {
+              category: isZh ? cat.name : cat.name_en,
+              subcategory: isZh ? sub.name : sub.name_en,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  // Group tasks
+  const groups = [];
+  const groupIndex = {};
+  for (const task of tasks) {
+    const info = taskGroupMap[task.task];
+    const key = info ? info.subcategory : '_other';
+    if (!groupIndex[key]) {
+      groupIndex[key] = {
+        category: info?.category || '',
+        subcategory: info?.subcategory || (isZh ? '其他' : 'Other'),
+        tasks: [],
+      };
+      groups.push(groupIndex[key]);
+    }
+    groupIndex[key].tasks.push(task);
+  }
+  return groups;
+}
+
+function GroupedTaskRows({ group, onSelectTask }) {
+  return (
+    <>
+      <tr>
+        <td colSpan={4} className="pt-3 pb-1 px-0">
+          <div className="text-xs font-medium text-on-muted border-b border-edge/30 pb-1">
+            {group.subcategory}
+          </div>
+        </td>
+      </tr>
+      {group.tasks.map(task => (
+        <tr key={task.task} className="border-b border-edge/50 hover:bg-surface-hover/50">
+          <td className="py-2 pl-4 text-on-canvas">
+            <button
+              onClick={() => onSelectTask(task.task)}
+              className="hover:text-blue-400 hover:underline text-left"
+            >
+              {task.display_name || task.task}
+            </button>
+          </td>
+          <td className="py-2 text-right text-on-canvas font-medium">{Math.round(task.safety_score)}</td>
+          <td className="py-2 text-center"><RiskLevelBadge level={task.risk_level} /></td>
+          <td className="py-2 text-right text-on-muted">{task.samples}</td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 // ---- Level 2: Full Report ----
 
-function FullReportView({ detail, model, t, onSelectTask, onHighRiskDetail, onGenerate, generating, generatedReport }) {
+function FullReportView({ detail, model, hierarchy, lang, t, onSelectTask, onHighRiskDetail, onGenerate, generating, generatedReport }) {
   const highRiskTasks = detail.tasks.filter(t => t.risk_level === 'CRITICAL' || t.risk_level === 'HIGH');
 
   return (
@@ -236,7 +329,7 @@ function FullReportView({ detail, model, t, onSelectTask, onHighRiskDetail, onGe
         </div>
       </Section>
 
-      {/* Score Table */}
+      {/* Score Table — grouped by risk hierarchy */}
       <Section title={t('report.scoreTable')}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -249,44 +342,43 @@ function FullReportView({ detail, model, t, onSelectTask, onHighRiskDetail, onGe
               </tr>
             </thead>
             <tbody>
-              {detail.tasks.map(task => (
-                <tr key={task.task} className="border-b border-edge/50 hover:bg-surface-hover/50">
-                  <td className="py-2 text-on-canvas">
-                    <button
-                      onClick={() => onSelectTask(task.task)}
-                      className="hover:text-blue-400 hover:underline text-left"
-                    >
-                      {task.display_name || task.task}
-                    </button>
-                  </td>
-                  <td className="py-2 text-right text-on-canvas font-medium">{Math.round(task.safety_score)}</td>
-                  <td className="py-2 text-center"><RiskLevelBadge level={task.risk_level} /></td>
-                  <td className="py-2 text-right text-on-muted">{task.samples}</td>
-                </tr>
+              {groupTasksByHierarchy(detail.tasks, hierarchy, lang).map(group => (
+                <GroupedTaskRows
+                  key={group.subcategory}
+                  group={group}
+                  onSelectTask={onSelectTask}
+                />
               ))}
             </tbody>
           </table>
         </div>
       </Section>
 
-      {/* Risk Analysis */}
+      {/* Risk Analysis — grouped */}
       {highRiskTasks.length > 0 && (
         <Section title={t('report.riskAnalysis')}>
-          <div className="space-y-2">
-            {highRiskTasks.map(task => (
-              <div key={task.task} className="flex items-center justify-between p-3 bg-red-900/10 border border-red-800/30 rounded-lg">
-                <div>
-                  <div className="text-sm font-medium text-on-canvas">{task.display_name || task.task}</div>
-                  <div className="text-xs text-on-muted mt-0.5">{task.interpretation}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RiskLevelBadge level={task.risk_level} />
-                  <button
-                    onClick={() => onHighRiskDetail(task.task)}
-                    className="px-2 py-1 text-xs bg-red-600/20 text-red-400 rounded hover:bg-red-600/30"
-                  >
-                    {t('report.level3')}
-                  </button>
+          <div className="space-y-4">
+            {groupTasksByHierarchy(highRiskTasks, hierarchy, lang).map(group => (
+              <div key={group.subcategory}>
+                <div className="text-xs font-medium text-on-muted mb-2">{group.subcategory}</div>
+                <div className="space-y-2">
+                  {group.tasks.map(task => (
+                    <div key={task.task} className="flex items-center justify-between p-3 bg-red-900/10 border border-red-800/30 rounded-lg">
+                      <div>
+                        <div className="text-sm font-medium text-on-canvas">{task.display_name || task.task}</div>
+                        <div className="text-xs text-on-muted mt-0.5">{task.interpretation}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RiskLevelBadge level={task.risk_level} />
+                        <button
+                          onClick={() => onHighRiskDetail(task.task)}
+                          className="px-2 py-1 text-xs bg-red-600/20 text-red-400 rounded hover:bg-red-600/30"
+                        >
+                          {t('report.level3')}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
@@ -318,22 +410,31 @@ function FullReportView({ detail, model, t, onSelectTask, onHighRiskDetail, onGe
 
 // ---- Level 1: Single Benchmark ----
 
-function SingleBenchmarkView({ detail, selectedTask, setSelectedTask, t }) {
+function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelectedTask, t }) {
+  const groups = groupTasksByHierarchy(detail.tasks, hierarchy, lang);
+
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 flex-wrap">
-        {detail.tasks.map(task => (
-          <button
-            key={task.task}
-            onClick={() => setSelectedTask(task.task)}
-            className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-              selectedTask === task.task
-                ? 'bg-blue-600 text-white'
-                : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
-            }`}
-          >
-            {task.display_name || task.task}
-          </button>
+      <div className="space-y-3">
+        {groups.map(group => (
+          <div key={group.subcategory}>
+            <div className="text-xs font-medium text-on-muted mb-1.5">{group.subcategory}</div>
+            <div className="flex gap-2 flex-wrap">
+              {group.tasks.map(task => (
+                <button
+                  key={task.task}
+                  onClick={() => setSelectedTask(task.task)}
+                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                    selectedTask === task.task
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
+                  }`}
+                >
+                  {task.display_name || task.task}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 
@@ -368,24 +469,32 @@ function SingleBenchmarkView({ detail, selectedTask, setSelectedTask, t }) {
 
 // ---- Level 3: High-Risk Cases ----
 
-function HighRiskView({ detail, model, selectedTask, setSelectedTask, samples, t, onNavigate }) {
+function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelectedTask, samples, t, onNavigate }) {
   const highRiskTasks = detail.tasks.filter(t => t.risk_level === 'CRITICAL' || t.risk_level === 'HIGH');
+  const groups = groupTasksByHierarchy(highRiskTasks, hierarchy, lang);
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 flex-wrap">
-        {highRiskTasks.map(task => (
-          <button
-            key={task.task}
-            onClick={() => setSelectedTask(task.task)}
-            className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-              selectedTask === task.task
-                ? 'bg-red-600 text-white'
-                : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
-            }`}
-          >
-            {task.display_name || task.task}
-          </button>
+      <div className="space-y-3">
+        {groups.map(group => (
+          <div key={group.subcategory}>
+            <div className="text-xs font-medium text-on-muted mb-1.5">{group.subcategory}</div>
+            <div className="flex gap-2 flex-wrap">
+              {group.tasks.map(task => (
+                <button
+                  key={task.task}
+                  onClick={() => setSelectedTask(task.task)}
+                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                    selectedTask === task.task
+                      ? 'bg-red-600 text-white'
+                      : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
+                  }`}
+                >
+                  {task.display_name || task.task}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 

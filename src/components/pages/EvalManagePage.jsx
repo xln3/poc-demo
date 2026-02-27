@@ -6,6 +6,7 @@ import {
   updateEvalTemplate,
   deleteEvalTemplate,
   copyEvalTemplate,
+  fetchRiskHierarchy,
 } from '../../api/evalBridgeApi';
 import RiskHierarchySelector from '../eval/RiskHierarchySelector';
 import EvalRunDialog from '../eval/EvalRunDialog';
@@ -135,7 +136,7 @@ function TemplateCard({ template, onEdit, onDelete, onCopy, onRun }) {
   const config = template.config_json || {};
   const tasks = config.selected_tasks || [];
   const benchmarks = new Set(tasks.map(t => t.benchmark));
-  const categories = config.risk_categories || [];
+  const riskCategories = config.risk_categories || [];
 
   return (
     <div className="border border-edge rounded-xl p-4 bg-canvas hover:shadow-md transition-shadow">
@@ -146,21 +147,22 @@ function TemplateCard({ template, onEdit, onDelete, onCopy, onRun }) {
             <p className="text-sm text-on-muted mt-1 line-clamp-2">{template.description}</p>
           )}
           <div className="flex items-center gap-3 mt-2 text-xs text-on-muted flex-wrap">
+            <span>{t('evalManage.riskCount', { count: riskCategories.length })}</span>
             <span>{t('evalManage.benchmarkCount', { count: benchmarks.size })}</span>
             <span>{t('evalManage.taskCount', { count: tasks.length })}</span>
             {template.created_at && (
               <span>{new Date(template.created_at).toLocaleDateString()}</span>
             )}
           </div>
-          {categories.length > 0 && (
+          {riskCategories.length > 0 && (
             <div className="flex gap-1 mt-2 flex-wrap">
-              {categories.slice(0, 5).map(cat => (
-                <span key={cat} className="px-2 py-0.5 text-xs rounded-full bg-blue-500/10 text-blue-500">
+              {riskCategories.slice(0, 5).map(cat => (
+                <span key={cat} className="px-2 py-0.5 text-xs rounded-full bg-purple-500/10 text-purple-500">
                   {cat}
                 </span>
               ))}
-              {categories.length > 5 && (
-                <span className="text-xs text-on-muted">+{categories.length - 5}</span>
+              {riskCategories.length > 5 && (
+                <span className="text-xs text-on-muted">+{riskCategories.length - 5}</span>
               )}
             </div>
           )}
@@ -198,12 +200,19 @@ function TemplateCard({ template, onEdit, onDelete, onCopy, onRun }) {
 
 
 function TemplateForm({ initial, onSave, onCancel }) {
-  const { t } = useTranslation('eval');
+  const { t, i18n } = useTranslation('eval');
+  const isZh = i18n.language?.startsWith('zh');
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [selectedTasks, setSelectedTasks] = useState(
     initial?.config_json?.selected_tasks || []
   );
+  const [hierarchy, setHierarchy] = useState([]);
+
+  // Load hierarchy for risk category derivation
+  useEffect(() => {
+    fetchRiskHierarchy().then(setHierarchy).catch(() => {});
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -211,8 +220,20 @@ function TemplateForm({ initial, onSave, onCancel }) {
 
     // Derive denormalized fields
     const benchmarks = [...new Set(selectedTasks.map(t => t.benchmark))];
-    // Extract category labels from benchmark grouping (simplified)
-    const categories = benchmarks.slice(0, 10);
+    const benchmarkSet = new Set(benchmarks);
+
+    // Derive risk categories from hierarchy: find which categories contain selected benchmarks
+    const categories = [];
+    for (const cat of hierarchy) {
+      for (const sub of cat.subcategories || []) {
+        for (const bm of sub.benchmarks || []) {
+          if (bm.catalog_key && benchmarkSet.has(bm.catalog_key)) {
+            const label = isZh ? sub.name : sub.name_en;
+            if (!categories.includes(label)) categories.push(label);
+          }
+        }
+      }
+    }
 
     onSave({
       name: name.trim(),

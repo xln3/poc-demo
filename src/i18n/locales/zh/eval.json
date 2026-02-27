@@ -155,6 +155,7 @@
     "save": "保存",
     "cancel": "取消",
     "noTemplates": "暂无评测模板，点击上方按钮创建。",
+    "riskCount": "{{count}} 个风险",
     "benchmarkCount": "{{count}} 个基准",
     "taskCount": "{{count}} 个任务",
     "riskCategories": "风险类别",

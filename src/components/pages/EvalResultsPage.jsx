@@ -20,17 +20,20 @@ export default function EvalResultsPage({ onNavigate }) {
         listEvaluations().catch(() => []),
         fetchResults().catch(() => []),
       ]);
-      // Build model→result lookup
+      // Build model→result lookup (trim keys for matching)
       const rmap = {};
       for (const r of results) {
         rmap[r.model] = r;
+        rmap[r.model.trim()] = r;
       }
       setResultMap(rmap);
-      // Sort jobs: running first, then by start time desc
+      // Sort jobs: running first, then by created_at desc
       const sorted = [...(Array.isArray(jobList) ? jobList : [])].sort((a, b) => {
         if (a.status === 'running' && b.status !== 'running') return -1;
         if (b.status === 'running' && a.status !== 'running') return 1;
-        return new Date(b.started_at || 0) - new Date(a.started_at || 0);
+        const aTime = a.created_at || a.started_at || 0;
+        const bTime = b.created_at || b.started_at || 0;
+        return new Date(bTime) - new Date(aTime);
       });
       setJobs(sorted);
     } catch {
@@ -88,12 +91,14 @@ export default function EvalResultsPage({ onNavigate }) {
           </thead>
           <tbody>
             {jobs.map((job) => {
-              const result = resultMap[job.model_id || job.model];
+              const mid = (job.model_id || job.model || '').trim();
+              const result = resultMap[mid] || resultMap[job.model_id || job.model];
               return (
                 <JobRow
                   key={job.job_id || job.id}
                   job={job}
                   result={result}
+                  hasResults={!!result}
                   t={t}
                   onNavigate={onNavigate}
                 />
@@ -106,31 +111,36 @@ export default function EvalResultsPage({ onNavigate }) {
   );
 }
 
-function JobRow({ job, result, t, onNavigate }) {
-  const modelName = job.model_id || job.model || '-';
+function JobRow({ job, result, hasResults, t, onNavigate }) {
+  const modelName = (job.model_id || job.model || '-').trim();
   const status = job.status || 'pending';
-  const startedAt = job.started_at ? new Date(job.started_at) : null;
+  const startedAt = job.started_at ? new Date(job.started_at)
+    : job.created_at ? new Date(job.created_at) : null;
   const completedAt = job.completed_at ? new Date(job.completed_at) : null;
 
   // Calculate duration
   let durationStr = '-';
   if (startedAt) {
-    const end = completedAt || new Date();
-    const diffSec = Math.floor((end - startedAt) / 1000);
-    if (diffSec < 60) durationStr = `${diffSec}s`;
-    else if (diffSec < 3600) durationStr = `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`;
-    else durationStr = `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`;
+    const end = completedAt || (status === 'running' ? new Date() : null);
+    if (end) {
+      const diffSec = Math.floor((end - startedAt) / 1000);
+      if (diffSec < 60) durationStr = `${diffSec}s`;
+      else if (diffSec < 3600) durationStr = `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`;
+      else durationStr = `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`;
+    }
   }
 
-  // Progress for running jobs
-  const progress = job.progress;
-  const tasksDone = progress?.completed ?? job.tasks_completed ?? 0;
-  const tasksTotal = progress?.total ?? job.tasks_total ?? 0;
+  // Progress from job data
+  const jobTasks = job.tasks || [];
+  const tasksTotal = jobTasks.length || job.benchmarks?.length || 0;
+  const tasksDone = typeof job.progress === 'number'
+    ? Math.round(job.progress / 100 * tasksTotal)
+    : jobTasks.filter(t => t.status === 'completed' || t.status === 'error').length;
 
   // Score from result data
   const score = result ? Math.round(result.avg_score) : null;
   const riskLevel = result?.risk_level;
-  const taskCount = result?.task_count ?? job.benchmarks?.length ?? tasksTotal;
+  const taskCount = result?.task_count ?? tasksTotal;
 
   return (
     <tr className="border-b border-edge/50 hover:bg-surface-hover/50 transition-colors">
@@ -181,15 +191,16 @@ function JobRow({ job, result, t, onNavigate }) {
       {/* Actions */}
       <td className="py-3 px-3 text-center">
         <div className="flex items-center justify-center gap-1.5">
-          {status === 'completed' && (
-            <>
-              <button
-                onClick={() => onNavigate?.('eval-report', { model: modelName })}
-                className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30"
-              >
-                {t('results.viewReport')}
-              </button>
-            </>
+          {status === 'completed' && hasResults && (
+            <button
+              onClick={() => onNavigate?.('eval-report', { model: modelName })}
+              className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30"
+            >
+              {t('results.viewReport')}
+            </button>
+          )}
+          {status === 'completed' && !hasResults && (
+            <span className="text-xs text-on-dim">{t('status.failed')}</span>
           )}
           {status === 'running' && (
             <button
