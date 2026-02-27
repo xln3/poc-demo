@@ -373,7 +373,7 @@ function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelec
         )}
       </div>
       {isOpen && (
-        <div className="pl-4 text-xs text-on-muted mb-1">{sub.description}</div>
+        <div className="pl-4 text-xs text-on-muted mb-1">{isZh ? sub.description : (sub.description_en || sub.description)}</div>
       )}
       {isOpen && (
         <div className="pl-4">
@@ -382,6 +382,7 @@ function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelec
               key={`${sub.id}::${bm.name}`}
               bm={bm}
               parentId={sub.id}
+              isZh={isZh}
               expanded={expanded}
               toggle={toggle}
               selectedSet={selectedSet}
@@ -399,7 +400,7 @@ function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelec
 }
 
 
-function BenchmarkNode({ bm, parentId, expanded, toggle, selectedSet, isTaskSelected, toggleTask, toggleBenchmarkAll, readOnly, t }) {
+function BenchmarkNode({ bm, parentId, isZh, expanded, toggle, selectedSet, isTaskSelected, toggleTask, toggleBenchmarkAll, readOnly, t }) {
   const nodeId = `${parentId}::${bm.name}`;
   const isOpen = expanded.has(nodeId);
   const hasTasks = bm.tasks.length > 0;
@@ -420,7 +421,7 @@ function BenchmarkNode({ bm, parentId, expanded, toggle, selectedSet, isTaskSele
         ) : (
           <span className="w-4" />
         )}
-        <span className="text-sm text-on-canvas flex-1">{bm.name}</span>
+        <span className="text-sm text-on-canvas flex-1">{isZh ? (bm.display_name || bm.name) : (bm.display_name_en || bm.name)}</span>
         {hasTasks && (
           <span className="text-xs text-on-muted ml-1">
             {selectedCount}/{bm.tasks.length}
@@ -452,10 +453,10 @@ function BenchmarkNode({ bm, parentId, expanded, toggle, selectedSet, isTaskSele
                 disabled={readOnly}
                 className="rounded"
               />
-              <span className="text-on-canvas">{tk.display_name || tk.name}</span>
-              {tk.description && (
-                <span className="text-on-muted text-xs truncate max-w-[200px]" title={tk.description}>
-                  — {tk.description}
+              <span className="text-on-canvas">{isZh ? (tk.display_name || tk.name) : (tk.display_name_en || tk.name)}</span>
+              {(tk.description || tk.description_en) && (
+                <span className="text-on-muted text-xs truncate max-w-[200px]" title={isZh ? tk.description : (tk.description_en || tk.description)}>
+                  — {isZh ? tk.description : (tk.description_en || tk.description)}
                 </span>
               )}
             </label>

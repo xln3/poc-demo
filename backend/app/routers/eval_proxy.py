@@ -47,7 +47,8 @@ async def get_risk_hierarchy(user: User = Depends(require_user)):
     try:
         benchmarks = await eval_bridge.list_eval_benchmarks()
         task_meta = await eval_bridge.get_task_meta()
-        return build_merged_hierarchy(benchmarks, task_meta)
+        benchmark_meta = await eval_bridge.get_benchmark_meta()
+        return build_merged_hierarchy(benchmarks, task_meta, benchmark_meta)
     except Exception as e:
         logger.error("Failed to build risk hierarchy: %s", e)
         # Return hierarchy with everything marked unavailable

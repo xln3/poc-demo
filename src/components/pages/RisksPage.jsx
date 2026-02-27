@@ -76,11 +76,12 @@ export default function RisksPage() {
         const filteredSubs = cat.subcategories?.map(sub => {
           const filteredBms = sub.benchmarks?.filter(bm =>
             matchesSearch(bm.name) || matchesSearch(bm.catalog_key) ||
-            bm.tasks?.some(t => matchesSearch(t.name) || matchesSearch(t.display_name))
+            matchesSearch(bm.display_name) || matchesSearch(bm.display_name_en) ||
+            bm.tasks?.some(t => matchesSearch(t.name) || matchesSearch(t.display_name) || matchesSearch(t.display_name_en))
           );
           if (filteredBms?.length > 0 ||
-              matchesSearch(isZh ? sub.name : sub.name_en) ||
-              matchesSearch(sub.description)) {
+              matchesSearch(sub.name) || matchesSearch(sub.name_en) ||
+              matchesSearch(sub.description) || matchesSearch(sub.description_en)) {
             return { ...sub, benchmarks: filteredBms?.length > 0 ? filteredBms : sub.benchmarks };
           }
           return null;
@@ -118,7 +119,7 @@ export default function RisksPage() {
         <StatCard label={isZh ? '风险大类' : 'Categories'} value={totalCats} />
         <StatCard label={isZh ? '风险子类' : 'Subcategories'} value={totalSubs} />
         <StatCard label={isZh ? '风险基准' : 'Risk Benchmarks'} value={totalBms} />
-        <StatCard label="Tasks" value={totalTasks} />
+        <StatCard label={isZh ? '任务数' : 'Tasks'} value={totalTasks} />
       </div>
 
       {/* Search + controls */}
@@ -214,9 +215,9 @@ function SubcategoryNode({ sub, isZh, expanded, toggleExpand, t }) {
       </button>
 
       {/* Description */}
-      {isExpanded && sub.description && (
+      {isExpanded && (sub.description || sub.description_en) && (
         <div className="px-5 pl-14 pb-2">
-          <p className="text-xs text-on-muted">{sub.description}</p>
+          <p className="text-xs text-on-muted">{isZh ? sub.description : (sub.description_en || sub.description)}</p>
         </div>
       )}
 
@@ -252,7 +253,7 @@ function BenchmarkNode({ bm, parentId, isZh, expanded, toggleExpand, t }) {
         <div className="flex items-center gap-2">
           {hasTasks && <span className="text-xs">{isExpanded ? '▾' : '▸'}</span>}
           <span className="text-sm text-on-surface">
-            {bm.name}
+            {isZh ? (bm.display_name || bm.name) : (bm.display_name_en || bm.name)}
           </span>
         </div>
         <span className="text-xs text-on-dim">
@@ -266,9 +267,9 @@ function BenchmarkNode({ bm, parentId, isZh, expanded, toggleExpand, t }) {
           {bm.tasks.map(task => (
             <div key={task.name} className="flex items-center gap-2 py-1">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
-              <span className="text-xs text-on-surface">{task.display_name || task.name}</span>
-              {task.description && (
-                <span className="text-[10px] text-on-dim truncate max-w-[300px]">— {task.description}</span>
+              <span className="text-xs text-on-surface">{isZh ? (task.display_name || task.name) : (task.display_name_en || task.name)}</span>
+              {(task.description || task.description_en) && (
+                <span className="text-[10px] text-on-dim truncate max-w-[300px]">— {isZh ? task.description : (task.description_en || task.description)}</span>
               )}
             </div>
           ))}

@@ -45,6 +45,12 @@ async def get_task_meta() -> Dict[str, Any]:
     return resp.json()
 
 
+async def get_benchmark_meta() -> Dict[str, Any]:
+    resp = await _get_client().get("/api/benchmarks/benchmark-meta")
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ---- Models ----
 
 async def list_eval_models() -> List[Dict[str, Any]]:
