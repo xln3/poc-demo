@@ -38,7 +38,29 @@ export default function EvalResultsPage({ onNavigate }) {
         const bTime = b.created_at || b.started_at || 0;
         return new Date(bTime) - new Date(aTime);
       });
-      setJobs(sorted);
+      // Add orphaned results (results with no matching job)
+      const allEntries = [...sorted];
+      for (const r of results) {
+        const modelKey = (r.model || '').trim();
+        const hasJob = sorted.some(j => {
+          const mid = (j.model_id || '').trim();
+          const midLast = mid.split('/').pop();
+          return mid === modelKey || midLast === modelKey;
+        });
+        if (!hasJob) {
+          allEntries.push({
+            id: '_orphan_' + modelKey,
+            model_id: modelKey,
+            status: 'completed',
+            created_at: r.eval_date || '',
+            completed_at: r.eval_date || '',
+            tasks: [],
+            benchmarks: [],
+            _isOrphan: true,
+          });
+        }
+      }
+      setJobs(allEntries);
     } catch {
       // ignore
     } finally {
@@ -202,7 +224,7 @@ function JobRow({ job, result, hasResults, t, onNavigate }) {
         <div className="flex items-center justify-center gap-1.5">
           {status === 'completed' && hasResults && (
             <button
-              onClick={() => onNavigate?.('eval-report', { model: result.model })}
+              onClick={() => onNavigate?.('eval-report', { model: job.id })}
               className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30"
             >
               {t('results.viewReport')}

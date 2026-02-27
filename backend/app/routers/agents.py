@@ -295,6 +295,8 @@ async def trigger_evaluation(
             "benchmarks": req.benchmarks,
             "limit": req.limit,
             "judge_model": req.judge_model,
+            "agent_id": str(agent.id),
+            "agent_name": agent.name,
         }
         eval_job = await eval_bridge.start_evaluation(eval_payload)
         return eval_job

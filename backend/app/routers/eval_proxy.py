@@ -22,6 +22,8 @@ class EvalStartRequest(BaseModel):
     benchmarks: List[str]
     limit: Optional[int] = None
     judge_model: Optional[str] = None
+    agent_id: Optional[str] = None
+    agent_name: Optional[str] = None
 
 
 class RegisterModelRequest(BaseModel):
@@ -239,6 +241,29 @@ async def get_result_detail(model: str, user: User = Depends(require_user)):
         return await eval_bridge.get_eval_result_detail(model)
     except Exception as e:
         logger.error("Failed to get results for %s: %s", model, e)
+        raise HTTPException(status_code=502, detail=f"Eval backend error: {e}")
+
+
+@router.get("/results/by-job/{job_id}")
+async def get_result_by_job(job_id: str, user: User = Depends(require_user)):
+    """Get run-scoped results for a specific evaluation job."""
+    try:
+        return await eval_bridge.get_result_by_job(job_id)
+    except Exception as e:
+        logger.error("Failed to get job results for %s: %s", job_id, e)
+        raise HTTPException(status_code=502, detail=f"Eval backend error: {e}")
+
+
+@router.get("/results/by-job/{job_id}/tasks/{task}/samples")
+async def get_job_task_samples(
+    job_id: str, task: str, risk_level: Optional[str] = None,
+    user: User = Depends(require_user),
+):
+    """Get samples for a specific task within a specific job."""
+    try:
+        return await eval_bridge.get_job_task_samples(job_id, task, risk_level)
+    except Exception as e:
+        logger.error("Failed to get job samples: %s", e)
         raise HTTPException(status_code=502, detail=f"Eval backend error: {e}")
 
 

@@ -118,6 +118,27 @@ async def get_eval_result_samples(
     return resp.json()
 
 
+async def get_result_by_job(job_id: str) -> Dict[str, Any]:
+    """Get run-scoped results for a specific evaluation job."""
+    resp = await _get_client().get(f"/api/results/by-job/{job_id}")
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def get_job_task_samples(
+    job_id: str, task: str, risk_level: Optional[str] = None
+) -> Dict[str, Any]:
+    """Get samples for a specific task within a specific job."""
+    params = {}
+    if risk_level:
+        params["risk_level"] = risk_level
+    resp = await _get_client().get(
+        f"/api/results/by-job/{job_id}/tasks/{task}/samples", params=params
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ---- Reports ----
 
 async def generate_eval_report(model: str) -> Dict[str, Any]:

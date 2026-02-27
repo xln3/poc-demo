@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   fetchResults, fetchResultDetail, fetchResultSamples,
+  fetchResultByJob, fetchJobTaskSamples,
   generateReport, fetchDatasetDescription, fetchRiskHierarchy,
   listEvaluations, fetchAgents,
 } from '../../api/evalBridgeApi';
@@ -30,7 +31,6 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
   const [detail, setDetail] = useState(null);
   const [activeLevel, setActiveLevel] = useState(2);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [selectedSample, setSelectedSample] = useState(null);
   const [samples, setSamples] = useState([]);
   const [generatedReport, setGeneratedReport] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -70,29 +70,32 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
       });
       setJobs(sorted);
 
-      // If initialModel provided (from View Report click), find the agent for it
+      // If initialModel provided (from View Report click), find the matching job or orphan
       if (initialModel) {
         const trimmedInit = initialModel.trim();
-        const matchJob = sorted.find(j => {
-          const mid = (j.model_id || '').trim();
-          const midLast = mid.split('/').pop();
-          return mid === trimmedInit || midLast === trimmedInit;
-        });
-        if (matchJob) {
-          setSelectedAgentId(matchJob.agent_id || '_model_' + (matchJob.model_id || '').trim());
-          setSelectedJobId(matchJob.id);
+        // Try job_id first (new path: View Report passes job.id)
+        const directJob = sorted.find(j => j.id === trimmedInit);
+        if (directJob) {
+          setSelectedAgentId(directJob.agent_id || '_model_' + (directJob.model_id || '').trim());
+          setSelectedJobId(directJob.id);
         } else {
-          // Fallback: try direct result lookup
-          const r = rmap[trimmedInit];
-          if (r) {
-            setSelectedAgentId('_model_' + r.model);
-            // Find first job matching this model
-            const mj = sorted.find(j => {
-              const mid = (j.model_id || '').trim();
-              const midLast = mid.split('/').pop();
-              return mid === r.model || midLast === r.model;
-            });
-            if (mj) setSelectedJobId(mj.id);
+          // Try model name match
+          const matchJob = sorted.find(j => {
+            const mid = (j.model_id || '').trim();
+            const midLast = mid.split('/').pop();
+            return mid === trimmedInit || midLast === trimmedInit;
+          });
+          if (matchJob) {
+            setSelectedAgentId(matchJob.agent_id || '_model_' + (matchJob.model_id || '').trim());
+            setSelectedJobId(matchJob.id);
+          } else {
+            // Orphaned result
+            const r = rmap[trimmedInit];
+            if (r) {
+              const orphanKey = '_orphan_' + r.model;
+              setSelectedAgentId(orphanKey);
+              setSelectedJobId('_orphan_' + r.model);
+            }
           }
         }
       }
@@ -104,9 +107,10 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
     fetchRiskHierarchy().then(setHierarchy).catch(() => {});
   }, []);
 
-  // Derive unique agents from jobs (some may not have agent_name)
+  // Derive agents from jobs + orphaned results
   const agentOptions = (() => {
     const seen = new Map();
+    // Source 1: Jobs (have agent association)
     for (const j of jobs) {
       const key = j.agent_id || '_model_' + (j.model_id || '').trim();
       if (!seen.has(key)) {
@@ -118,46 +122,101 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
         });
       }
     }
+    // Source 2: Orphaned results (no matching job)
+    for (const r of Object.values(resultMap)) {
+      const modelKey = (r.model || '').trim();
+      const hasJob = jobs.some(j => {
+        const mid = (j.model_id || '').trim();
+        const midLast = mid.split('/').pop();
+        return mid === modelKey || midLast === modelKey;
+      });
+      if (!hasJob) {
+        const key = '_orphan_' + modelKey;
+        if (!seen.has(key)) {
+          seen.set(key, {
+            id: key,
+            agent_id: null,
+            name: modelKey,
+            model_id: modelKey,
+            isOrphan: true,
+          });
+        }
+      }
+    }
     return Array.from(seen.values());
   })();
 
-  // Filter jobs for selected agent
-  const agentJobs = jobs.filter(j => {
-    if (!selectedAgentId) return false;
-    const key = j.agent_id || '_model_' + (j.model_id || '').trim();
-    return key === selectedAgentId;
-  });
-
-  // Get the selected job
-  const selectedJob = selectedJobId ? jobs.find(j => j.id === selectedJobId) : null;
-
-  // Resolve result model for the selected job
-  const selectedResultModel = (() => {
-    if (!selectedJob) return null;
-    const mid = (selectedJob.model_id || '').trim();
-    const midLast = mid.split('/').pop();
-    const r = resultMap[mid] || resultMap[midLast];
-    return r ? r.model : null;
+  // Filter jobs for selected agent (or synthesize for orphaned results)
+  const agentJobs = (() => {
+    if (!selectedAgentId) return [];
+    const agent = agentOptions.find(a => a.id === selectedAgentId);
+    if (agent?.isOrphan) {
+      // Synthesize a single entry from the orphaned result
+      const r = resultMap[agent.model_id];
+      if (r) return [{
+        id: '_orphan_' + r.model,
+        model_id: r.model,
+        status: 'completed',
+        created_at: r.eval_date || '',
+        _isOrphan: true,
+      }];
+      return [];
+    }
+    return jobs.filter(j => {
+      const key = j.agent_id || '_model_' + (j.model_id || '').trim();
+      return key === selectedAgentId;
+    });
   })();
 
-  // Load detail when result model resolved
-  useEffect(() => {
-    if (!selectedResultModel) { setDetail(null); return; }
-    setDetail(null);
-    fetchResultDetail(selectedResultModel)
-      .then(setDetail)
-      .catch(() => setDetail(null));
-  }, [selectedResultModel]);
+  // Get the selected job
+  const selectedJob = selectedJobId
+    ? (jobs.find(j => j.id === selectedJobId) || agentJobs.find(j => j.id === selectedJobId))
+    : null;
 
-  // Load samples when task selected (all risk levels for client-side filtering)
+  // Load detail when job selected (job-scoped or model-fallback for orphans)
   useEffect(() => {
-    if (selectedTask && selectedResultModel) {
-      setSamples([]);
-      fetchResultSamples(selectedResultModel, selectedTask)
+    if (!selectedJob) { setDetail(null); return; }
+    setDetail(null);
+    if (selectedJob._isOrphan) {
+      // Orphan: use model-based API
+      fetchResultDetail(selectedJob.model_id)
+        .then(setDetail)
+        .catch(() => setDetail(null));
+    } else {
+      // Normal: use job-scoped API
+      fetchResultByJob(selectedJob.id)
+        .then(setDetail)
+        .catch(() => {
+          // Fallback to model-based if job has no results yet
+          const mid = (selectedJob.model_id || '').trim();
+          const midLast = mid.split('/').pop();
+          const model = resultMap[mid]?.model || resultMap[midLast]?.model;
+          if (model) fetchResultDetail(model).then(setDetail).catch(() => setDetail(null));
+          else setDetail(null);
+        });
+    }
+  }, [selectedJobId]);
+
+  // Load samples when task selected (job-scoped or model-fallback)
+  useEffect(() => {
+    if (!selectedTask || !selectedJob) { setSamples([]); return; }
+    setSamples([]);
+    if (selectedJob._isOrphan) {
+      fetchResultSamples(selectedJob.model_id, selectedTask)
         .then(data => setSamples(data.samples || []))
         .catch(() => setSamples([]));
+    } else {
+      fetchJobTaskSamples(selectedJob.id, selectedTask)
+        .then(data => setSamples(data.samples || []))
+        .catch(() => {
+          // Fallback to model-based
+          const mid = (selectedJob.model_id || '').trim().split('/').pop();
+          fetchResultSamples(mid, selectedTask)
+            .then(data => setSamples(data.samples || []))
+            .catch(() => setSamples([]));
+        });
     }
-  }, [selectedTask, selectedResultModel]);
+  }, [selectedTask, selectedJobId]);
 
   // Load dataset examples when Level 4 selected
   useEffect(() => {
@@ -172,10 +231,12 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
   }, [activeLevel, i18n.language]);
 
   const handleGenerate = async () => {
-    if (!selectedResultModel) return;
+    if (!selectedJob) return;
+    const model = (selectedJob.model_id || '').trim().split('/').pop();
+    if (!model) return;
     setGenerating(true);
     try {
-      const resp = await generateReport(selectedResultModel);
+      const resp = await generateReport(model);
       setGeneratedReport(resp.content || '');
     } catch (err) {
       setGeneratedReport(`Error: ${err.message}`);
@@ -246,10 +307,10 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
             {agentJobs.map(j => {
               const mid = (j.model_id || '').trim();
               const midLast = mid.split('/').pop();
-              const r = resultMap[mid] || resultMap[midLast];
+              const r = j._isOrphan ? resultMap[mid] : (resultMap[mid] || resultMap[midLast]);
               const score = r ? Math.round(r.avg_score) : null;
               const isRunning = j.status === 'running' || j.status === 'pending';
-              const hasResult = !!r;
+              const isCompleted = j.status === 'completed' || j._isOrphan;
               const timeStr = j.created_at ? formatDateTime(new Date(j.created_at)) : '';
 
               return (
@@ -263,16 +324,16 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span>{timeStr}</span>
+                    <span>{timeStr || (j._isOrphan ? (r?.eval_date ? formatDateTime(new Date(r.eval_date)) : 'Legacy') : '')}</span>
                     {isRunning && (
                       <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-blue-500/20 text-blue-400">
                         {t(`status.${j.status}`)}
                       </span>
                     )}
-                    {!isRunning && hasResult && score !== null && (
-                      <span className={`opacity-70 ${selectedJobId === j.id ? '' : ''}`}>{score}</span>
+                    {isCompleted && score !== null && (
+                      <span className="opacity-70">{score}</span>
                     )}
-                    {!isRunning && !hasResult && (
+                    {!isRunning && !isCompleted && (
                       <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400">
                         {t('status.failed')}
                       </span>
@@ -296,21 +357,16 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
         </div>
       )}
 
-      {/* No result model found for selected job */}
-      {selectedJobId && !selectedResultModel && (
-        <div className="text-center text-on-muted py-8 text-sm">
+      {/* Loading detail */}
+      {selectedJobId && !detail && (
+        <div className="text-center text-on-muted py-8">
           {selectedJob?.status === 'running' || selectedJob?.status === 'pending'
             ? t('report.evalRunning')
-            : t('results.noResults')}
+            : t('loading')}
         </div>
       )}
 
-      {/* Loading detail */}
-      {selectedResultModel && !detail && (
-        <div className="text-center text-on-muted py-8">{t('loading')}</div>
-      )}
-
-      {selectedResultModel && detail && (
+      {selectedJobId && detail && (
         <>
           {/* Level tabs */}
           <div className="flex gap-2 border-b border-edge pb-2">
@@ -338,7 +394,7 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
           {activeLevel === 2 && (
             <FullReportView
               detail={detail}
-              model={selectedResultModel}
+              model={(selectedJob?.model_id || '').trim().split('/').pop()}
               hierarchy={hierarchy}
               lang={i18n.language}
               t={t}
@@ -367,7 +423,7 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
           {activeLevel === 3 && (
             <HighRiskView
               detail={detail}
-              model={selectedResultModel}
+              model={(selectedJob?.model_id || '').trim().split('/').pop()}
               hierarchy={hierarchy}
               lang={i18n.language}
               selectedTask={selectedTask}

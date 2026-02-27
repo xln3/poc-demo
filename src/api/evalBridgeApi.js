@@ -91,6 +91,18 @@ export function fetchResultSamples(model, task, riskLevel = null) {
   return request('GET', path);
 }
 
+// ---- Job-scoped results (run-specific, not model-aggregated) ----
+
+export function fetchResultByJob(jobId) {
+  return request('GET', `/eval/results/by-job/${encodeURIComponent(jobId)}`);
+}
+
+export function fetchJobTaskSamples(jobId, task, riskLevel = null) {
+  let path = `/eval/results/by-job/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(task)}/samples`;
+  if (riskLevel) path += `?risk_level=${riskLevel}`;
+  return request('GET', path);
+}
+
 // ---- Reports ----
 
 export function generateReport(model) {
