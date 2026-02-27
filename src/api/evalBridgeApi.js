@@ -3,23 +3,15 @@
  * (authenticated through poc-demo JWT)
  */
 
-const API_BASE = '';  // Relative paths, proxied via Vite/Nginx
-
-function authHeaders() {
-  const token = localStorage.getItem('access_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
+import { authFetch } from '../auth.js';
 
 async function request(method, path, body = null) {
   const opts = {
     method,
-    headers: authHeaders(),
+    headers: { 'Content-Type': 'application/json' },
   };
   if (body) opts.body = JSON.stringify(body);
-  const resp = await fetch(`${API_BASE}${path}`, opts);
+  const resp = await authFetch(path, opts);
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }));
     throw new Error(err.detail || `${resp.status} ${resp.statusText}`);
