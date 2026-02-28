@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   fetchResults, fetchResultDetail, fetchResultSamples,
@@ -38,6 +38,8 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
 
   // Risk hierarchy for grouping tasks
   const [hierarchy, setHierarchy] = useState([]);
+  const [samplesLoading, setSamplesLoading] = useState(false);
+  const sampleRequestRef = useRef(0);
 
   // Dataset examples state
   const [datasetData, setDatasetData] = useState(null);
@@ -198,22 +200,33 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
   }, [selectedJobId]);
 
   // Load samples when task selected (job-scoped or model-fallback)
+  // Uses request counter to prevent stale responses from overwriting newer data
   useEffect(() => {
-    if (!selectedTask || !selectedJob) { setSamples([]); return; }
+    if (!selectedTask || !selectedJob) { setSamples([]); setSamplesLoading(false); return; }
     setSamples([]);
+    setSamplesLoading(true);
+    const reqId = ++sampleRequestRef.current;
+    const stale = () => sampleRequestRef.current !== reqId;
+    const done = (data) => {
+      if (stale()) return;
+      setSamples(data.samples || []);
+      setSamplesLoading(false);
+    };
+    const fail = () => {
+      if (stale()) return;
+      setSamples([]);
+      setSamplesLoading(false);
+    };
     if (selectedJob._isOrphan) {
-      fetchResultSamples(selectedJob.model_id, selectedTask)
-        .then(data => setSamples(data.samples || []))
-        .catch(() => setSamples([]));
+      fetchResultSamples(selectedJob.model_id, selectedTask).then(done).catch(fail);
     } else {
       fetchJobTaskSamples(selectedJob.id, selectedTask)
-        .then(data => setSamples(data.samples || []))
+        .then(done)
         .catch(() => {
+          if (stale()) return;
           // Fallback to model-based
           const mid = (selectedJob.model_id || '').trim().split('/').pop();
-          fetchResultSamples(mid, selectedTask)
-            .then(data => setSamples(data.samples || []))
-            .catch(() => setSamples([]));
+          fetchResultSamples(mid, selectedTask).then(done).catch(fail);
         });
     }
   }, [selectedTask, selectedJobId]);
@@ -415,6 +428,7 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
               selectedTask={selectedTask}
               setSelectedTask={setSelectedTask}
               samples={samples}
+              samplesLoading={samplesLoading}
               t={t}
             />
           )}
@@ -429,6 +443,7 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
               selectedTask={selectedTask}
               setSelectedTask={setSelectedTask}
               samples={samples}
+              samplesLoading={samplesLoading}
               t={t}
               onNavigate={onNavigate}
             />
@@ -458,11 +473,16 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
  */
 function groupTasksByHierarchy(tasks, hierarchy, lang) {
   const isZh = lang?.startsWith('zh');
-  // Build task→group mapping from hierarchy (now includes benchmark)
+  // Build task→group mapping from hierarchy with ordering indices
   const taskGroupMap = {};
-  for (const cat of hierarchy) {
-    for (const sub of cat.subcategories || []) {
-      for (const bm of sub.benchmarks || []) {
+  for (let catIdx = 0; catIdx < hierarchy.length; catIdx++) {
+    const cat = hierarchy[catIdx];
+    const subcats = cat.subcategories || [];
+    for (let subIdx = 0; subIdx < subcats.length; subIdx++) {
+      const sub = subcats[subIdx];
+      const benchmarks = sub.benchmarks || [];
+      for (let bmIdx = 0; bmIdx < benchmarks.length; bmIdx++) {
+        const bm = benchmarks[bmIdx];
         const bmLabel = isZh
           ? (bm.display_name || bm.name)
           : (bm.display_name_en || bm.display_name || bm.name);
@@ -472,6 +492,9 @@ function groupTasksByHierarchy(tasks, hierarchy, lang) {
               category: isZh ? cat.name : cat.name_en,
               subcategory: isZh ? sub.name : sub.name_en,
               benchmark: bmLabel,
+              _catIdx: catIdx,
+              _subIdx: subIdx,
+              _bmIdx: bmIdx,
             };
           }
         }
@@ -490,12 +513,21 @@ function groupTasksByHierarchy(tasks, hierarchy, lang) {
         category: info?.category || '',
         subcategory: info?.subcategory || (isZh ? '其他' : 'Other'),
         benchmark: info?.benchmark || '',
+        _catIdx: info?._catIdx ?? 999,
+        _subIdx: info?._subIdx ?? 999,
+        _bmIdx: info?._bmIdx ?? 999,
         tasks: [],
       };
       groups.push(groupIndex[key]);
     }
     groupIndex[key].tasks.push(task);
   }
+
+  // Sort by hierarchy order (category → subcategory → benchmark)
+  groups.sort((a, b) =>
+    a._catIdx - b._catIdx || a._subIdx - b._subIdx || a._bmIdx - b._bmIdx
+  );
+
   return groups;
 }
 
@@ -644,7 +676,7 @@ function FullReportView({ detail, model, hierarchy, lang, t, onSelectTask, onHig
 const RISK_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, MINIMAL: 4, UNKNOWN: 5 };
 const ALL_RISK_LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'MINIMAL'];
 
-function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelectedTask, samples, t }) {
+function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelectedTask, samples, samplesLoading, t }) {
   const isZh = lang?.startsWith('zh');
   const groups = groupTasksByHierarchy(detail.tasks, hierarchy, lang);
 
@@ -656,7 +688,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
   const [expandedSample, setExpandedSample] = useState(null);
   const perPage = 20;
 
-  // Reset page when task or filter changes
+  // Reset page and expanded state when filter changes
   const handleFilterToggle = (level) => {
     setRiskFilter(prev => {
       const next = new Set(prev);
@@ -665,6 +697,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
       return next;
     });
     setPage(0);
+    setExpandedSample(null);
   };
 
   const handleSort = (key) => {
@@ -675,6 +708,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
       setSortAsc(true);
     }
     setPage(0);
+    setExpandedSample(null);
   };
 
   // Filter and sort samples
@@ -779,7 +813,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
             </Section>
 
             {/* Sample table */}
-            <Section title={isZh ? `样本详情 (${filteredSamples.length}/${samples.length})` : `Sample Details (${filteredSamples.length}/${samples.length})`}>
+            <Section title={isZh ? `样本详情 (${samplesLoading ? '...' : `${filteredSamples.length}/${samples.length}`})` : `Sample Details (${samplesLoading ? '...' : `${filteredSamples.length}/${samples.length}`})`}>
               {/* Risk level filter bar */}
               <div className="flex items-center gap-2 mb-4 flex-wrap">
                 <span className="text-xs text-on-muted">{isZh ? '风险等级:' : 'Risk Level:'}</span>
@@ -814,7 +848,12 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
               </div>
 
               {/* Table */}
-              {filteredSamples.length > 0 ? (
+              {samplesLoading ? (
+                <div className="text-center text-on-muted py-6 text-sm">
+                  <div className="inline-block w-5 h-5 border-2 border-on-dim/30 border-t-blue-400 rounded-full animate-spin mb-2" />
+                  <div>{isZh ? '加载样本数据...' : 'Loading samples...'}</div>
+                </div>
+              ) : filteredSamples.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -932,7 +971,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
 
 // ---- Level 3: High-Risk Cases ----
 
-function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelectedTask, samples, t, onNavigate }) {
+function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelectedTask, samples, samplesLoading, t, onNavigate }) {
   const isZh = lang?.startsWith('zh');
   const highRiskTasks = detail.tasks.filter(t => t.risk_level === 'CRITICAL' || t.risk_level === 'HIGH');
   const groups = groupTasksByHierarchy(highRiskTasks, hierarchy, lang);
@@ -991,7 +1030,14 @@ function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelecte
         ))}
       </div>
 
-      {selectedTask && highRiskSamples.length > 0 && (
+      {selectedTask && samplesLoading && (
+        <div className="text-center text-on-muted py-8 text-sm">
+          <div className="inline-block w-5 h-5 border-2 border-on-dim/30 border-t-blue-400 rounded-full animate-spin mb-2" />
+          <div>{isZh ? '加载样本数据...' : 'Loading samples...'}</div>
+        </div>
+      )}
+
+      {selectedTask && !samplesLoading && highRiskSamples.length > 0 && (
         <div className="space-y-3">
           {highRiskSamples.map((sample, i) => (
             <div key={sample.sample_id || i} className="bg-surface border border-edge rounded-xl p-4 space-y-3">
@@ -1037,7 +1083,7 @@ function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelecte
         </div>
       )}
 
-      {selectedTask && highRiskSamples.length === 0 && (
+      {selectedTask && !samplesLoading && highRiskSamples.length === 0 && (
         <div className="text-center text-on-muted py-8 text-sm">
           {t('results.noResults')}
         </div>
