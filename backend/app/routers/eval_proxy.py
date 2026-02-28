@@ -19,6 +19,7 @@ router = APIRouter(prefix="/eval", tags=["eval"])
 
 class EvalStartRequest(BaseModel):
     model_id: str
+    model_config_id: Optional[str] = None
     benchmarks: List[str]
     limit: Optional[int] = None
     judge_model: Optional[str] = None

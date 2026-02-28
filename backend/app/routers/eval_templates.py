@@ -260,6 +260,7 @@ async def run_template(
     try:
         eval_payload = {
             "model_id": agent.model_id,
+            "model_config_id": agent.eval_model_id,
             "benchmarks": benchmarks,
             "limit": req.limit,
             "judge_model": req.judge_model,
