@@ -59,7 +59,7 @@ export default function ModuleGeneratingView({ report, onComplete, onStop }) {
           setModuleStates(prev => {
             const next = [...prev];
             while (next.length <= module_index) {
-              next.push({ title: `Module ${next.length + 1}`, status: 'pending', content: '', error: null });
+              next.push({ title: `${t('module.modules', 'Module')} ${next.length + 1}`, status: 'pending', content: '', error: null });
             }
             next[module_index] = { ...next[module_index], title: title || next[module_index].title, status: 'generating' };
             return next;
@@ -140,7 +140,7 @@ export default function ModuleGeneratingView({ report, onComplete, onStop }) {
           <h2 className="text-lg font-semibold text-on-canvas">
             {overallStatus === 'complete'
               ? t('generate.complete', 'Generation Complete')
-              : t('generate.modulesProgress', `Generating modules (${completedCount}/${totalCount})`)}
+              : t('generate.modulesProgress', { completed: completedCount, total: totalCount, defaultValue: `Generating modules (${completedCount}/${totalCount})` })}
           </h2>
           <div className="flex items-center gap-2">
             {overallStatus === 'generating' && (

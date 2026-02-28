@@ -96,7 +96,7 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
     try {
       const reportTitle = title ||
         (scenarioType === 'single_agent'
-          ? `${resultItems.find(r => r.modelName === selectedModels[0])?.agentName || selectedModels[0]} 安全评测报告`
+          ? `${resultItems.find(r => r.modelName === selectedModels[0])?.agentName || selectedModels[0]} ${t('source.reportSuffix', 'Safety Report')}`
           : `${t(`scenario.${scenarioType}`)} — ${new Date().toLocaleDateString()}`);
 
       if (existingReport) {
@@ -200,7 +200,7 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
           </label>
 
           {loadingData ? (
-            <div className="p-4 text-center text-on-muted text-xs">Loading...</div>
+            <div className="p-4 text-center text-on-muted text-xs">{t('loading')}</div>
           ) : resultItems.length === 0 ? (
             <div className="p-4 text-center text-on-muted text-xs border border-edge rounded">{t('source.noResults')}</div>
           ) : (
@@ -222,7 +222,7 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
                     <div className="text-sm font-medium text-on-canvas truncate">{item.agentName}</div>
                     <div className="text-[10px] text-on-muted flex gap-3 mt-0.5">
                       <span>{t('source.model')}: {item.modelId}</span>
-                      {item.taskCount > 0 && <span>{item.taskCount} tasks</span>}
+                      {item.taskCount > 0 && <span>{item.taskCount} {t('source.tasks', 'tasks')}</span>}
                       {item.lastEval && (
                         <span>{new Date(item.lastEval).toLocaleDateString()}</span>
                       )}

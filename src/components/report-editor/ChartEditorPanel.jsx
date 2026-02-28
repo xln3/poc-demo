@@ -88,7 +88,7 @@ export default function ChartEditorPanel({
       const config = JSON.parse(configText);
       onApply?.(config);
     } catch {
-      setPreviewError('Invalid JSON');
+      setPreviewError(t('block.invalidJSON', 'Invalid JSON'));
     }
   };
 
@@ -216,7 +216,7 @@ export default function ChartEditorPanel({
       <div className="flex-1 min-h-0">
         <Suspense fallback={
           <div className="flex items-center justify-center h-full text-on-canvas/50 text-sm">
-            Loading editor...
+            {t('loadingEditor')}
           </div>
         }>
           <MonacoEditor

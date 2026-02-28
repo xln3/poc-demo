@@ -6,6 +6,9 @@
   "untitledReport": "未命名报告",
   "reportTitle": "报告标题",
 
+  "loading": "加载中...",
+  "loadingEditor": "正在加载编辑器...",
+
   "status": {
     "draft": "草稿",
     "generating": "生成中",
@@ -35,6 +38,8 @@
     "model": "模型",
     "evalDate": "评测日期",
     "score": "评分",
+    "tasks": "个任务",
+    "reportSuffix": "安全评测报告",
     "generationMode": "生成模式",
     "modeModular": "模块化",
     "modeModularDesc": "大纲 → 并行模块生成 → 块编辑器",
@@ -85,7 +90,10 @@
     "rollback": "回滚到此版本",
     "preview": "预览",
     "noHistory": "暂无历史版本",
-    "rollbackConfirm": "确定要回滚到版本 {{version}} 吗？当前内容将被保存为新版本。"
+    "rollbackConfirm": "确定要回滚到版本 {{version}} 吗？当前内容将被保存为新版本。",
+    "secondsAgo": "{{count}}秒前",
+    "minutesAgo": "{{count}}分钟前",
+    "hoursAgo": "{{count}}小时前"
   },
 
   "delete": {
@@ -150,6 +158,15 @@
     "insert": "插入图片",
     "generating": "生成中...",
     "regenerate": "重新生成",
-    "caption": "图片说明"
+    "caption": "图片说明",
+    "noImage": "暂无图片，使用 /image 生成",
+    "addCaption": "添加图片说明..."
+  },
+
+  "block": {
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "chartError": "图表错误：{{error}}",
+    "invalidJSON": "无效的 JSON"
   }
 }

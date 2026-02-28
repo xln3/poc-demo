@@ -379,7 +379,7 @@ export default function ReportEditorPage() {
           isModular ? (
             <Suspense fallback={
               <div className="flex-1 flex items-center justify-center text-on-canvas/50">
-                Loading editor...
+                {t('loadingEditor')}
               </div>
             }>
               <ModularBlockEditor

@@ -34,7 +34,7 @@ export default function ReportListPanel({
       <div className="flex-1 overflow-y-auto custom-scroll">
         {loading ? (
           <div className="p-4 text-center text-on-muted text-xs">
-            {t('status.generating')}...
+            {t('loading')}
           </div>
         ) : reports.length === 0 ? (
           <div className="p-4 text-center text-on-muted text-xs">

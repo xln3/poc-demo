@@ -171,7 +171,7 @@ export default function OutlinePreview({
                   onClick={() => moveModule(idx, -1)}
                   disabled={idx === 0}
                   className="p-1 text-on-canvas/40 hover:text-on-canvas disabled:opacity-30"
-                  title="Move up"
+                  title={t('block.moveUp', 'Move up')}
                 >
                   &#9650;
                 </button>
@@ -180,7 +180,7 @@ export default function OutlinePreview({
                   onClick={() => moveModule(idx, 1)}
                   disabled={idx === modules.length - 1}
                   className="p-1 text-on-canvas/40 hover:text-on-canvas disabled:opacity-30"
-                  title="Move down"
+                  title={t('block.moveDown', 'Move down')}
                 >
                   &#9660;
                 </button>

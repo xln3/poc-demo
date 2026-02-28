@@ -69,9 +69,9 @@ export default function HistoryPanel({ reportId, onRollback, onClose }) {
     const d = new Date(dateStr);
     const now = new Date();
     const diff = Math.floor((now - d) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 60) return t('history.secondsAgo', { count: diff, defaultValue: `${diff}s ago` });
+    if (diff < 3600) return t('history.minutesAgo', { count: Math.floor(diff / 60), defaultValue: `${Math.floor(diff / 60)}m ago` });
+    if (diff < 86400) return t('history.hoursAgo', { count: Math.floor(diff / 3600), defaultValue: `${Math.floor(diff / 3600)}h ago` });
     return d.toLocaleDateString();
   };
 
@@ -92,7 +92,7 @@ export default function HistoryPanel({ reportId, onRollback, onClose }) {
       {/* Timeline */}
       <div className="flex-1 overflow-y-auto custom-scroll">
         {loading ? (
-          <div className="p-4 text-center text-on-muted text-xs">Loading...</div>
+          <div className="p-4 text-center text-on-muted text-xs">{t('loading')}</div>
         ) : entries.length === 0 ? (
           <div className="p-4 text-center text-on-muted text-xs">{t('history.noHistory')}</div>
         ) : (
@@ -147,11 +147,11 @@ export default function HistoryPanel({ reportId, onRollback, onClose }) {
       {previewVersion != null && (
         <div className="border-t border-edge max-h-[40%] overflow-y-auto custom-scroll">
           <div className="p-2 border-b border-edge text-[10px] text-on-muted bg-surface/50">
-            Preview: {t('history.version', { version: previewVersion })}
+            {t('history.preview')}: {t('history.version', { version: previewVersion })}
           </div>
           <div className="p-2 text-xs">
             {previewLoading ? (
-              <div className="text-center text-on-muted py-4">Loading...</div>
+              <div className="text-center text-on-muted py-4">{t('loading')}</div>
             ) : (
               <div className="report-html-content text-[11px] leading-relaxed" style={{ transform: 'scale(0.85)', transformOrigin: 'top left', width: '118%' }}>
                 <HtmlPreview html={previewHtml} />

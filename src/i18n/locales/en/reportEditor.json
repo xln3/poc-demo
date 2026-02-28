@@ -6,6 +6,9 @@
   "untitledReport": "Untitled Report",
   "reportTitle": "Report Title",
 
+  "loading": "Loading...",
+  "loadingEditor": "Loading editor...",
+
   "status": {
     "draft": "Draft",
     "generating": "Generating",
@@ -35,6 +38,8 @@
     "model": "Model",
     "evalDate": "Eval Date",
     "score": "Score",
+    "tasks": "tasks",
+    "reportSuffix": "Safety Report",
     "generationMode": "Generation Mode",
     "modeModular": "Modular",
     "modeModularDesc": "Outline → parallel module generation → block editor",
@@ -85,7 +90,10 @@
     "rollback": "Rollback to this version",
     "preview": "Preview",
     "noHistory": "No version history yet",
-    "rollbackConfirm": "Are you sure you want to rollback to version {{version}}? Current content will be saved as a new version."
+    "rollbackConfirm": "Are you sure you want to rollback to version {{version}}? Current content will be saved as a new version.",
+    "secondsAgo": "{{count}}s ago",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago"
   },
 
   "delete": {
@@ -150,6 +158,15 @@
     "insert": "Insert Image",
     "generating": "Generating...",
     "regenerate": "Regenerate",
-    "caption": "Caption"
+    "caption": "Caption",
+    "noImage": "No image. Use /image to generate one.",
+    "addCaption": "Add caption..."
+  },
+
+  "block": {
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "chartError": "Chart error: {{error}}",
+    "invalidJSON": "Invalid JSON"
   }
 }

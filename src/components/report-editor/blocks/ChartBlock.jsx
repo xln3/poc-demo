@@ -1,5 +1,6 @@
 import { createReactBlockSpec } from '@blocknote/react';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import * as echarts from 'echarts';
 
 /**
@@ -21,6 +22,7 @@ export const ChartBlock = createReactBlockSpec(
   {
     render: (props) => {
       const { block, editor } = props;
+      const { t } = useTranslation('reportEditor');
       const chartRef = useRef(null);
       const instanceRef = useRef(null);
       const [error, setError] = useState(null);
@@ -79,7 +81,7 @@ export const ChartBlock = createReactBlockSpec(
         >
           {error ? (
             <div className="p-4 text-red-500 text-sm bg-red-50 dark:bg-red-900/20">
-              Chart error: {error}
+              {t('block.chartError', { error, defaultValue: `Chart error: ${error}` })}
             </div>
           ) : (
             <div
