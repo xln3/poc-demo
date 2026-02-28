@@ -23,7 +23,25 @@ class DBCaseStorage:
 
     @staticmethod
     def _extract_summary(data: dict) -> dict:
-        """Extract summary from v1 format case (same logic as CaseStorage)."""
+        """Extract summary from v1 or v3 format case."""
+        schema_version = data.get("schema_version", "")
+
+        # v3 format (from new Cases Config page)
+        if schema_version == "3.0.0" or "test_mode" in data:
+            meta = data.get("meta", {})
+            agent = data.get("agent", {})
+            return {
+                "id": meta.get("case_id") or data.get("id"),
+                "savedAt": data.get("savedAt") or meta.get("createdAt"),
+                "schemaVersion": "3.0.0",
+                "name": meta.get("name") or "",
+                "description": meta.get("description") or "",
+                "test_mode": data.get("test_mode"),
+                "agent_name": agent.get("agent_name"),
+                "modelId": agent.get("model_id"),
+            }
+
+        # v1 format (legacy)
         meta = data.get("meta", {})
         source = data.get("source", {})
         attack = source.get("attack", {})
@@ -48,32 +66,57 @@ class DBCaseStorage:
         }
 
     async def save_case(self, db: AsyncSession, case_data: dict) -> dict:
-        """Save a new test case."""
+        """Save a new test case (v1 or v3 format)."""
         now = datetime.now().isoformat()
+        schema_version = case_data.get("schema_version", "")
 
-        meta = case_data.get("meta", {})
-        if not meta.get("caseId"):
-            meta["caseId"] = self._generate_id()
-        if not meta.get("createdAt"):
-            meta["createdAt"] = now
-        case_data["meta"] = meta
-        case_id = meta["caseId"]
-        case_data["id"] = case_id
-        case_data["savedAt"] = meta["createdAt"]
+        if schema_version == "3.0.0" or "test_mode" in case_data:
+            # v3 format
+            meta = case_data.get("meta", {})
+            if not meta.get("case_id"):
+                meta["case_id"] = self._generate_id()
+            case_data["meta"] = meta
+            case_id = meta["case_id"]
+            case_data["id"] = case_id
+            case_data["savedAt"] = now
+            agent = case_data.get("agent", {})
 
-        source = case_data.get("source", {})
-        attack = source.get("attack", {})
+            row = TestCase(
+                id=case_id,
+                name=meta.get("name") or "",
+                scenario_key=None,
+                attack_id=None,
+                attack_type=case_data.get("test_mode"),
+                capability_level=None,
+                data_json=case_data,
+                created_at=datetime.utcnow(),
+            )
+        else:
+            # v1 format (legacy)
+            meta = case_data.get("meta", {})
+            if not meta.get("caseId"):
+                meta["caseId"] = self._generate_id()
+            if not meta.get("createdAt"):
+                meta["createdAt"] = now
+            case_data["meta"] = meta
+            case_id = meta["caseId"]
+            case_data["id"] = case_id
+            case_data["savedAt"] = meta["createdAt"]
 
-        row = TestCase(
-            id=case_id,
-            name=meta.get("name") or attack.get("name", ""),
-            scenario_key=source.get("scenarioKey"),
-            attack_id=attack.get("id"),
-            attack_type=attack.get("type"),
-            capability_level=source.get("capabilityLevel"),
-            data_json=case_data,
-            created_at=datetime.fromisoformat(meta["createdAt"]) if meta.get("createdAt") else datetime.utcnow(),
-        )
+            source = case_data.get("source", {})
+            attack = source.get("attack", {})
+
+            row = TestCase(
+                id=case_id,
+                name=meta.get("name") or attack.get("name", ""),
+                scenario_key=source.get("scenarioKey"),
+                attack_id=attack.get("id"),
+                attack_type=attack.get("type"),
+                capability_level=source.get("capabilityLevel"),
+                data_json=case_data,
+                created_at=datetime.fromisoformat(meta["createdAt"]) if meta.get("createdAt") else datetime.utcnow(),
+            )
+
         db.add(row)
         await db.commit()
         return case_data
@@ -106,30 +149,42 @@ class DBCaseStorage:
         return {"items": items, "total": total, "offset": offset, "limit": limit}
 
     async def update_case(self, db: AsyncSession, case_id: str, updates: dict) -> Optional[dict]:
-        """Update an existing case (name, tags, notes)."""
+        """Update an existing case. For v3, replaces the entire document. For v1, updates meta fields."""
         row = await db.get(TestCase, case_id, with_for_update=True)
         if row is None:
             return None
 
-        case_data = copy.deepcopy(row.data_json)
         now = datetime.now().isoformat()
-        meta = case_data.get("meta", {})
 
-        if "name" in updates:
-            meta["name"] = updates["name"]
-            row.name = updates["name"]
-        if "tags" in updates:
-            meta["tags"] = updates["tags"]
-        if "notes" in updates:
-            meta["notes"] = updates["notes"]
-        meta["updatedAt"] = now
-        case_data["meta"] = meta
+        # v3 full-document update (frontend sends the entire config)
+        if updates.get("schema_version") == "3.0.0" or "test_mode" in updates:
+            updates["id"] = case_id
+            updates["savedAt"] = now
+            meta = updates.get("meta", {})
+            meta["case_id"] = case_id
+            updates["meta"] = meta
+            row.name = meta.get("name", "")
+            row.attack_type = updates.get("test_mode")
+            row.data_json = updates
+        else:
+            # v1 partial update (name, tags, notes)
+            case_data = copy.deepcopy(row.data_json)
+            meta = case_data.get("meta", {})
+            if "name" in updates:
+                meta["name"] = updates["name"]
+                row.name = updates["name"]
+            if "tags" in updates:
+                meta["tags"] = updates["tags"]
+            if "notes" in updates:
+                meta["notes"] = updates["notes"]
+            meta["updatedAt"] = now
+            case_data["meta"] = meta
+            row.data_json = case_data
 
-        row.data_json = case_data
         row.updated_at = datetime.utcnow()
         flag_modified(row, "data_json")
         await db.commit()
-        return case_data
+        return row.data_json
 
     async def delete_case(self, db: AsyncSession, case_id: str) -> bool:
         """Delete a case by ID."""

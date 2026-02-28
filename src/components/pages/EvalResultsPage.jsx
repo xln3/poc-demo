@@ -234,7 +234,9 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
   const tasksTotal = jobTasks.length || job.benchmarks?.length || 0;
   const tasksDone = typeof job.progress === 'number'
     ? Math.round(job.progress / 100 * tasksTotal)
-    : jobTasks.filter(t => t.status === 'completed' || t.status === 'error').length;
+    : jobTasks.filter(t => t.status === 'completed' || t.status === 'error' || t.status === 'failed').length;
+  const tasksSucceeded = jobTasks.filter(t => t.status === 'completed').length;
+  const tasksFailed = jobTasks.filter(t => t.status === 'failed' || t.status === 'error').length;
 
   // Score: prefer job-scoped result, fall back to model-level for orphans only
   const isOrphan = !!job._isOrphan;
@@ -311,7 +313,8 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
 
       {/* Status */}
       <td className="py-3 px-2 text-center">
-        <StatusBadge status={status} t={t} tasksDone={tasksDone} tasksTotal={tasksTotal} />
+        <StatusBadge status={status} t={t} tasksDone={tasksDone} tasksTotal={tasksTotal}
+          tasksSucceeded={tasksSucceeded} tasksFailed={tasksFailed} />
       </td>
 
       {/* Start time */}
@@ -339,7 +342,7 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
             </button>
           )}
           {status === 'completed' && !hasResults && (
-            <span className="text-xs text-on-dim">{t('status.failed')}</span>
+            <span className="text-xs text-on-dim">{t('status.noResults')}</span>
           )}
           {(status === 'running' || status === 'pending') && (
             <>
@@ -365,19 +368,24 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
   );
 }
 
-function StatusBadge({ status, t, tasksDone, tasksTotal }) {
+function StatusBadge({ status, t, tasksDone, tasksTotal, tasksSucceeded, tasksFailed }) {
+  const hasPartialFailure = status === 'completed' && tasksFailed > 0;
   const styles = {
     pending: 'bg-gray-500/20 text-gray-400',
     running: 'bg-blue-500/20 text-blue-400',
     completed: 'bg-green-500/20 text-green-400',
+    completedPartial: 'bg-amber-500/20 text-amber-400',
     failed: 'bg-red-500/20 text-red-400',
     cancelled: 'bg-gray-500/20 text-gray-400',
   };
 
+  const badgeStatus = hasPartialFailure ? 'completedPartial' : status;
+  const badgeLabel = hasPartialFailure ? t('status.completedPartial') : t(`status.${status}`);
+
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
-        {t(`status.${status}`)}
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[badgeStatus] || styles.pending}`}>
+        {badgeLabel}
       </span>
       {status === 'running' && tasksTotal > 0 && (
         <div className="w-full max-w-[80px]">
@@ -388,6 +396,19 @@ function StatusBadge({ status, t, tasksDone, tasksTotal }) {
             />
           </div>
           <div className="text-[10px] text-on-dim mt-0.5">{tasksDone}/{tasksTotal}</div>
+        </div>
+      )}
+      {(status === 'completed' || status === 'failed') && tasksTotal > 0 && (
+        <div className="text-[10px] mt-0.5">
+          {tasksFailed > 0 ? (
+            <span>
+              <span className="text-green-400">{tasksSucceeded}✓</span>
+              {' / '}
+              <span className="text-red-400">{tasksFailed}✗</span>
+            </span>
+          ) : (
+            <span className="text-on-dim">{tasksSucceeded}/{tasksTotal}</span>
+          )}
         </div>
       )}
     </div>

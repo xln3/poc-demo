@@ -1,7 +1,7 @@
 /**
  * Case API 客户端
  * 用于与后端测试用例存储服务通信
- * 只支持 v1.0.0 Schema 格式
+ * 支持 v1.0.0 和 v3.0.0 格式
  */
 
 import { validateTestCase } from './schemas/testCase.js';
@@ -10,15 +10,18 @@ import { authFetch } from './auth.js';
 const BASE_URL = '';  // 使用 Vite 代理
 
 /**
- * 保存测试用例到服务器（v1 格式）
- * @param {Object} testCase - 完整的 v1 格式测试用例
+ * 保存测试用例到服务器（v1 或 v3 格式）
+ * v3 格式 (schema_version: '3.0.0') 跳过 v1 验证
+ * @param {Object} testCase - 测试用例
  * @returns {Promise<Object>} 保存后的用例（含ID）
  */
 export async function saveCaseToServer(testCase) {
-  // 验证格式 — 失败则拒绝保存
-  const validation = validateTestCase(testCase);
-  if (!validation.valid) {
-    throw new Error(`测试用例验证失败: ${validation.errors.join('; ')}`);
+  // v3 format skips v1 validation
+  if (testCase.schema_version !== '3.0.0') {
+    const validation = validateTestCase(testCase);
+    if (!validation.valid) {
+      throw new Error(`测试用例验证失败: ${validation.errors.join('; ')}`);
+    }
   }
 
   const response = await authFetch(`${BASE_URL}/cases`, {

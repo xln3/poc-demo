@@ -22,6 +22,9 @@ export default defineConfig({
           scenarios: [
             './src/scenarios/index.js',
           ],
+          echarts: ['echarts'],
+          monaco: ['@monaco-editor/react'],
+          blocknote: ['@blocknote/core', '@blocknote/react', '@blocknote/mantine'],
         },
       },
     },

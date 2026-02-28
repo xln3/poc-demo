@@ -1,18 +1,11 @@
-"""API endpoints for saved test cases."""
+"""API endpoints for saved test cases (supports v1 and v3 formats)."""
 from __future__ import annotations
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.security import require_auth
 from ..db.engine import get_db
-
-from ..models.schemas import (
-    SaveCaseRequest,
-    UpdateCaseRequest,
-    SavedCaseSummary,
-    SavedCaseDetail,
-)
 from ..services.db_case_storage import db_case_storage
 
 router = APIRouter(prefix="/cases", tags=["cases"], dependencies=[Depends(require_auth)])
@@ -28,15 +21,15 @@ async def list_cases(
     return await db_case_storage.list_cases(db, offset=offset, limit=limit)
 
 
-@router.post("", response_model=SavedCaseDetail)
-async def save_case(request: SaveCaseRequest, db: AsyncSession = Depends(get_db)):
-    """Save a new test case."""
-    case_data = request.model_dump()
+@router.post("")
+async def save_case(request: Request, db: AsyncSession = Depends(get_db)):
+    """Save a new test case (accepts v1 or v3 format as JSON)."""
+    case_data = await request.json()
     saved = await db_case_storage.save_case(db, case_data)
     return saved
 
 
-@router.get("/{case_id}", response_model=SavedCaseDetail)
+@router.get("/{case_id}")
 async def get_case(case_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single test case by ID."""
     case_data = await db_case_storage.get_case(db, case_id)
@@ -45,10 +38,10 @@ async def get_case(case_id: str, db: AsyncSession = Depends(get_db)):
     return case_data
 
 
-@router.put("/{case_id}", response_model=SavedCaseDetail)
-async def update_case(case_id: str, request: UpdateCaseRequest, db: AsyncSession = Depends(get_db)):
-    """Update a test case (name, tags, notes)."""
-    updates = request.model_dump(exclude_unset=True)
+@router.put("/{case_id}")
+async def update_case(case_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Update a test case (v1 partial or v3 full document)."""
+    updates = await request.json()
     updated = await db_case_storage.update_case(db, case_id, updates)
     if updated is None:
         raise HTTPException(status_code=404, detail="Case not found")

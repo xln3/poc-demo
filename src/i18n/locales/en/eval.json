@@ -36,9 +36,12 @@
     "pending": "Pending",
     "running": "Running",
     "completed": "Completed",
+    "completedPartial": "Partial",
     "failed": "Failed",
     "skipped": "Skipped",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "tasksBreakdown": "{{succeeded}} passed / {{failed}} failed",
+    "noResults": "No score data"
   },
 
   "benchmarks": {

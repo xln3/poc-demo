@@ -34,7 +34,12 @@
     "agent": "Agent",
     "model": "Model",
     "evalDate": "Eval Date",
-    "score": "Score"
+    "score": "Score",
+    "generationMode": "Generation Mode",
+    "modeModular": "Modular",
+    "modeModularDesc": "Outline → parallel module generation → block editor",
+    "modeLegacy": "Classic",
+    "modeLegacyDesc": "Single-pass generation → HTML editor"
   },
 
   "generate": {
@@ -44,7 +49,10 @@
     "complete": "Report generation complete",
     "error": "Generation failed",
     "systemPrompt": "System Prompt",
-    "systemPromptPlaceholder": "Custom system prompt (optional)"
+    "systemPromptPlaceholder": "Custom system prompt (optional)",
+    "modulesProgress": "Generating modules ({{completed}}/{{total}})",
+    "assembling": "Assembling report...",
+    "openEditor": "Open Editor"
   },
 
   "editor": {
@@ -55,6 +63,7 @@
     "redo": "Redo",
     "history": "History",
     "export": "Export PDF",
+    "exportPDF": "Export PDF",
     "toc": "Contents",
     "editSource": "Edit Source",
     "saveSource": "Save Source",
@@ -87,5 +96,60 @@
   "print": {
     "title": "Print Preview",
     "preparing": "Preparing for print..."
+  },
+
+  "outline": {
+    "title": "Report Outline",
+    "subtitle": "Review and edit the report structure before generating",
+    "generating": "Generating outline...",
+    "regenerate": "Regenerate",
+    "approveGenerate": "Approve & Generate All",
+    "addModule": "Add Module",
+    "removeModule": "Remove",
+    "newModule": "New Module",
+    "descriptionPlaceholder": "Module description...",
+    "dependencies": "Deps",
+    "dataKeys": "Data",
+    "charts": "Charts"
+  },
+
+  "module": {
+    "modules": "Modules",
+    "pending": "Pending",
+    "generating": "Generating...",
+    "ready": "Ready",
+    "error": "Error",
+    "blocked": "Waiting for dependency",
+    "regenerate": "Regenerate",
+    "insertBefore": "+ Before",
+    "insertAfter": "+ After",
+    "delete": "Delete",
+    "newTitle": "New Module"
+  },
+
+  "chart": {
+    "editConfig": "Edit Chart",
+    "aiModify": "AI Modify",
+    "insertChart": "Insert Chart",
+    "livePreview": "Live Preview",
+    "apply": "Apply",
+    "naturalLanguage": "Describe the change...",
+    "send": "Send",
+    "typeBar": "Bar",
+    "typeLine": "Line",
+    "typePie": "Pie",
+    "typeRadar": "Radar",
+    "typeScatter": "Scatter",
+    "typeHeatmap": "Heatmap",
+    "typeGauge": "Gauge",
+    "typeFunnel": "Funnel",
+    "typeTreemap": "Treemap"
+  },
+
+  "image": {
+    "insert": "Insert Image",
+    "generating": "Generating...",
+    "regenerate": "Regenerate",
+    "caption": "Caption"
   }
 }

@@ -3,8 +3,20 @@ import { useTranslation } from 'react-i18next';
 
 /**
  * TableOfContents — parses headings from HTML and renders a collapsible tree.
+ *
+ * Props:
+ * - html: HTML string for legacy heading parsing
+ * - activeId: currently active heading ID
+ * - onNavigate: callback when user clicks a heading
+ * - modules: optional array of module objects for modular report view
+ *   [{id, title, status, order_index}]
+ * - activeModuleIdx: index of active module (for modular view)
+ * - onModuleClick: callback when user clicks a module
  */
-export default function TableOfContents({ html = '', activeId = '', onNavigate }) {
+export default function TableOfContents({
+  html = '', activeId = '', onNavigate,
+  modules, activeModuleIdx, onModuleClick,
+}) {
   const { t } = useTranslation('reportEditor');
   const [collapsed, setCollapsed] = useState(new Set());
 
@@ -56,13 +68,45 @@ export default function TableOfContents({ html = '', activeId = '', onNavigate }
     return true;
   };
 
-  if (headings.length === 0) return null;
+  if (headings.length === 0 && (!modules || modules.length === 0)) return null;
+
+  // Module status icons
+  const statusIcon = (status) => {
+    switch (status) {
+      case 'ready': return <span className="text-green-500 text-xs">&#10003;</span>;
+      case 'generating': return <span className="text-blue-500 text-xs animate-pulse">&#9679;</span>;
+      case 'error': return <span className="text-red-500 text-xs">&#10007;</span>;
+      default: return <span className="text-gray-400 text-xs">&#9675;</span>;
+    }
+  };
 
   return (
     <div className="w-48 flex-shrink-0 border-r border-edge overflow-y-auto custom-scroll">
       <div className="p-2 border-b border-edge">
         <span className="text-xs font-medium text-on-muted uppercase tracking-wider">{t('editor.toc')}</span>
       </div>
+
+      {/* Module list (modular reports) */}
+      {modules && modules.length > 0 && (
+        <div className="py-1 border-b border-edge">
+          {modules.map((mod, idx) => (
+            <div
+              key={mod.id}
+              className={`flex items-center gap-1.5 px-3 py-1.5 cursor-pointer text-xs transition-colors ${
+                activeModuleIdx === idx
+                  ? 'bg-blue-500/15 text-blue-400 font-medium'
+                  : 'text-on-muted hover:text-on-canvas hover:bg-surface'
+              }`}
+              onClick={() => onModuleClick?.(idx)}
+            >
+              {statusIcon(mod.status)}
+              <span className="truncate">{mod.title}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Heading tree (legacy or nested under modules) */}
       <nav className="py-1">
         {headings.map((h, i) => {
           if (!isVisible(i)) return null;

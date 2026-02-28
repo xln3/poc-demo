@@ -362,3 +362,88 @@ html, body, #root {
     border-left: none !important;
   }
 }
+
+/* ========== BlockNote Editor Overrides ========== */
+
+.report-block-editor .bn-editor {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.report-block-editor .bn-block-content {
+  font-size: 0.875rem;
+  line-height: 1.625;
+}
+
+/* Match heading styles to report HTML content */
+.report-block-editor [data-content-type="heading"][data-level="2"] .bn-inline-content {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-on-canvas, #e0e0e0);
+}
+
+.report-block-editor [data-content-type="heading"][data-level="3"] .bn-inline-content {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text-on-canvas, #d0d0d0);
+}
+
+/* Chart block wrapper */
+.chart-block-wrapper {
+  background: var(--color-bg-surface, rgba(255,255,255,0.03));
+  transition: box-shadow 0.15s ease;
+}
+
+.chart-block-wrapper:hover {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+/* Image block */
+.image-block-wrapper img {
+  max-height: 500px;
+  object-fit: contain;
+}
+
+/* Callout block */
+.callout-block .inline-content p {
+  margin: 0;
+}
+
+/* BlockNote container padding */
+.blocknote-editor-container {
+  min-height: 100%;
+}
+
+.blocknote-editor-container .bn-container {
+  min-height: 60vh;
+}
+
+/* ECharts container styles */
+.chart-placeholder[data-chart-config] {
+  min-height: 300px;
+  border: none;
+  padding: 0;
+}
+
+.chart-placeholder[data-chart-config] canvas {
+  border-radius: 0.5rem;
+}
+
+.chart-fallback {
+  color: var(--color-text-on-muted, #888);
+  text-align: center;
+  padding: 2rem;
+  font-size: 0.875rem;
+}
+
+/* Light theme BlockNote overrides */
+.light .report-block-editor [data-content-type="heading"][data-level="2"] .bn-inline-content {
+  color: #1a1a1a;
+}
+
+.light .report-block-editor [data-content-type="heading"][data-level="3"] .bn-inline-content {
+  color: #333;
+}
+
+.light .chart-block-wrapper {
+  background: rgba(0,0,0,0.02);
+}

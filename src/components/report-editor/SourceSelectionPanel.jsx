@@ -23,6 +23,7 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
   // Selection state
   const [selectedModels, setSelectedModels] = useState([]);
   const [scenarioType, setScenarioType] = useState('single_agent');
+  const [generationMode, setGenerationMode] = useState('modular'); // modular | legacy
   const [title, setTitle] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [creating, setCreating] = useState(false);
@@ -118,6 +119,7 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
           scenario_type: scenarioType,
           system_prompt: systemPrompt || null,
           source_data: { models: selectedModels },
+          generation_mode: generationMode,
         });
         onReportCreated(report);
       }
@@ -255,6 +257,43 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
             />
           </div>
         )}
+
+        {/* Generation Mode Toggle */}
+        <div>
+          <label className="block text-xs text-on-muted mb-2">
+            {t('source.generationMode', 'Generation Mode')}
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setGenerationMode('modular')}
+              className={`flex-1 px-3 py-2 rounded border text-sm transition-colors ${
+                generationMode === 'modular'
+                  ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                  : 'border-edge text-on-canvas/60 hover:border-on-muted/30'
+              }`}
+            >
+              <div className="font-medium">{t('source.modeModular', 'Modular')}</div>
+              <div className="text-[10px] text-on-muted mt-0.5">
+                {t('source.modeModularDesc', 'Outline → parallel module generation → block editor')}
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setGenerationMode('legacy')}
+              className={`flex-1 px-3 py-2 rounded border text-sm transition-colors ${
+                generationMode === 'legacy'
+                  ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                  : 'border-edge text-on-canvas/60 hover:border-on-muted/30'
+              }`}
+            >
+              <div className="font-medium">{t('source.modeLegacy', 'Classic')}</div>
+              <div className="text-[10px] text-on-muted mt-0.5">
+                {t('source.modeLegacyDesc', 'Single-pass generation → HTML editor')}
+              </div>
+            </button>
+          </div>
+        </div>
 
         {/* Actions */}
         <div className="flex items-center gap-3 pt-2">

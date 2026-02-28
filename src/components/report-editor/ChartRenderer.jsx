@@ -4,18 +4,27 @@ import SafetyScoreGauge from '../eval/SafetyScoreGauge.jsx';
 import RadarChart from '../eval/RadarChart.jsx';
 import ScoreBar from '../eval/ScoreBar.jsx';
 import RiskLevelBadge from '../eval/RiskLevelBadge.jsx';
+import { renderECharts, disposeECharts } from './EChartsRenderer.jsx';
 
 /**
  * Scans a container for .chart-placeholder elements and renders
  * React chart components into them. Also replaces .risk-badge spans.
+ *
+ * Dual dispatch:
+ * - data-chart-config → ECharts path (new V2)
+ * - data-chart="gauge|radar|score_bar" → legacy SVG path
  */
-export function renderCharts(container) {
+export function renderCharts(container, isDark = false) {
   if (!container) return;
   const roots = [];
 
-  // Render chart placeholders
-  container.querySelectorAll('.chart-placeholder').forEach(el => {
+  // ECharts path: render data-chart-config placeholders
+  const echartsInstances = renderECharts(container, isDark);
+
+  // Legacy path: render data-chart placeholders (only those WITHOUT data-chart-config)
+  container.querySelectorAll('.chart-placeholder:not([data-chart-config])').forEach(el => {
     const chartType = el.dataset.chart;
+    if (!chartType) return; // skip if no chart type specified
     const root = createRoot(el);
     roots.push(root);
 
@@ -63,30 +72,37 @@ export function renderCharts(container) {
     root.render(<RiskLevelBadge level={level} />);
   });
 
-  return roots;
+  return { roots, echartsInstances };
 }
 
 /**
  * Hook version: renders charts whenever html changes.
+ * Handles both legacy React roots and ECharts instances.
  */
-export function useChartRenderer(containerRef, html) {
+export function useChartRenderer(containerRef, html, isDark = false) {
   const rootsRef = useRef([]);
 
   useEffect(() => {
-    // Cleanup old roots
+    // Cleanup old React roots
     rootsRef.current.forEach(root => {
       try { root.unmount(); } catch {}
     });
     rootsRef.current = [];
 
+    // Cleanup old ECharts
+    if (containerRef.current) {
+      disposeECharts(containerRef.current);
+    }
+
     if (containerRef.current && html) {
       // Delay to ensure DOM is painted
       const timer = setTimeout(() => {
-        rootsRef.current = renderCharts(containerRef.current) || [];
+        const result = renderCharts(containerRef.current, isDark);
+        rootsRef.current = result?.roots || [];
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [html]);
+  }, [html, isDark]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -94,6 +110,9 @@ export function useChartRenderer(containerRef, html) {
       rootsRef.current.forEach(root => {
         try { root.unmount(); } catch {}
       });
+      if (containerRef.current) {
+        disposeECharts(containerRef.current);
+      }
     };
   }, []);
 }

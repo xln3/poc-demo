@@ -83,3 +83,84 @@ export function regenerateSectionStream(reportId, selectedHtml, instruction) {
   });
   return { promise, abort: () => controller.abort() };
 }
+
+
+// ======================================================================
+// Modular V2 API — Outline, Modules, Charts, Images
+// ======================================================================
+
+// ---- Outline ----
+
+export function generateOutlineStream(reportId) {
+  const controller = new AbortController();
+  const promise = authFetch(`/report-editor/${reportId}/generate-outline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
+  });
+  return { promise, abort: () => controller.abort() };
+}
+
+export function getOutline(reportId) {
+  return request('GET', `/report-editor/${reportId}/outline`);
+}
+
+export function updateOutline(reportId, data) {
+  return request('PUT', `/report-editor/${reportId}/outline`, data);
+}
+
+// ---- Modules ----
+
+export function generateModulesStream(reportId) {
+  const controller = new AbortController();
+  const promise = authFetch(`/report-editor/${reportId}/generate-modules`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
+  });
+  return { promise, abort: () => controller.abort() };
+}
+
+export function listModules(reportId) {
+  return request('GET', `/report-editor/${reportId}/modules`);
+}
+
+export function getModule(reportId, moduleId) {
+  return request('GET', `/report-editor/${reportId}/modules/${moduleId}`);
+}
+
+export function updateModule(reportId, moduleId, data) {
+  return request('PUT', `/report-editor/${reportId}/modules/${moduleId}`, data);
+}
+
+export function regenerateModuleStream(reportId, moduleId) {
+  const controller = new AbortController();
+  const promise = authFetch(`/report-editor/${reportId}/modules/${moduleId}/regenerate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
+  });
+  return { promise, abort: () => controller.abort() };
+}
+
+export function insertModule(reportId, data) {
+  return request('POST', `/report-editor/${reportId}/insert-module`, data);
+}
+
+// ---- Charts ----
+
+export function generateChartConfig(reportId, data) {
+  return request('POST', `/report-editor/${reportId}/generate-chart`, data);
+}
+
+// ---- Images ----
+
+export function generateImage(reportId, data) {
+  return request('POST', `/report-editor/${reportId}/generate-image`, data);
+}
+
+// ---- Assembly ----
+
+export function assembleReport(reportId) {
+  return request('POST', `/report-editor/${reportId}/assemble`);
+}

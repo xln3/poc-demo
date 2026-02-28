@@ -62,6 +62,9 @@ export default function ReportListPanel({
                       <span>{t(`scenario.${report.scenario_type}`, report.scenario_type)}</span>
                       <span>·</span>
                       <span>{t(`status.${report.status}`, report.status)}</span>
+                      {report.generation_mode === 'modular' && (
+                        <span className="px-1 py-px rounded text-[9px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">V2</span>
+                      )}
                     </div>
                     {report.created_at && (
                       <div className="text-[10px] text-on-muted/60 mt-0.5">

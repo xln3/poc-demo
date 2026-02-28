@@ -142,12 +142,17 @@ class Report(Base):
     source_data = Column(JSON, nullable=False, default=dict)  # {agents, models, jobs, ...}
     metadata_json = Column(JSON, nullable=False, default=dict)
     status = Column(String(32), nullable=False, default="draft")  # draft | generating | ready
+    generation_mode = Column(String(16), nullable=False, default="legacy")  # legacy | modular
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     history = relationship("ReportHistory", back_populates="report", cascade="all, delete-orphan",
                            order_by="ReportHistory.version.desc()")
+    outline = relationship("ReportOutline", back_populates="report", uselist=False,
+                           cascade="all, delete-orphan")
+    modules = relationship("ReportModule", back_populates="report", cascade="all, delete-orphan",
+                           order_by="ReportModule.order_index")
 
 
 class ReportHistory(Base):
@@ -165,6 +170,48 @@ class ReportHistory(Base):
 
     __table_args__ = (
         Index("ix_report_history_report_version", "report_id", "version", unique=True),
+    )
+
+
+class ReportOutline(Base):
+    """Structured outline for modular report generation."""
+    __tablename__ = "report_outlines"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    report_id = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"),
+                       nullable=False, unique=True)
+    outline_json = Column(JSON, nullable=False, default=dict)
+    # { modules: [{ title, description, data_keys, depends_on_indices, suggested_charts }] }
+    status = Column(String(16), nullable=False, default="draft")  # draft | approved | generating
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    report = relationship("Report", back_populates="outline")
+
+
+class ReportModule(Base):
+    """Individual module of a modular report."""
+    __tablename__ = "report_modules"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    report_id = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
+    order_index = Column(Integer, nullable=False, default=0)
+    title = Column(String(512), nullable=False)
+    description = Column(Text, nullable=True)
+    content = Column(Text, nullable=True)  # HTML content for this module
+    status = Column(String(16), nullable=False, default="pending")
+    # pending | generating | ready | error
+    depends_on = Column(JSON, nullable=False, default=list)  # list of module IDs
+    data_keys = Column(JSON, nullable=False, default=list)  # data keys relevant to this module
+    chart_configs = Column(JSON, nullable=False, default=list)  # list of ECharts option objects
+    generation_meta = Column(JSON, nullable=False, default=dict)  # tokens used, timing, etc.
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    report = relationship("Report", back_populates="modules")
+
+    __table_args__ = (
+        Index("ix_report_modules_report_order", "report_id", "order_index"),
     )
 
 

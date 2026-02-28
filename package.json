@@ -12,7 +12,13 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@blocknote/core": "^0.47.0",
+    "@blocknote/mantine": "^0.47.0",
+    "@blocknote/react": "^0.47.0",
+    "@mantine/core": "^8.3.15",
+    "@monaco-editor/react": "^4.7.0",
     "@playwright/test": "^1.58.2",
+    "echarts": "^6.0.0",
     "i18next": "^25.8.13",
     "i18next-browser-languagedetector": "^8.2.1",
     "react": "^18.3.1",

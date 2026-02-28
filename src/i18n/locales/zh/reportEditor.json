@@ -34,7 +34,12 @@
     "agent": "智能体",
     "model": "模型",
     "evalDate": "评测日期",
-    "score": "评分"
+    "score": "评分",
+    "generationMode": "生成模式",
+    "modeModular": "模块化",
+    "modeModularDesc": "大纲 → 并行模块生成 → 块编辑器",
+    "modeLegacy": "经典",
+    "modeLegacyDesc": "单次生成 → HTML编辑器"
   },
 
   "generate": {
@@ -44,7 +49,10 @@
     "complete": "报告生成完成",
     "error": "生成失败",
     "systemPrompt": "系统提示词",
-    "systemPromptPlaceholder": "自定义系统提示词（可选）"
+    "systemPromptPlaceholder": "自定义系统提示词（可选）",
+    "modulesProgress": "正在生成模块 ({{completed}}/{{total}})",
+    "assembling": "正在组装报告...",
+    "openEditor": "打开编辑器"
   },
 
   "editor": {
@@ -55,6 +63,7 @@
     "redo": "重做",
     "history": "历史版本",
     "export": "导出PDF",
+    "exportPDF": "导出PDF",
     "toc": "目录",
     "editSource": "编辑源码",
     "saveSource": "保存源码",
@@ -87,5 +96,60 @@
   "print": {
     "title": "打印预览",
     "preparing": "正在准备打印..."
+  },
+
+  "outline": {
+    "title": "报告大纲",
+    "subtitle": "审阅并编辑报告结构后开始生成",
+    "generating": "正在生成大纲...",
+    "regenerate": "重新生成",
+    "approveGenerate": "确认并生成所有模块",
+    "addModule": "添加模块",
+    "removeModule": "删除",
+    "newModule": "新模块",
+    "descriptionPlaceholder": "模块描述...",
+    "dependencies": "依赖",
+    "dataKeys": "数据",
+    "charts": "图表"
+  },
+
+  "module": {
+    "modules": "模块",
+    "pending": "等待中",
+    "generating": "生成中...",
+    "ready": "就绪",
+    "error": "错误",
+    "blocked": "等待依赖",
+    "regenerate": "重新生成",
+    "insertBefore": "+ 前插",
+    "insertAfter": "+ 后插",
+    "delete": "删除",
+    "newTitle": "新模块"
+  },
+
+  "chart": {
+    "editConfig": "编辑图表",
+    "aiModify": "AI修改",
+    "insertChart": "插入图表",
+    "livePreview": "实时预览",
+    "apply": "应用",
+    "naturalLanguage": "描述你想要的修改...",
+    "send": "发送",
+    "typeBar": "柱状图",
+    "typeLine": "折线图",
+    "typePie": "饼图",
+    "typeRadar": "雷达图",
+    "typeScatter": "散点图",
+    "typeHeatmap": "热力图",
+    "typeGauge": "仪表盘",
+    "typeFunnel": "漏斗图",
+    "typeTreemap": "矩形树图"
+  },
+
+  "image": {
+    "insert": "插入图片",
+    "generating": "生成中...",
+    "regenerate": "重新生成",
+    "caption": "图片说明"
   }
 }

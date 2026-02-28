@@ -1,14 +1,30 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listReports, createReport, getReport, deleteReport } from '../../api/reportEditorApi.js';
+import {
+  listReports, createReport, getReport, deleteReport,
+  getOutline, updateOutline, listModules, generateOutlineStream,
+  insertModule as apiInsertModule, regenerateModuleStream,
+} from '../../api/reportEditorApi.js';
+import { consumeTypedSSE } from '../../utils/sseReader.js';
 import ReportListPanel from '../report-editor/ReportListPanel.jsx';
 import SourceSelectionPanel from '../report-editor/SourceSelectionPanel.jsx';
 import GeneratingView from '../report-editor/GeneratingView.jsx';
 import ReportEditor from '../report-editor/ReportEditor.jsx';
+import OutlinePreview from '../report-editor/OutlinePreview.jsx';
+import ModuleGeneratingView from '../report-editor/ModuleGeneratingView.jsx';
+
+// Lazy-load the heavy BlockNote editor
+const ModularBlockEditor = lazy(() => import('../report-editor/ModularBlockEditor.jsx'));
 
 /**
  * ReportEditorPage — main page for the report editor feature.
- * State machine: viewMode = list | source-select | generating | editor
+ *
+ * State machine:
+ *   viewMode = list | source-select | outline-preview | generating-modules | generating | editor
+ *
+ * Flow routing:
+ *   generation_mode === 'modular' → outline-preview → generating-modules → editor (ModularBlockEditor)
+ *   generation_mode === 'legacy'  → generating → editor (ReportEditor)
  */
 export default function ReportEditorPage() {
   const { t } = useTranslation('reportEditor');
@@ -20,7 +36,13 @@ export default function ReportEditorPage() {
   const [selectedReport, setSelectedReport] = useState(null);
 
   // View mode state machine
-  const [viewMode, setViewMode] = useState('list'); // list | source-select | generating | editor
+  const [viewMode, setViewMode] = useState('list');
+
+  // Modular report state
+  const [outline, setOutline] = useState(null);
+  const [modules, setModules] = useState([]);
+  const [outlineLoading, setOutlineLoading] = useState(false);
+  const [outlineStreamContent, setOutlineStreamContent] = useState('');
 
   // Load reports on mount
   const loadReports = useCallback(async () => {
@@ -47,14 +69,35 @@ export default function ReportEditorPage() {
     (async () => {
       try {
         const data = await getReport(selectedReportId);
-        if (!cancelled) {
-          setSelectedReport(data);
-          // Auto-switch to editor if report has content
-          if (data.content && data.status === 'ready') {
-            setViewMode('editor');
-          } else if (data.status === 'generating') {
-            setViewMode('generating');
-          } else if (data.status === 'draft' && !data.content) {
+        if (cancelled) return;
+        setSelectedReport(data);
+
+        const isModular = data.generation_mode === 'modular';
+
+        if (data.content && data.status === 'ready') {
+          // Has content — go to editor
+          if (isModular) {
+            // Load modules for modular reports
+            const mods = await listModules(selectedReportId);
+            if (!cancelled) setModules(mods);
+          }
+          setViewMode('editor');
+        } else if (data.status === 'generating') {
+          setViewMode(isModular ? 'generating-modules' : 'generating');
+        } else if (data.status === 'draft' && !data.content) {
+          // Check if outline exists for modular
+          if (isModular) {
+            try {
+              const ol = await getOutline(selectedReportId);
+              if (!cancelled) {
+                setOutline(ol.outline_json);
+                setViewMode('outline-preview');
+              }
+            } catch {
+              // No outline yet → go to source select
+              setViewMode('source-select');
+            }
+          } else {
             setViewMode('source-select');
           }
         }
@@ -69,19 +112,101 @@ export default function ReportEditorPage() {
   const handleNewReport = () => {
     setSelectedReportId(null);
     setSelectedReport(null);
+    setOutline(null);
+    setModules([]);
     setViewMode('source-select');
   };
 
   // After creating report in SourceSelectionPanel
-  const handleReportCreated = (report) => {
+  const handleReportCreated = async (report) => {
     setSelectedReportId(report.id);
     setSelectedReport(report);
-    setViewMode('generating');
     loadReports();
+
+    if (report.generation_mode === 'modular') {
+      // Start outline generation
+      setViewMode('outline-preview');
+      await generateOutline(report.id);
+    } else {
+      // Legacy flow: direct generation
+      setViewMode('generating');
+    }
   };
 
-  // After generation complete
-  const handleGenerationComplete = async (html) => {
+  // Outline generation
+  const generateOutline = useCallback(async (reportId) => {
+    setOutlineLoading(true);
+    setOutlineStreamContent('');
+    setOutline(null);
+
+    const { promise, abort } = generateOutlineStream(reportId);
+    try {
+      const response = await promise;
+      if (!response.ok) {
+        setOutlineLoading(false);
+        return;
+      }
+
+      await consumeTypedSSE(response, {
+        onOutlineChunk: (content) => {
+          setOutlineStreamContent(prev => prev + content);
+        },
+        onOutlineComplete: (outlineData) => {
+          setOutline(outlineData);
+          setOutlineLoading(false);
+        },
+        onError: (error) => {
+          console.error('Outline generation error:', error);
+          setOutlineLoading(false);
+        },
+        onDone: () => {
+          setOutlineLoading(false);
+        },
+      });
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.error('Outline stream error:', e);
+      }
+      setOutlineLoading(false);
+    }
+  }, []);
+
+  // Outline updated (user edits)
+  const handleOutlineUpdate = useCallback(async (newOutline) => {
+    setOutline(newOutline);
+    if (selectedReportId) {
+      try {
+        await updateOutline(selectedReportId, { outline_json: newOutline });
+      } catch (e) {
+        console.error('Failed to save outline:', e);
+      }
+    }
+  }, [selectedReportId]);
+
+  // Outline approved → generate modules
+  const handleOutlineApprove = useCallback(async () => {
+    if (!selectedReportId) return;
+    try {
+      await updateOutline(selectedReportId, { status: 'approved' });
+    } catch {
+      // outline might not exist yet in DB — that's ok, generate-modules will handle it
+    }
+    setViewMode('generating-modules');
+  }, [selectedReportId]);
+
+  // After module generation complete
+  const handleModulesComplete = async () => {
+    if (selectedReportId) {
+      const data = await getReport(selectedReportId);
+      setSelectedReport(data);
+      const mods = await listModules(selectedReportId);
+      setModules(mods);
+    }
+    setViewMode('editor');
+  };
+
+  // After legacy generation complete
+  const handleGenerationComplete = async () => {
     if (selectedReportId) {
       const data = await getReport(selectedReportId);
       setSelectedReport(data);
@@ -102,6 +227,8 @@ export default function ReportEditorPage() {
       if (selectedReportId === reportId) {
         setSelectedReportId(null);
         setSelectedReport(null);
+        setOutline(null);
+        setModules([]);
         setViewMode('list');
       }
       loadReports();
@@ -111,10 +238,54 @@ export default function ReportEditorPage() {
   };
 
   // Report content updated (from editor save)
-  const handleReportUpdated = (updatedReport) => {
-    setSelectedReport(prev => ({ ...prev, ...updatedReport }));
+  const handleReportUpdated = useCallback((updatedReport) => {
+    if (updatedReport) {
+      setSelectedReport(prev => ({ ...prev, ...updatedReport }));
+    } else if (selectedReportId) {
+      // Reload
+      getReport(selectedReportId).then(data => setSelectedReport(data));
+    }
     loadReports();
-  };
+  }, [selectedReportId, loadReports]);
+
+  // Module regenerate handler
+  const handleModuleRegenerate = useCallback(async (mod) => {
+    if (!selectedReportId || !mod?.id) return;
+    const { promise, abort } = regenerateModuleStream(selectedReportId, mod.id);
+    try {
+      const response = await promise;
+      if (response.ok) {
+        await consumeTypedSSE(response, {
+          onModuleComplete: () => {
+            // Reload modules
+            listModules(selectedReportId).then(mods => setModules(mods));
+          },
+          onDone: () => {},
+        });
+      }
+    } catch (e) {
+      console.error('Module regenerate error:', e);
+    }
+  }, [selectedReportId]);
+
+  // Insert module handler
+  const handleInsertModule = useCallback(async (referenceModuleId, position) => {
+    if (!selectedReportId) return;
+    try {
+      await apiInsertModule(selectedReportId, {
+        title: t('module.newTitle', 'New Module'),
+        description: '',
+        position,
+        reference_module_id: referenceModuleId,
+      });
+      const mods = await listModules(selectedReportId);
+      setModules(mods);
+    } catch (e) {
+      console.error('Failed to insert module:', e);
+    }
+  }, [selectedReportId, t]);
+
+  const isModular = selectedReport?.generation_mode === 'modular';
 
   return (
     <div className="flex flex-1 h-full overflow-hidden">
@@ -153,6 +324,48 @@ export default function ReportEditorPage() {
           />
         )}
 
+        {/* Modular: Outline Preview */}
+        {viewMode === 'outline-preview' && (
+          <div className="flex-1 overflow-y-auto">
+            {outlineLoading && !outline && (
+              <div className="max-w-4xl mx-auto p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm text-on-canvas/70">
+                    {t('outline.generating', 'Generating outline...')}
+                  </span>
+                </div>
+                {outlineStreamContent && (
+                  <pre className="text-xs text-on-canvas/50 bg-surface p-4 rounded-lg overflow-auto max-h-96 whitespace-pre-wrap">
+                    {outlineStreamContent}
+                  </pre>
+                )}
+              </div>
+            )}
+            {outline && (
+              <OutlinePreview
+                outline={outline}
+                onUpdate={handleOutlineUpdate}
+                onApprove={handleOutlineApprove}
+                onRegenerate={() => generateOutline(selectedReportId)}
+                loading={outlineLoading}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Modular: Module Generation */}
+        {viewMode === 'generating-modules' && selectedReport && (
+          <div className="flex-1 overflow-y-auto">
+            <ModuleGeneratingView
+              report={selectedReport}
+              onComplete={handleModulesComplete}
+              onStop={() => setViewMode('outline-preview')}
+            />
+          </div>
+        )}
+
+        {/* Legacy: Generation View */}
         {viewMode === 'generating' && selectedReport && (
           <GeneratingView
             report={selectedReport}
@@ -161,12 +374,29 @@ export default function ReportEditorPage() {
           />
         )}
 
+        {/* Editor: Modular (BlockNote) or Legacy (contentEditable) */}
         {viewMode === 'editor' && selectedReport && (
-          <ReportEditor
-            report={selectedReport}
-            onUpdated={handleReportUpdated}
-            onRegenerate={() => setViewMode('source-select')}
-          />
+          isModular ? (
+            <Suspense fallback={
+              <div className="flex-1 flex items-center justify-center text-on-canvas/50">
+                Loading editor...
+              </div>
+            }>
+              <ModularBlockEditor
+                report={selectedReport}
+                modules={modules}
+                onUpdated={handleReportUpdated}
+                onModuleRegenerate={handleModuleRegenerate}
+                onInsertModule={handleInsertModule}
+              />
+            </Suspense>
+          ) : (
+            <ReportEditor
+              report={selectedReport}
+              onUpdated={handleReportUpdated}
+              onRegenerate={() => setViewMode('source-select')}
+            />
+          )
         )}
       </div>
     </div>
