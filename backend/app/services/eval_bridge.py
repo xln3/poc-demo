@@ -20,6 +20,7 @@ def _get_client() -> httpx.AsyncClient:
         _client = httpx.AsyncClient(
             base_url=EVAL_BACKEND_URL,
             timeout=httpx.Timeout(connect=10, read=3600, write=30, pool=10),
+            trust_env=False,  # Ignore http_proxy/https_proxy — eval-backend is internal
         )
     return _client
 
