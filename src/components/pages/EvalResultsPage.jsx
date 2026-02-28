@@ -335,10 +335,10 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
           {status === 'completed' && hasResults && (
             <button
               type="button"
-              onClick={() => onNavigate?.('eval-report', { model: jobId })}
+              onClick={() => onNavigate?.('eval-result-detail', { jobId })}
               className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30"
             >
-              {t('results.viewReport')}
+              {t('results.details')}
             </button>
           )}
           {status === 'completed' && !hasResults && (

@@ -30,10 +30,9 @@ import RisksPage from './components/pages/RisksPage.jsx';
 import CasesPage from './components/pages/CasesPage.jsx';
 import EvalSubNav from './components/eval/EvalSubNav.jsx';
 import AgentConfigPage from './components/pages/AgentConfigPage.jsx';
-import EvalNewPage from './components/pages/EvalNewPage.jsx';
 import EvalProgressPage from './components/pages/EvalProgressPage.jsx';
 import EvalResultsPage from './components/pages/EvalResultsPage.jsx';
-import EvalReportPage from './components/pages/EvalReportPage.jsx';
+import EvalResultDetailPage from './components/pages/EvalResultDetailPage.jsx';
 import EvalManagePage from './components/pages/EvalManagePage.jsx';
 import {
   TerminalItem,
@@ -1623,13 +1622,6 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
             {evalSubPage === 'eval-manage' && (
               <EvalManagePage onNavigate={evalNavigate} />
             )}
-            {evalSubPage === 'eval-new' && (
-              <EvalNewPage
-                onNavigate={evalNavigate}
-                initialAgentId={evalContext.agentId}
-                initialModelId={evalContext.modelId}
-              />
-            )}
             {evalSubPage === 'eval-progress' && (
               <EvalProgressPage
                 jobId={evalContext.jobId}
@@ -1641,9 +1633,9 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
                 onNavigate={evalNavigate}
               />
             )}
-            {evalSubPage === 'eval-report' && (
-              <EvalReportPage
-                model={evalContext.model}
+            {evalSubPage === 'eval-result-detail' && (
+              <EvalResultDetailPage
+                jobId={evalContext.jobId}
                 onNavigate={evalNavigate}
               />
             )}

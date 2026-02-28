@@ -53,6 +53,8 @@ class ReportSummary(BaseModel):
     status: str
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    generation_mode: str = "legacy"
+    source_data: dict = Field(default_factory=dict)
 
 class HistoryEntry(BaseModel):
     id: int
@@ -107,6 +109,7 @@ async def list_reports(
             "status": r.status,
             "created_at": _ts(r.created_at),
             "updated_at": _ts(r.updated_at),
+            "source_data": r.source_data or {},
         }
         for r in reports
     ]

@@ -3,9 +3,7 @@ import { useTranslation } from 'react-i18next';
 const SUB_PAGES = [
   { id: 'agents', icon: '🤖' },
   { id: 'eval-manage', icon: '📋' },
-  { id: 'eval-new', icon: '➕' },
   { id: 'eval-results', icon: '📊' },
-  { id: 'eval-report', icon: '📝' },
 ];
 
 /**
@@ -17,10 +15,11 @@ export default function EvalSubNav({ active, onChange }) {
   const labels = {
     'agents': t('nav.agents'),
     'eval-manage': t('nav.evalManage'),
-    'eval-new': t('nav.newEval'),
     'eval-results': t('nav.results'),
-    'eval-report': t('nav.reports'),
   };
+
+  // Treat eval-result-detail as part of eval-results for highlighting
+  const effectiveActive = active === 'eval-result-detail' ? 'eval-results' : active;
 
   return (
     <div className="px-6 pt-4 pb-2 border-b border-edge flex gap-1 flex-wrap">
@@ -29,7 +28,7 @@ export default function EvalSubNav({ active, onChange }) {
           key={id}
           onClick={() => onChange(id)}
           className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${
-            active === id
+            effectiveActive === id
               ? 'bg-blue-600 text-white'
               : 'text-on-muted hover:text-on-canvas hover:bg-surface-hover'
           }`}
