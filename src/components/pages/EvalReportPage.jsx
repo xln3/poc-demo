@@ -452,22 +452,26 @@ export default function EvalReportPage({ model: initialModel, onNavigate }) {
 // ---- Task grouping by risk hierarchy ----
 
 /**
- * Groups tasks by risk hierarchy categories.
- * Returns: [{ category, subcategory, tasks: [taskObj] }]
+ * Groups tasks by risk hierarchy: Category → Subcategory → Benchmark → Tasks.
+ * Returns: [{ category, subcategory, benchmark, tasks: [taskObj] }]
  * Tasks not matching any hierarchy entry go into an "Other" group.
  */
 function groupTasksByHierarchy(tasks, hierarchy, lang) {
   const isZh = lang?.startsWith('zh');
-  // Build task→group mapping from hierarchy
+  // Build task→group mapping from hierarchy (now includes benchmark)
   const taskGroupMap = {};
   for (const cat of hierarchy) {
     for (const sub of cat.subcategories || []) {
       for (const bm of sub.benchmarks || []) {
+        const bmLabel = isZh
+          ? (bm.display_name || bm.name)
+          : (bm.display_name_en || bm.display_name || bm.name);
         for (const t of bm.tasks || []) {
           if (!taskGroupMap[t.name]) {
             taskGroupMap[t.name] = {
               category: isZh ? cat.name : cat.name_en,
               subcategory: isZh ? sub.name : sub.name_en,
+              benchmark: bmLabel,
             };
           }
         }
@@ -475,16 +479,17 @@ function groupTasksByHierarchy(tasks, hierarchy, lang) {
     }
   }
 
-  // Group tasks
+  // Group tasks by benchmark (unique key = subcategory + benchmark)
   const groups = [];
   const groupIndex = {};
   for (const task of tasks) {
     const info = taskGroupMap[task.task];
-    const key = info ? info.subcategory : '_other';
+    const key = info ? `${info.subcategory}::${info.benchmark}` : '_other';
     if (!groupIndex[key]) {
       groupIndex[key] = {
         category: info?.category || '',
         subcategory: info?.subcategory || (isZh ? '其他' : 'Other'),
+        benchmark: info?.benchmark || '',
         tasks: [],
       };
       groups.push(groupIndex[key]);
@@ -500,7 +505,10 @@ function GroupedTaskRows({ group, onSelectTask }) {
       <tr>
         <td colSpan={4} className="pt-3 pb-1 px-0">
           <div className="text-xs font-medium text-on-muted border-b border-edge/30 pb-1">
-            {group.subcategory}
+            <span className="text-on-dim">{group.subcategory}</span>
+            {group.benchmark && (
+              <span className="ml-2 text-on-surface">{group.benchmark}</span>
+            )}
           </div>
         </td>
       </tr>
@@ -562,7 +570,7 @@ function FullReportView({ detail, model, hierarchy, lang, t, onSelectTask, onHig
             <tbody>
               {groupTasksByHierarchy(detail.tasks, hierarchy, lang).map(group => (
                 <GroupedTaskRows
-                  key={group.subcategory}
+                  key={`${group.subcategory}::${group.benchmark}`}
                   group={group}
                   onSelectTask={onSelectTask}
                 />
@@ -577,8 +585,13 @@ function FullReportView({ detail, model, hierarchy, lang, t, onSelectTask, onHig
         <Section title={t('report.riskAnalysis')}>
           <div className="space-y-4">
             {groupTasksByHierarchy(highRiskTasks, hierarchy, lang).map(group => (
-              <div key={group.subcategory}>
-                <div className="text-xs font-medium text-on-muted mb-2">{group.subcategory}</div>
+              <div key={`${group.subcategory}::${group.benchmark}`}>
+                <div className="text-xs font-medium text-on-muted mb-2">
+                  {group.subcategory}
+                  {group.benchmark && (
+                    <span className="ml-2 text-on-dim font-normal">{group.benchmark}</span>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {group.tasks.map(task => (
                     <div key={task.task} className="flex items-center justify-between p-3 bg-red-900/10 border border-red-800/30 rounded-lg">
@@ -687,25 +700,52 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
     return <span className="text-blue-400 ml-1">{sortAsc ? '↑' : '↓'}</span>;
   };
 
+  // Build nested structure: category → subcategories → benchmarks
+  const categoryMap = new Map();
+  for (const g of groups) {
+    const catKey = g.category || (isZh ? '其他' : 'Other');
+    if (!categoryMap.has(catKey)) categoryMap.set(catKey, new Map());
+    const subMap = categoryMap.get(catKey);
+    const subKey = g.subcategory;
+    if (!subMap.has(subKey)) subMap.set(subKey, []);
+    subMap.get(subKey).push(g);
+  }
+
   return (
     <div className="space-y-4">
-      <div className="space-y-3">
-        {groups.map(group => (
-          <div key={group.subcategory}>
-            <div className="text-xs font-medium text-on-muted mb-1.5">{group.subcategory}</div>
-            <div className="flex gap-2 flex-wrap">
-              {group.tasks.map(task => (
-                <button
-                  key={task.task}
-                  onClick={() => { setSelectedTask(task.task); setPage(0); setExpandedSample(null); }}
-                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                    selectedTask === task.task
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
-                  }`}
-                >
-                  {task.display_name || task.task}
-                </button>
+      <div className="space-y-4">
+        {[...categoryMap.entries()].map(([cat, subMap]) => (
+          <div key={cat}>
+            <div className="text-sm font-semibold text-on-canvas mb-2 border-b border-edge/40 pb-1">{cat}</div>
+            <div className="space-y-3 pl-2">
+              {[...subMap.entries()].map(([sub, benchGroups]) => (
+                <div key={sub}>
+                  <div className="text-xs font-medium text-on-muted mb-1.5">{sub}</div>
+                  <div className="space-y-2 pl-2">
+                    {benchGroups.map(group => (
+                      <div key={group.benchmark || '_default'}>
+                        {group.benchmark && (
+                          <div className="text-[11px] text-on-dim mb-1">{group.benchmark}</div>
+                        )}
+                        <div className="flex gap-2 flex-wrap">
+                          {group.tasks.map(task => (
+                            <button
+                              key={task.task}
+                              onClick={() => { setSelectedTask(task.task); setPage(0); setExpandedSample(null); }}
+                              className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                                selectedTask === task.task
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
+                              }`}
+                            >
+                              {task.display_name || task.task}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -893,30 +933,58 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
 // ---- Level 3: High-Risk Cases ----
 
 function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelectedTask, samples, t, onNavigate }) {
+  const isZh = lang?.startsWith('zh');
   const highRiskTasks = detail.tasks.filter(t => t.risk_level === 'CRITICAL' || t.risk_level === 'HIGH');
   const groups = groupTasksByHierarchy(highRiskTasks, hierarchy, lang);
   // Filter to only high-risk samples (client-side since we now load all)
   const highRiskSamples = samples.filter(s => s.risk_level === 'CRITICAL' || s.risk_level === 'HIGH');
 
+  // Build nested structure: category → subcategories → benchmarks
+  const categoryMap = new Map();
+  for (const g of groups) {
+    const catKey = g.category || (isZh ? '其他' : 'Other');
+    if (!categoryMap.has(catKey)) categoryMap.set(catKey, new Map());
+    const subMap = categoryMap.get(catKey);
+    const subKey = g.subcategory;
+    if (!subMap.has(subKey)) subMap.set(subKey, []);
+    subMap.get(subKey).push(g);
+  }
+
   return (
     <div className="space-y-4">
-      <div className="space-y-3">
-        {groups.map(group => (
-          <div key={group.subcategory}>
-            <div className="text-xs font-medium text-on-muted mb-1.5">{group.subcategory}</div>
-            <div className="flex gap-2 flex-wrap">
-              {group.tasks.map(task => (
-                <button
-                  key={task.task}
-                  onClick={() => setSelectedTask(task.task)}
-                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                    selectedTask === task.task
-                      ? 'bg-red-600 text-white'
-                      : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
-                  }`}
-                >
-                  {task.display_name || task.task}
-                </button>
+      <div className="space-y-4">
+        {[...categoryMap.entries()].map(([cat, subMap]) => (
+          <div key={cat}>
+            <div className="text-sm font-semibold text-on-canvas mb-2 border-b border-edge/40 pb-1">{cat}</div>
+            <div className="space-y-3 pl-2">
+              {[...subMap.entries()].map(([sub, benchGroups]) => (
+                <div key={sub}>
+                  <div className="text-xs font-medium text-on-muted mb-1.5">{sub}</div>
+                  <div className="space-y-2 pl-2">
+                    {benchGroups.map(group => (
+                      <div key={group.benchmark || '_default'}>
+                        {group.benchmark && (
+                          <div className="text-[11px] text-on-dim mb-1">{group.benchmark}</div>
+                        )}
+                        <div className="flex gap-2 flex-wrap">
+                          {group.tasks.map(task => (
+                            <button
+                              key={task.task}
+                              onClick={() => setSelectedTask(task.task)}
+                              className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                                selectedTask === task.task
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-surface border border-edge text-on-surface hover:bg-surface-hover'
+                              }`}
+                            >
+                              {task.display_name || task.task}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
