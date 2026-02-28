@@ -78,8 +78,13 @@ export default function ReportEditorPage() {
           // Has content — go to editor
           if (isModular) {
             // Load modules for modular reports
-            const mods = await listModules(selectedReportId);
-            if (!cancelled) setModules(mods);
+            try {
+              const mods = await listModules(selectedReportId);
+              if (!cancelled) setModules(Array.isArray(mods) ? mods : []);
+            } catch (e) {
+              console.warn('Failed to load modules, using empty list:', e);
+              if (!cancelled) setModules([]);
+            }
           }
           setViewMode('editor');
         } else if (data.status === 'generating') {

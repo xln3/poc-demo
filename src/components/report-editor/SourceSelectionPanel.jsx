@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fetchResults, fetchAgents, listEvaluations } from '../../api/evalBridgeApi.js';
+import { listEvaluations } from '../../api/evalBridgeApi.js';
 import { createReport, updateReport } from '../../api/reportEditorApi.js';
 
 const SCENARIOS = [
@@ -12,34 +12,27 @@ const SCENARIOS = [
 ];
 
 export default function SourceSelectionPanel({ existingReport, onReportCreated, onCancel }) {
-  const { t } = useTranslation('reportEditor');
+  const { t, i18n } = useTranslation('reportEditor');
+  const isZh = (i18n.language || '').startsWith('zh');
 
   // Data sources
-  const [results, setResults] = useState([]);
-  const [agents, setAgents] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  // Selection state
-  const [selectedModels, setSelectedModels] = useState([]);
+  // Selection state — now job-based
+  const [selectedJobIds, setSelectedJobIds] = useState([]);
   const [scenarioType, setScenarioType] = useState('single_agent');
-  const [generationMode, setGenerationMode] = useState('modular'); // modular | legacy
+  const [generationMode, setGenerationMode] = useState('modular');
   const [title, setTitle] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Load eval data
+  // Load eval jobs
   useEffect(() => {
     (async () => {
       try {
         setLoadingData(true);
-        const [res, ags, evals] = await Promise.all([
-          fetchResults().catch(() => []),
-          fetchAgents().catch(() => []),
-          listEvaluations().catch(() => []),
-        ]);
-        setResults(Array.isArray(res) ? res : []);
-        setAgents(Array.isArray(ags) ? ags : []);
+        const evals = await listEvaluations().catch(() => []);
         setEvaluations(Array.isArray(evals) ? evals : []);
       } finally {
         setLoadingData(false);
@@ -53,54 +46,63 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
       setTitle(existingReport.title || '');
       setScenarioType(existingReport.scenario_type || 'single_agent');
       setSystemPrompt(existingReport.system_prompt || '');
-      const models = existingReport.source_data?.models || [];
-      setSelectedModels(models);
+      // Support both old models-based and new job_ids-based source_data
+      const jobIds = existingReport.source_data?.job_ids || [];
+      setSelectedJobIds(jobIds);
     }
   }, [existingReport]);
 
-  // Toggle model selection
-  const toggleModel = (modelName) => {
-    setSelectedModels(prev =>
-      prev.includes(modelName)
-        ? prev.filter(m => m !== modelName)
-        : [...prev, modelName]
+  // Only show completed jobs, sorted by date (newest first)
+  const completedJobs = useMemo(() => {
+    return evaluations
+      .filter(e => e.status === 'completed')
+      .sort((a, b) => {
+        const da = a.completed_at || a.created_at || '';
+        const db = b.completed_at || b.created_at || '';
+        return db.localeCompare(da);
+      });
+  }, [evaluations]);
+
+  // Toggle job selection
+  const toggleJob = (jobId) => {
+    setSelectedJobIds(prev =>
+      prev.includes(jobId)
+        ? prev.filter(j => j !== jobId)
+        : [...prev, jobId]
     );
   };
 
-  // Build result items with agent info
-  const resultItems = results.map(r => {
-    const modelName = (r.model || r.name || '').trim();
-    // Find matching agent
-    const agent = agents.find(a =>
-      a.eval_model_id === modelName || a.model_id === modelName
-    );
-    // Find matching evaluations
-    const relatedEvals = evaluations.filter(e =>
-      (e.model_id || '').trim() === modelName && e.status === 'completed'
-    );
-    return {
-      modelName,
-      agentName: agent?.name || modelName,
-      modelId: agent?.model_id || modelName,
-      score: r.overall_score ?? r.score ?? null,
-      taskCount: r.task_count ?? Object.keys(r.tasks || {}).length,
-      lastEval: relatedEvals[0]?.completed_at || r.created_at,
-    };
-  });
+  // Format date
+  const fmtDate = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleString(isZh ? 'zh-CN' : 'en-US', {
+        month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch { return dateStr; }
+  };
 
   // Generate report
   const handleGenerate = async () => {
-    if (selectedModels.length === 0) return;
+    if (selectedJobIds.length === 0) return;
 
     setCreating(true);
     try {
+      // Derive model names from selected jobs for data context
+      const selectedJobs = completedJobs.filter(j => selectedJobIds.includes(j.id));
+      const models = [...new Set(selectedJobs.map(j => (j.model_id || j.model_name || '').trim()).filter(Boolean))];
+      const firstJob = selectedJobs[0];
+
       const reportTitle = title ||
         (scenarioType === 'single_agent'
-          ? `${resultItems.find(r => r.modelName === selectedModels[0])?.agentName || selectedModels[0]} ${t('source.reportSuffix', 'Safety Report')}`
+          ? `${firstJob?.agent_name || firstJob?.model_name || firstJob?.model_id || ''} ${t('source.reportSuffix', 'Safety Report')}`
           : `${t(`scenario.${scenarioType}`)} — ${new Date().toLocaleDateString()}`);
 
+      const sourceData = { job_ids: selectedJobIds, models };
+
       if (existingReport) {
-        // Update existing
         await updateReport(existingReport.id, {
           title: reportTitle,
           status: 'draft',
@@ -110,15 +112,14 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
           title: reportTitle,
           scenario_type: scenarioType,
           system_prompt: systemPrompt || null,
-          source_data: { models: selectedModels },
+          source_data: sourceData,
         });
       } else {
-        // Create new
         const report = await createReport({
           title: reportTitle,
           scenario_type: scenarioType,
           system_prompt: systemPrompt || null,
-          source_data: { models: selectedModels },
+          source_data: sourceData,
           generation_mode: generationMode,
         });
         onReportCreated(report);
@@ -190,61 +191,67 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
           </div>
         </div>
 
-        {/* Data source multi-select */}
+        {/* Data source: evaluation jobs */}
         <div>
           <label className="block text-xs text-on-muted mb-2">
-            {t('source.selectResults')}
-            {selectedModels.length > 0 && (
-              <span className="ml-2 text-blue-400">({t('source.selectedCount', { count: selectedModels.length })})</span>
+            {t('source.selectResults', 'Select Evaluation Results')}
+            {selectedJobIds.length > 0 && (
+              <span className="ml-2 text-blue-400">({t('source.selectedCount', { count: selectedJobIds.length })})</span>
             )}
           </label>
 
           {loadingData ? (
             <div className="p-4 text-center text-on-muted text-xs">{t('loading')}</div>
-          ) : resultItems.length === 0 ? (
-            <div className="p-4 text-center text-on-muted text-xs border border-edge rounded">{t('source.noResults')}</div>
+          ) : completedJobs.length === 0 ? (
+            <div className="p-4 text-center text-on-muted text-xs border border-edge rounded">
+              {t('source.noResults', 'No completed evaluation results')}
+            </div>
           ) : (
-            <div className="border border-edge rounded divide-y divide-edge max-h-64 overflow-y-auto custom-scroll">
-              {resultItems.map(item => (
-                <label
-                  key={item.modelName}
-                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
-                    selectedModels.includes(item.modelName) ? 'bg-blue-500/10' : 'hover:bg-surface'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedModels.includes(item.modelName)}
-                    onChange={() => toggleModel(item.modelName)}
-                    className="rounded border-edge"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-on-canvas truncate">{item.agentName}</div>
-                    <div className="text-[10px] text-on-muted flex gap-3 mt-0.5">
-                      <span>{t('source.model')}: {item.modelId}</span>
-                      {item.taskCount > 0 && <span>{item.taskCount} {t('source.tasks', 'tasks')}</span>}
-                      {item.lastEval && (
-                        <span>{new Date(item.lastEval).toLocaleDateString()}</span>
+            <div className="border border-edge rounded divide-y divide-edge max-h-80 overflow-y-auto custom-scroll">
+              {completedJobs.map(job => {
+                const displayName = job.agent_name || job.model_name || job.model_id || job.id;
+                const taskCount = Array.isArray(job.tasks) ? job.tasks.length : 0;
+                const benchmarkList = (job.benchmarks || []).join(', ');
+
+                return (
+                  <label
+                    key={job.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+                      selectedJobIds.includes(job.id) ? 'bg-blue-500/10' : 'hover:bg-surface'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedJobIds.includes(job.id)}
+                      onChange={() => toggleJob(job.id)}
+                      className="rounded border-edge flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-on-canvas truncate">
+                        {displayName}
+                      </div>
+                      <div className="text-[10px] text-on-muted flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                        <span>{t('source.model', 'Model')}: {(job.model_id || '').trim()}</span>
+                        {taskCount > 0 && <span>{taskCount} {t('source.tasks', 'tasks')}</span>}
+                        {job.completed_at && <span>{fmtDate(job.completed_at)}</span>}
+                      </div>
+                      {benchmarkList && (
+                        <div className="text-[10px] text-on-muted/60 truncate mt-0.5">
+                          {benchmarkList}
+                        </div>
                       )}
                     </div>
-                  </div>
-                  {item.score != null && (
-                    <div className={`text-sm font-bold flex-shrink-0 ${
-                      item.score >= 80 ? 'text-blue-400' :
-                      item.score >= 60 ? 'text-green-400' :
-                      item.score >= 40 ? 'text-yellow-400' :
-                      'text-red-400'
-                    }`}>
-                      {Math.round(item.score)}
+                    <div className="text-[10px] text-on-muted/50 flex-shrink-0 font-mono">
+                      {job.id.slice(0, 8)}
                     </div>
-                  )}
-                </label>
-              ))}
+                  </label>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Custom system prompt (for custom scenario or override) */}
+        {/* Custom system prompt */}
         {(scenarioType === 'custom' || systemPrompt) && (
           <div>
             <label className="block text-xs text-on-muted mb-1">{t('generate.systemPrompt')}</label>
@@ -300,7 +307,7 @@ export default function SourceSelectionPanel({ existingReport, onReportCreated, 
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={selectedModels.length === 0 || creating}
+            disabled={selectedJobIds.length === 0 || creating}
             className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors"
           >
             {creating ? '...' : t('generate.button')}

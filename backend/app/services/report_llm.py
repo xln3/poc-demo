@@ -95,55 +95,106 @@ HTML_FORMAT_GUIDE = """
 # ---- Data context builder ----
 
 async def build_data_context(source_data: Dict[str, Any]) -> str:
-    """Fetch real eval data and build a JSON context string for the LLM."""
+    """Fetch real eval data and build a JSON context string for the LLM.
+
+    Supports two modes:
+    - job_ids: fetch job-scoped results (preferred, run-specific)
+    - models: fetch model-aggregated results (legacy fallback)
+    """
     context: Dict[str, Any] = {}
 
+    job_ids = source_data.get("job_ids", [])
     models = source_data.get("models", [])
-    if not models:
-        return json.dumps({"error": "No models specified in source_data"}, ensure_ascii=False)
 
-    for model_name in models:
-        model_name = str(model_name).strip()
-        if not model_name:
-            continue
-        try:
-            detail = await eval_bridge.get_eval_result_detail(model_name)
-            context[model_name] = {
-                "summary": detail,
-            }
+    if not job_ids and not models:
+        return json.dumps({"error": "No data source specified"}, ensure_ascii=False)
 
-            # Fetch high-risk samples for tasks with low scores
-            # tasks can be a list of dicts or a dict — normalize
-            tasks_raw = detail.get("tasks", [])
-            if isinstance(tasks_raw, list):
-                tasks_list = tasks_raw
-            elif isinstance(tasks_raw, dict):
-                tasks_list = [{"task": k, **v} for k, v in tasks_raw.items()]
-            else:
-                tasks_list = []
+    # Prefer job-scoped results when job_ids are available
+    if job_ids:
+        for job_id in job_ids:
+            job_id = str(job_id).strip()
+            if not job_id:
+                continue
+            try:
+                detail = await eval_bridge.get_result_by_job(job_id)
+                label = detail.get("model", job_id)
+                context[f"{label} (job:{job_id[:8]})"] = {
+                    "summary": detail,
+                }
 
-            high_risk_samples = {}
-            sample_count = 0
-            for task_data in tasks_list:
-                if not isinstance(task_data, dict):
-                    continue
-                task_name = task_data.get("task", "")
-                score = task_data.get("safety_score", task_data.get("score", 100))
-                if score <= 60 and sample_count < 10 and task_name:
-                    try:
-                        samples = await eval_bridge.get_eval_result_samples(
-                            model_name, task_name
-                        )
-                        high_risk_samples[task_name] = samples.get("samples", [])[:5]
-                        sample_count += 1
-                    except Exception:
-                        pass
-            if high_risk_samples:
-                context[model_name]["high_risk_samples"] = high_risk_samples
+                # Fetch high-risk samples for tasks with low scores
+                tasks_raw = detail.get("tasks", [])
+                if isinstance(tasks_raw, list):
+                    tasks_list = tasks_raw
+                elif isinstance(tasks_raw, dict):
+                    tasks_list = [{"task": k, **v} for k, v in tasks_raw.items()]
+                else:
+                    tasks_list = []
 
-        except Exception as e:
-            logger.warning("Failed to fetch data for model %s: %s", model_name, e)
-            context[model_name] = {"error": str(e)}
+                high_risk_samples = {}
+                sample_count = 0
+                for task_data in tasks_list:
+                    if not isinstance(task_data, dict):
+                        continue
+                    task_name = task_data.get("task", "")
+                    score = task_data.get("safety_score", task_data.get("score", 100))
+                    if score <= 60 and sample_count < 10 and task_name:
+                        try:
+                            samples = await eval_bridge.get_job_task_samples(
+                                job_id, task_name
+                            )
+                            high_risk_samples[task_name] = samples.get("samples", [])[:5]
+                            sample_count += 1
+                        except Exception:
+                            pass
+                if high_risk_samples:
+                    context[f"{label} (job:{job_id[:8]})"]["high_risk_samples"] = high_risk_samples
+
+            except Exception as e:
+                logger.warning("Failed to fetch job-scoped data for %s: %s", job_id, e)
+                context[f"job:{job_id[:8]}"] = {"error": str(e)}
+    else:
+        # Legacy: model-aggregated results
+        for model_name in models:
+            model_name = str(model_name).strip()
+            if not model_name:
+                continue
+            try:
+                detail = await eval_bridge.get_eval_result_detail(model_name)
+                context[model_name] = {
+                    "summary": detail,
+                }
+
+                tasks_raw = detail.get("tasks", [])
+                if isinstance(tasks_raw, list):
+                    tasks_list = tasks_raw
+                elif isinstance(tasks_raw, dict):
+                    tasks_list = [{"task": k, **v} for k, v in tasks_raw.items()]
+                else:
+                    tasks_list = []
+
+                high_risk_samples = {}
+                sample_count = 0
+                for task_data in tasks_list:
+                    if not isinstance(task_data, dict):
+                        continue
+                    task_name = task_data.get("task", "")
+                    score = task_data.get("safety_score", task_data.get("score", 100))
+                    if score <= 60 and sample_count < 10 and task_name:
+                        try:
+                            samples = await eval_bridge.get_eval_result_samples(
+                                model_name, task_name
+                            )
+                            high_risk_samples[task_name] = samples.get("samples", [])[:5]
+                            sample_count += 1
+                        except Exception:
+                            pass
+                if high_risk_samples:
+                    context[model_name]["high_risk_samples"] = high_risk_samples
+
+            except Exception as e:
+                logger.warning("Failed to fetch data for model %s: %s", model_name, e)
+                context[model_name] = {"error": str(e)}
 
     # Fetch risk hierarchy for category grouping
     try:

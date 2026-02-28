@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Component } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
@@ -10,15 +10,57 @@ import TableOfContents from './TableOfContents.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
 import { updateModule, generateChartConfig } from '../../api/reportEditorApi.js';
 
+/* Error boundary to catch BlockNote internal crashes (e.g. "t2 is undefined") */
+class EditorErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('BlockNote editor error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="text-center max-w-md">
+            <div className="text-3xl mb-3">⚠</div>
+            <p className="text-sm font-medium text-on-canvas mb-2">
+              {this.props.errorTitle || 'Editor Error'}
+            </p>
+            <p className="text-xs text-on-muted mb-4">
+              {this.state.error?.message || 'An unexpected error occurred in the editor.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="px-4 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+            >
+              {this.props.retryLabel || 'Retry'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /**
  * Modular Block Editor — BlockNote-based editor for modular reports.
  *
- * Layout:
- * ┌──────────┬──────────────────────┬──────────────┐
- * │  Module  │     Block Editor     │  Side Panel  │
- * │   TOC    │                      │  (Chart/     │
- * │          │                      │   History)   │
- * └──────────┴──────────────────────┴──────────────┘
+ * 1:8:1 three-column layout:
+ * ┌──────┬──────────────────────────────────┬──────┐
+ * │Module│          Block Editor             │ Full │
+ * │ Dir  │          (center)                 │ TOC  │
+ * │ (1)  │            (8)                    │ (1)  │
+ * └──────┴──────────────────────────────────┴──────┘
+ *
+ * Right column shows full multi-level TOC by default,
+ * replaced by Chart Editor or History panel when open.
  */
 export default function ModularBlockEditor({
   report,
@@ -49,37 +91,56 @@ export default function ModularBlockEditor({
   });
 
   // Initialize editor content from modules
+  const [editorError, setEditorError] = useState(null);
+
   useEffect(() => {
     if (!editor || !modules?.length) return;
 
-    const blocks = [];
-    for (const mod of modules) {
-      // Module header as heading
-      blocks.push({
-        type: 'heading',
-        props: { level: 2 },
-        content: [{ type: 'text', text: mod.title, styles: {} }],
-      });
+    try {
+      const blocks = [];
+      for (const mod of modules) {
+        // Module header as heading
+        blocks.push({
+          type: 'heading',
+          props: { level: 2 },
+          content: [{ type: 'text', text: mod.title || 'Untitled', styles: {} }],
+        });
 
-      // Parse module HTML content into blocks
-      if (mod.content) {
-        try {
-          const parsed = editor.tryParseHTMLToBlocks(mod.content);
-          blocks.push(...parsed);
-        } catch (e) {
-          // Fallback: add as paragraph
+        // Parse module HTML content into blocks — skip null/empty/pending
+        const content = mod.content;
+        if (content && typeof content === 'string' && content.trim()) {
+          try {
+            const parsed = editor.tryParseHTMLToBlocks(content);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              blocks.push(...parsed);
+            }
+          } catch (e) {
+            console.warn('Failed to parse module HTML, using plaintext fallback:', e);
+            const plainText = content.replace(/<[^>]*>/g, '').trim();
+            if (plainText) {
+              blocks.push({
+                type: 'paragraph',
+                content: [{ type: 'text', text: plainText, styles: {} }],
+              });
+            }
+          }
+        } else if (mod.status === 'pending' || mod.status === 'generating') {
           blocks.push({
             type: 'paragraph',
-            content: [{ type: 'text', text: mod.content.replace(/<[^>]*>/g, ''), styles: {} }],
+            content: [{ type: 'text', text: `(${mod.status}...)`, styles: {} }],
           });
         }
       }
-    }
 
-    if (blocks.length > 0) {
-      editor.replaceBlocks(editor.document, blocks);
+      if (blocks.length > 0) {
+        editor.replaceBlocks(editor.document, blocks);
+      }
+      setEditorError(null);
+    } catch (e) {
+      console.error('Failed to initialize editor content:', e);
+      setEditorError(e.message || 'Failed to load content');
     }
-  }, [modules?.map(m => m.id).join(',')]);
+  }, [modules?.map(m => m.id + ':' + (m.status || '')).join(',')]);
 
   // Auto-save with 5s debounce
   const handleContentChange = useCallback(() => {
@@ -216,131 +277,269 @@ ${html}
     setTimeout(() => printWin.print(), 500);
   }, [editor, report]);
 
+  // Extract headings from all modules for the right-side TOC
+  const allHeadings = useMemo(() => {
+    if (!modules?.length) return [];
+    const result = [];
+    for (const mod of modules) {
+      // Add module title as H2
+      result.push({ id: `mod-${mod.id}`, text: mod.title || 'Untitled', level: 2 });
+      // Parse headings from module content
+      if (mod.content && typeof mod.content === 'string') {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(mod.content, 'text/html');
+          const nodes = doc.querySelectorAll('h2, h3, h4');
+          nodes.forEach((node, i) => {
+            const text = node.textContent.trim();
+            if (text) {
+              result.push({
+                id: node.id || `mod-${mod.id}-h-${i}`,
+                text,
+                level: parseInt(node.tagName[1]),
+              });
+            }
+          });
+        } catch { /* ignore parse errors */ }
+      }
+    }
+    return result;
+  }, [modules]);
+
+  // Right-side TOC state
+  const [tocCollapsed, setTocCollapsed] = useState(new Set());
+  const tocHasChildren = (index) => {
+    const current = allHeadings[index];
+    if (!current) return false;
+    for (let i = index + 1; i < allHeadings.length; i++) {
+      if (allHeadings[i].level <= current.level) break;
+      if (allHeadings[i].level > current.level) return true;
+    }
+    return false;
+  };
+  const tocIsVisible = (index) => {
+    const h = allHeadings[index];
+    if (h.level === 2) return true;
+    for (let i = index - 1; i >= 0; i--) {
+      if (allHeadings[i].level < h.level) {
+        if (tocCollapsed.has(allHeadings[i].id)) return false;
+        return tocIsVisible(i);
+      }
+    }
+    return true;
+  };
+
+  if (editorError) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center max-w-md">
+          <div className="text-3xl mb-3">⚠</div>
+          <p className="text-sm font-medium text-on-canvas mb-2">
+            {t('editor.loadError', 'Failed to load editor')}
+          </p>
+          <p className="text-xs text-on-muted mb-4">{editorError}</p>
+          <button
+            type="button"
+            onClick={() => setEditorError(null)}
+            className="px-4 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+          >
+            {t('editor.retry', 'Retry')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left: Module TOC */}
-      <div className="w-48 flex-shrink-0 border-r border-edge overflow-y-auto bg-surface/50">
-        <div className="p-3">
-          <h4 className="text-xs font-semibold text-on-canvas/50 uppercase tracking-wider mb-2">
-            {t('module.modules', 'Modules')}
-          </h4>
-          {tocModules.map((mod) => (
+    <EditorErrorBoundary
+      errorTitle={t('editor.loadError', 'Editor Error')}
+      retryLabel={t('editor.retry', 'Retry')}
+    >
+      <div className="flex h-full overflow-hidden">
+        {/* Left: Module TOC — 1 part */}
+        <div className="flex-shrink-0 border-r border-edge overflow-y-auto bg-surface/50" style={{ width: 'calc(100% / 10)' }}>
+          <div className="p-2">
+            <h4 className="text-[10px] font-semibold text-on-canvas/50 uppercase tracking-wider mb-2">
+              {t('module.modules', 'Modules')}
+            </h4>
+            {tocModules.map((mod) => (
+              <button
+                key={mod.id}
+                type="button"
+                onClick={() => setActiveModuleIdx(mod.index)}
+                className={`w-full text-left px-1.5 py-1 text-xs rounded mb-0.5 flex items-center gap-1.5 ${
+                  activeModuleIdx === mod.index
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    : 'text-on-canvas/70 hover:bg-surface'
+                }`}
+              >
+                <span className="flex-shrink-0 text-[10px]">
+                  {mod.status === 'ready' && <span className="text-green-500">&#10003;</span>}
+                  {mod.status === 'generating' && <span className="text-blue-500 animate-spin inline-block">&#9696;</span>}
+                  {mod.status === 'error' && <span className="text-red-500">&#10007;</span>}
+                  {mod.status === 'pending' && <span className="text-gray-400">&#9675;</span>}
+                </span>
+                <span className="truncate">{mod.title}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Action buttons */}
+          <div className="p-2 border-t border-edge space-y-1">
             <button
-              key={mod.id}
               type="button"
-              onClick={() => setActiveModuleIdx(mod.index)}
-              className={`w-full text-left px-2 py-1.5 text-sm rounded mb-1 flex items-center gap-2 ${
-                activeModuleIdx === mod.index
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-on-canvas/70 hover:bg-surface'
+              onClick={() => setSidePanel(sidePanel === 'history' ? null : 'history')}
+              className="w-full px-1.5 py-1 text-[10px] rounded border border-edge hover:bg-surface text-on-canvas/70"
+            >
+              {t('editor.history', 'History')}
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPDF}
+              className="w-full px-1.5 py-1 text-[10px] rounded border border-edge hover:bg-surface text-on-canvas/70"
+            >
+              {t('editor.exportPDF', 'Export PDF')}
+            </button>
+            <button
+              type="button"
+              onClick={saveAllModules}
+              className={`w-full px-1.5 py-1 text-[10px] rounded ${
+                saveStatus === 'saving' ? 'bg-gray-400 text-white' :
+                saveStatus === 'saved' ? 'bg-green-600 text-white' :
+                'bg-blue-600 text-white hover:bg-blue-700'
               }`}
             >
-              <span className="flex-shrink-0">
-                {mod.status === 'ready' && <span className="text-green-500">&#10003;</span>}
-                {mod.status === 'generating' && <span className="text-blue-500 animate-spin inline-block">&#9696;</span>}
-                {mod.status === 'error' && <span className="text-red-500">&#10007;</span>}
-                {mod.status === 'pending' && <span className="text-gray-400">&#9675;</span>}
-              </span>
-              <span className="truncate">{mod.title}</span>
+              {saveStatus === 'saving' ? t('editor.saving', 'Saving...') :
+               saveStatus === 'saved' ? t('editor.saved', 'Saved') :
+               t('editor.save', 'Save')}
             </button>
-          ))}
+          </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="p-3 border-t border-edge space-y-1.5">
-          <button
-            type="button"
-            onClick={() => setSidePanel(sidePanel === 'history' ? null : 'history')}
-            className="w-full px-2 py-1.5 text-xs rounded border border-edge hover:bg-surface text-on-canvas/70"
-          >
-            {t('editor.history', 'History')}
-          </button>
-          <button
-            type="button"
-            onClick={handleExportPDF}
-            className="w-full px-2 py-1.5 text-xs rounded border border-edge hover:bg-surface text-on-canvas/70"
-          >
-            {t('editor.exportPDF', 'Export PDF')}
-          </button>
-          <button
-            type="button"
-            onClick={saveAllModules}
-            className={`w-full px-2 py-1.5 text-xs rounded ${
-              saveStatus === 'saving' ? 'bg-gray-400 text-white' :
-              saveStatus === 'saved' ? 'bg-green-600 text-white' :
-              'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            {saveStatus === 'saving' ? t('editor.saving', 'Saving...') :
-             saveStatus === 'saved' ? t('editor.saved', 'Saved') :
-             t('editor.save', 'Save')}
-          </button>
-        </div>
-      </div>
-
-      {/* Center: Block Editor */}
-      <div className="flex-1 min-w-0 overflow-y-auto" ref={editorContainerRef}>
-        {/* Module headers with action buttons */}
-        {modules?.length > 0 && (
-          <div className="px-4 py-2 border-b border-edge bg-surface/30 flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-on-canvas">
-              {modules[activeModuleIdx]?.title}
-            </span>
-            <div className="ml-auto flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => onModuleRegenerate?.(modules[activeModuleIdx])}
-                className="px-2 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200"
-              >
-                {t('module.regenerate', 'Regenerate')}
-              </button>
-              <button
-                type="button"
-                onClick={() => onInsertModule?.(modules[activeModuleIdx]?.id, 'before')}
-                className="px-2 py-0.5 text-xs rounded border border-edge text-on-canvas/60 hover:bg-surface"
-              >
-                {t('module.insertBefore', '+ Before')}
-              </button>
-              <button
-                type="button"
-                onClick={() => onInsertModule?.(modules[activeModuleIdx]?.id, 'after')}
-                className="px-2 py-0.5 text-xs rounded border border-edge text-on-canvas/60 hover:bg-surface"
-              >
-                {t('module.insertAfter', '+ After')}
-              </button>
+        {/* Center: Block Editor — 8 parts */}
+        <div className="min-w-0 overflow-y-auto" style={{ width: 'calc(100% * 8 / 10)' }} ref={editorContainerRef}>
+          {/* Module header with action buttons */}
+          {modules?.length > 0 && (
+            <div className="px-4 py-2 border-b border-edge bg-surface/30 flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-on-canvas">
+                {modules[activeModuleIdx]?.title}
+              </span>
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onModuleRegenerate?.(modules[activeModuleIdx])}
+                  className="px-2 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200"
+                >
+                  {t('module.regenerate', 'Regenerate')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onInsertModule?.(modules[activeModuleIdx]?.id, 'before')}
+                  className="px-2 py-0.5 text-xs rounded border border-edge text-on-canvas/60 hover:bg-surface"
+                >
+                  {t('module.insertBefore', '+ Before')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onInsertModule?.(modules[activeModuleIdx]?.id, 'after')}
+                  className="px-2 py-0.5 text-xs rounded border border-edge text-on-canvas/60 hover:bg-surface"
+                >
+                  {t('module.insertAfter', '+ After')}
+                </button>
+              </div>
             </div>
+          )}
+
+          <div className="blocknote-editor-container p-4">
+            <BlockNoteView
+              editor={editor}
+              theme={isDark ? 'dark' : 'light'}
+              slashMenu={false}
+            />
+          </div>
+        </div>
+
+        {/* Right: Full TOC — 1 part (or side panel when open) */}
+        {sidePanel === 'chart' ? (
+          <ChartEditorPanel
+            visible={true}
+            chartConfig={chartEditorConfig}
+            onClose={() => { setSidePanel(null); setChartEditorConfig(null); }}
+            onApply={handleChartApply}
+            onAIModify={handleAIModifyChart}
+            isDark={isDark}
+          />
+        ) : sidePanel === 'history' && report ? (
+          <div className="flex-shrink-0 border-l border-edge overflow-y-auto" style={{ width: 'calc(100% / 10)', minWidth: 180 }}>
+            <HistoryPanel
+              reportId={report.id}
+              onClose={() => setSidePanel(null)}
+              onRollback={() => { setSidePanel(null); onUpdated?.(); }}
+            />
+          </div>
+        ) : (
+          <div className="flex-shrink-0 border-l border-edge overflow-y-auto bg-surface/50" style={{ width: 'calc(100% / 10)' }}>
+            <div className="p-2 border-b border-edge">
+              <span className="text-[10px] font-medium text-on-muted uppercase tracking-wider">
+                {t('editor.toc', 'Contents')}
+              </span>
+            </div>
+            <nav className="py-1">
+              {allHeadings.map((h, i) => {
+                if (!tocIsVisible(i)) return null;
+                const indent = (h.level - 2) * 10;
+                const expandable = tocHasChildren(i);
+                const isCollapsed = tocCollapsed.has(h.id);
+                const isModuleTitle = h.id.startsWith('mod-') && h.level === 2;
+
+                return (
+                  <div
+                    key={h.id}
+                    className={`flex items-center gap-0.5 px-1.5 py-0.5 cursor-pointer text-[10px] transition-colors rounded mx-0.5 ${
+                      isModuleTitle
+                        ? 'font-medium text-on-canvas'
+                        : 'text-on-muted hover:text-on-canvas hover:bg-surface'
+                    }`}
+                    style={{ paddingLeft: `${4 + indent}px` }}
+                    onClick={() => {
+                      // Find the module index for this heading
+                      if (isModuleTitle) {
+                        const modIdx = modules?.findIndex(m => h.id === `mod-${m.id}`);
+                        if (modIdx >= 0) setActiveModuleIdx(modIdx);
+                      }
+                    }}
+                  >
+                    {expandable && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTocCollapsed(prev => {
+                            const next = new Set(prev);
+                            if (next.has(h.id)) next.delete(h.id);
+                            else next.add(h.id);
+                            return next;
+                          });
+                        }}
+                        className="w-3 h-3 flex items-center justify-center flex-shrink-0 text-on-muted/60"
+                      >
+                        {isCollapsed ? '▸' : '▾'}
+                      </button>
+                    )}
+                    {!expandable && <span className="w-3 flex-shrink-0" />}
+                    <span className="truncate">{h.text}</span>
+                  </div>
+                );
+              })}
+              {allHeadings.length === 0 && (
+                <div className="px-2 py-3 text-[10px] text-on-muted/50 text-center">
+                  {t('editor.noContent', 'No content yet')}
+                </div>
+              )}
+            </nav>
           </div>
         )}
-
-        <div className="blocknote-editor-container p-4">
-          <BlockNoteView
-            editor={editor}
-            theme={isDark ? 'dark' : 'light'}
-            slashMenu={false}
-          />
-        </div>
       </div>
-
-      {/* Right: Side Panel */}
-      {sidePanel === 'chart' && (
-        <ChartEditorPanel
-          visible={true}
-          chartConfig={chartEditorConfig}
-          onClose={() => { setSidePanel(null); setChartEditorConfig(null); }}
-          onApply={handleChartApply}
-          onAIModify={handleAIModifyChart}
-          isDark={isDark}
-        />
-      )}
-      {sidePanel === 'history' && report && (
-        <div className="w-80 flex-shrink-0 border-l border-edge overflow-y-auto">
-          <HistoryPanel
-            reportId={report.id}
-            onClose={() => setSidePanel(null)}
-            onRollback={() => { setSidePanel(null); onUpdated?.(); }}
-          />
-        </div>
-      )}
-    </div>
+    </EditorErrorBoundary>
   );
 }
