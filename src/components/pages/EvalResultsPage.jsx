@@ -54,12 +54,12 @@ export default function EvalResultsPage({ onNavigate }) {
       }
       setResultMap(rmap);
 
-      // Fetch job-scoped results for running/completed jobs
+      // Fetch job-scoped results for all non-orphan jobs (including failed/cancelled)
       const validJobs = (Array.isArray(jobList) ? jobList : []).filter(
         j => !j.id?.startsWith('_orphan_')
       );
       const jobResultPromises = validJobs
-        .filter(j => j.status === 'running' || j.status === 'completed')
+        .filter(j => j.status !== 'pending')
         .map(j => fetchResultByJob(j.id)
           .then(detail => ({ jobId: j.id, detail }))
           .catch(() => ({ jobId: j.id, detail: null }))
@@ -332,7 +332,7 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
       {/* Actions */}
       <td className="py-3 px-2 text-center">
         <div className="flex items-center justify-center gap-1.5">
-          {status === 'completed' && hasResults && (
+          {(status === 'completed' || status === 'failed' || status === 'cancelled') && (
             <button
               type="button"
               onClick={() => onNavigate?.('eval-result-detail', { jobId })}
@@ -341,14 +341,11 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
               {t('results.details')}
             </button>
           )}
-          {status === 'completed' && !hasResults && (
-            <span className="text-xs text-on-dim">{t('status.noResults')}</span>
-          )}
           {(status === 'running' || status === 'pending') && (
             <>
               <button
                 type="button"
-                onClick={() => onNavigate?.('eval-progress', { jobId })}
+                onClick={() => onNavigate?.('eval-result-detail', { jobId })}
                 className="px-2 py-1 text-xs bg-amber-600/20 text-amber-400 rounded hover:bg-amber-600/30"
               >
                 {t('results.viewDetail')}
@@ -398,7 +395,7 @@ function StatusBadge({ status, t, tasksDone, tasksTotal, tasksSucceeded, tasksFa
           <div className="text-[10px] text-on-dim mt-0.5">{tasksDone}/{tasksTotal}</div>
         </div>
       )}
-      {(status === 'completed' || status === 'failed') && tasksTotal > 0 && (
+      {(status === 'completed' || status === 'failed' || status === 'cancelled') && tasksTotal > 0 && (
         <div className="text-[10px] mt-0.5">
           {tasksFailed > 0 ? (
             <span>

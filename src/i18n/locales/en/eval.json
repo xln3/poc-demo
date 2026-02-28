@@ -234,6 +234,7 @@
     "selectAgent": "Select Agent",
     "selectResult": "Select Evaluation Result",
     "evalRunning": "Evaluation is still running...",
+    "evalRunningHint": "Results will update automatically as tasks complete.",
     "level4": "Dataset Examples",
     "backToResults": "Back to Results",
     "noReports": "No reports for this evaluation",

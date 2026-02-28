@@ -234,6 +234,7 @@
     "selectAgent": "选择智能体",
     "selectResult": "选择评测结果",
     "evalRunning": "评测仍在运行中...",
+    "evalRunningHint": "任务完成后结果会自动更新。",
     "level4": "数据集示例",
     "backToResults": "返回结果列表",
     "noReports": "暂无关联报告",

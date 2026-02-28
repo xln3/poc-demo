@@ -41,18 +41,36 @@ export default function EvalResultDetailPage({ jobId, onNavigate }) {
   const [generatedReport, setGeneratedReport] = useState('');
   const [generating, setGenerating] = useState(false);
 
+  const pollRef = useRef(null);
+
   // Load job, results, hierarchy on mount
-  useEffect(() => {
+  const loadData = async (isInitial = false) => {
     if (!jobId) return;
-    Promise.all([
-      getEvaluation(jobId).catch(() => null),
-      fetchResultByJob(jobId).catch(() => null),
-      fetchRiskHierarchy().catch(() => []),
-    ]).then(([jobData, resultData, hier]) => {
+    try {
+      const [jobData, resultData, hier] = await Promise.all([
+        getEvaluation(jobId).catch(() => null),
+        fetchResultByJob(jobId).catch(() => null),
+        ...(isInitial ? [fetchRiskHierarchy().catch(() => [])] : []),
+      ]);
       setJob(jobData);
       setDetail(resultData);
-      setHierarchy(Array.isArray(hier) ? hier : (hier?.categories || []));
-    }).finally(() => setLoading(false));
+      if (isInitial && hier !== undefined) {
+        setHierarchy(Array.isArray(hier) ? hier : (hier?.categories || []));
+      }
+      // Stop polling when job finishes
+      if (jobData && jobData.status !== 'running' && jobData.status !== 'pending') {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      }
+    } finally {
+      if (isInitial) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData(true);
+    // Poll every 5s for running jobs
+    pollRef.current = setInterval(() => loadData(false), 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [jobId]);
 
   // Load samples when task selected
@@ -170,11 +188,20 @@ export default function EvalResultDetailPage({ jobId, onNavigate }) {
             <div className="text-xs text-on-dim">{(job.model_id || '').trim()}</div>
           )}
         </div>
-        {detail && (
+        {detail ? (
           <div className="flex items-center gap-2">
             <span className="text-lg font-bold text-on-canvas">{Math.round(detail.avg_score)}</span>
             <RiskLevelBadge level={detail.risk_level} />
           </div>
+        ) : job && (
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+            job.status === 'running' ? 'bg-blue-500/20 text-blue-400'
+            : job.status === 'failed' ? 'bg-red-500/20 text-red-400'
+            : job.status === 'cancelled' ? 'bg-amber-500/20 text-amber-400'
+            : 'bg-gray-500/20 text-gray-400'
+          }`}>
+            {t(`status.${job.status}`)}
+          </span>
         )}
       </div>
 
@@ -197,7 +224,7 @@ export default function EvalResultDetailPage({ jobId, onNavigate }) {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'overview' && detail && (
+      {activeTab === 'overview' && (
         <OverviewTab
           detail={detail}
           job={job}
@@ -212,14 +239,6 @@ export default function EvalResultDetailPage({ jobId, onNavigate }) {
         />
       )}
 
-      {activeTab === 'overview' && !detail && (
-        <div className="text-center text-on-muted py-8">
-          {job?.status === 'running' || job?.status === 'pending'
-            ? t('report.evalRunning')
-            : t('results.noResults')}
-        </div>
-      )}
-
       {activeTab === 'benchmark-details' && detail && (
         <BenchmarkDetailsTab
           detail={detail}
@@ -231,6 +250,9 @@ export default function EvalResultDetailPage({ jobId, onNavigate }) {
           samplesLoading={samplesLoading}
           t={t}
         />
+      )}
+      {activeTab === 'benchmark-details' && !detail && (
+        <div className="text-center text-on-muted py-8">{t('results.noResults')}</div>
       )}
 
       {activeTab === 'high-risk' && detail && (
@@ -246,6 +268,9 @@ export default function EvalResultDetailPage({ jobId, onNavigate }) {
           t={t}
           onNavigate={onNavigate}
         />
+      )}
+      {activeTab === 'high-risk' && !detail && (
+        <div className="text-center text-on-muted py-8">{t('results.noResults')}</div>
       )}
 
       {activeTab === 'dataset' && (
@@ -382,7 +407,8 @@ function groupTasksByHierarchy(tasks, hierarchy, lang) {
 // ============================================================
 
 function OverviewTab({ detail, job, hierarchy, lang, t, onSelectTask, onHighRisk, onGenerate, generating, generatedReport }) {
-  const highRiskTasks = detail.tasks.filter(tk => tk.risk_level === 'CRITICAL' || tk.risk_level === 'HIGH');
+  const detailTasks = detail?.tasks || [];
+  const highRiskTasks = detailTasks.filter(tk => tk.risk_level === 'CRITICAL' || tk.risk_level === 'HIGH');
 
   // Merge job.tasks status info with detail.tasks scores
   const jobTasks = job?.tasks || [];
@@ -394,8 +420,8 @@ function OverviewTab({ detail, job, hierarchy, lang, t, onSelectTask, onHighRisk
 
   // Build merged task list: completed tasks from detail + pending/running/failed from job
   const mergedTasks = useMemo(() => {
-    const detailTaskNames = new Set(detail.tasks.map(t => t.task));
-    const merged = [...detail.tasks.map(dt => ({
+    const detailTaskNames = new Set(detailTasks.map(t => t.task));
+    const merged = [...detailTasks.map(dt => ({
       ...dt,
       _status: 'completed',
       _jobTask: jobTaskMap[dt.task],
@@ -421,54 +447,98 @@ function OverviewTab({ detail, job, hierarchy, lang, t, onSelectTask, onHighRisk
     }
 
     return merged;
-  }, [detail.tasks, jobTasks]);
+  }, [detailTasks, jobTasks]);
+
+  const jobStatus = job?.status || 'pending';
+  const hasDetail = !!detail;
+
+  // Job status banner styles
+  const statusBannerConfig = {
+    running: { bg: 'bg-blue-600/10 border-blue-500/30', icon: '⏳', color: 'text-blue-400' },
+    pending: { bg: 'bg-gray-600/10 border-gray-500/30', icon: '⏳', color: 'text-gray-400' },
+    failed: { bg: 'bg-red-600/10 border-red-500/30', icon: '⚠', color: 'text-red-400' },
+    cancelled: { bg: 'bg-amber-600/10 border-amber-500/30', icon: '⊘', color: 'text-amber-400' },
+  };
 
   return (
     <div className="space-y-6">
-      {/* Score overview */}
-      <Section title={t('report.overview')}>
-        <div className="flex items-center gap-8">
-          <SafetyScoreGauge score={detail.avg_score} riskLevel={detail.risk_level} size={120} />
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <RiskLevelBadge level={detail.risk_level} />
-              <span className="text-on-surface">{detail.rating}</span>
-              <span className="text-on-dim">{'★'.repeat(detail.stars)}{'☆'.repeat(5 - detail.stars)}</span>
+      {/* Job status banner for non-completed jobs */}
+      {jobStatus !== 'completed' && (
+        <div className={`flex items-center gap-3 p-3 rounded-lg border ${statusBannerConfig[jobStatus]?.bg || 'bg-gray-600/10 border-gray-500/30'}`}>
+          <span className="text-lg">{statusBannerConfig[jobStatus]?.icon || '?'}</span>
+          <div className="flex-1">
+            <div className={`text-sm font-medium ${statusBannerConfig[jobStatus]?.color || 'text-on-muted'}`}>
+              {t(`status.${jobStatus}`)}
             </div>
-            <div className="text-sm text-on-muted">
-              {detail.tasks.length} {t('benchmarks.tasks')} | {t('results.evalDate')}: {detail.eval_date || '-'}
+            {(jobStatus === 'running' || jobStatus === 'pending') && (
+              <div className="text-xs text-on-dim mt-0.5">
+                {t('report.evalRunningHint')}
+              </div>
+            )}
+          </div>
+          {jobTasks.length > 0 && (
+            <div className="text-xs text-on-muted">
+              {jobTasks.filter(jt => jt.status === 'completed').length}/{jobTasks.length} {t('benchmarks.tasks')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Score overview — only show when we have result data */}
+      {hasDetail && (
+        <Section title={t('report.overview')}>
+          <div className="flex items-center gap-8">
+            <SafetyScoreGauge score={detail.avg_score} riskLevel={detail.risk_level} size={120} />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <RiskLevelBadge level={detail.risk_level} />
+                <span className="text-on-surface">{detail.rating}</span>
+                <span className="text-on-dim">{'★'.repeat(detail.stars)}{'☆'.repeat(5 - detail.stars)}</span>
+              </div>
+              <div className="text-sm text-on-muted">
+                {detailTasks.length} {t('benchmarks.tasks')} | {t('results.evalDate')}: {detail.eval_date || '-'}
+              </div>
             </div>
           </div>
-        </div>
-      </Section>
+        </Section>
+      )}
 
       {/* Score Details table with task status */}
-      <Section title={t('report.scoreTable')}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-edge">
-                <th className="text-left py-2 text-on-muted font-medium">{t('report.taskCol')}</th>
-                <th className="text-center py-2 text-on-muted font-medium">{t('report.statusCol')}</th>
-                <th className="text-right py-2 text-on-muted font-medium">{t('report.scoreCol')}</th>
-                <th className="text-center py-2 text-on-muted font-medium">{t('report.riskCol')}</th>
-                <th className="text-right py-2 text-on-muted font-medium">{t('report.samplesCol')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groupTasksByHierarchy(mergedTasks, hierarchy, lang).map(group => (
-                <GroupedTaskRows
-                  key={`${group.subcategory}::${group.benchmark}`}
-                  group={group}
-                  onSelectTask={onSelectTask}
-                  t={t}
-                  lang={lang}
-                />
-              ))}
-            </tbody>
-          </table>
+      {mergedTasks.length > 0 && (
+        <Section title={t('report.scoreTable')}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-edge">
+                  <th className="text-left py-2 text-on-muted font-medium">{t('report.taskCol')}</th>
+                  <th className="text-center py-2 text-on-muted font-medium">{t('report.statusCol')}</th>
+                  <th className="text-right py-2 text-on-muted font-medium">{t('report.scoreCol')}</th>
+                  <th className="text-center py-2 text-on-muted font-medium">{t('report.riskCol')}</th>
+                  <th className="text-right py-2 text-on-muted font-medium">{t('report.samplesCol')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupTasksByHierarchy(mergedTasks, hierarchy, lang).map(group => (
+                  <GroupedTaskRows
+                    key={`${group.subcategory}::${group.benchmark}`}
+                    group={group}
+                    onSelectTask={onSelectTask}
+                    t={t}
+                    lang={lang}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
+
+      {/* No data message when no tasks at all */}
+      {mergedTasks.length === 0 && (
+        <div className="text-center text-on-muted py-8">
+          {jobStatus === 'pending' ? t('report.evalRunning') : t('results.noResults')}
         </div>
-      </Section>
+      )}
 
       {/* Risk Analysis */}
       {highRiskTasks.length > 0 && (
@@ -508,24 +578,28 @@ function OverviewTab({ detail, job, hierarchy, lang, t, onSelectTask, onHighRisk
         </Section>
       )}
 
-      {/* Generate report */}
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={onGenerate}
-          disabled={generating}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
-        >
-          {generating ? t('report.generating') : t('results.generateReport')}
-        </button>
-      </div>
+      {/* Generate report — only when we have results */}
+      {hasDetail && (
+        <>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={generating}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {generating ? t('report.generating') : t('results.generateReport')}
+            </button>
+          </div>
 
-      {generatedReport && (
-        <Section title={t('results.generateReport')}>
-          <pre className="whitespace-pre-wrap text-sm text-on-surface bg-canvas rounded-lg p-4 max-h-96 overflow-y-auto custom-scroll">
-            {generatedReport}
-          </pre>
-        </Section>
+          {generatedReport && (
+            <Section title={t('results.generateReport')}>
+              <pre className="whitespace-pre-wrap text-sm text-on-surface bg-canvas rounded-lg p-4 max-h-96 overflow-y-auto custom-scroll">
+                {generatedReport}
+              </pre>
+            </Section>
+          )}
+        </>
       )}
     </div>
   );
