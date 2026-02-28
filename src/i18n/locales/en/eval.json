@@ -41,7 +41,8 @@
     "skipped": "Skipped",
     "cancelled": "Cancelled",
     "tasksBreakdown": "{{succeeded}} passed / {{failed}} failed",
-    "noResults": "No score data"
+    "noResults": "No score data",
+    "retries": "{{count}} retries"
   },
 
   "benchmarks": {

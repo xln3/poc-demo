@@ -41,7 +41,8 @@
     "skipped": "已跳过",
     "cancelled": "已取消",
     "tasksBreakdown": "{{succeeded}} 成功 / {{failed}} 失败",
-    "noResults": "无评分数据"
+    "noResults": "无评分数据",
+    "retries": "重试 {{count}} 次"
   },
 
   "benchmarks": {

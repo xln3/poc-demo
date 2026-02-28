@@ -600,8 +600,13 @@ function GroupedTaskRows({ group, onSelectTask, t, lang }) {
                     {t('status.failed')}
                   </span>
                   {task._jobTask?.error && (
-                    <span className="text-[9px] text-red-400 max-w-[120px] truncate" title={task._jobTask.error}>
+                    <span className="text-[9px] text-red-400 max-w-[200px] truncate block" title={task._jobTask.error}>
                       {task._jobTask.error}
+                    </span>
+                  )}
+                  {task._jobTask?.retry_count > 0 && (
+                    <span className="text-[9px] text-on-dim">
+                      {t('status.retries', { count: task._jobTask.retry_count })}
                     </span>
                   )}
                 </div>
