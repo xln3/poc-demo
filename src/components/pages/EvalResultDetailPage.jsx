@@ -65,13 +65,9 @@ export default function EvalResultDetailPage({ jobId, onNavigate }) {
     const done = (data) => { if (!stale()) { setSamples(data.samples || []); setSamplesLoading(false); } };
     const fail = () => { if (!stale()) { setSamples([]); setSamplesLoading(false); } };
 
-    fetchJobTaskSamples(jobId, selectedTask).then(done).catch(() => {
-      if (stale()) return;
-      // Fallback to model-based
-      const mid = (job?.model_id || '').trim().split('/').pop();
-      if (mid) fetchResultSamples(mid, selectedTask).then(done).catch(fail);
-      else fail();
-    });
+    // Only use job-scoped samples — never fall back to model-level
+    // to avoid cross-contamination between runs
+    fetchJobTaskSamples(jobId, selectedTask).then(done).catch(fail);
   }, [selectedTask, jobId]);
 
   // Load dataset examples when tab selected
