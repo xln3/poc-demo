@@ -42,7 +42,18 @@
     "cancelled": "已取消",
     "tasksBreakdown": "{{succeeded}} 成功 / {{failed}} 失败",
     "noResults": "无评分数据",
-    "retries": "重试 {{count}} 次"
+    "retries": "重试 {{count}} 次",
+    "errorType": {
+      "AUTH_FAILURE": "认证失败 (API Key 无效或过期)",
+      "ACCESS_DENIED": "访问被拒绝 (权限不足)",
+      "RATE_LIMITED": "速率限制 (请求过于频繁)",
+      "MODEL_NOT_FOUND": "模型未找到 (ID 或地址错误)",
+      "CONNECTION_ERROR": "连接失败 (无法访问 API)",
+      "TIMEOUT": "执行超时",
+      "RESOURCE_EXHAUSTED": "资源不足 (内存/GPU 耗尽)",
+      "CONTENT_FILTERED": "内容过滤 (模型拒绝响应)",
+      "UNKNOWN_ERROR": "未知错误"
+    }
   },
 
   "benchmarks": {

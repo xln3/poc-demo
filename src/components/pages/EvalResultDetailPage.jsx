@@ -599,8 +599,13 @@ function GroupedTaskRows({ group, onSelectTask, t, lang }) {
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/20 text-red-400">
                     {t('status.failed')}
                   </span>
+                  {task._jobTask?.error_type && (
+                    <span className="text-[9px] text-red-400 font-medium">
+                      {t(`status.errorType.${task._jobTask.error_type}`, { defaultValue: task._jobTask.error_type })}
+                    </span>
+                  )}
                   {task._jobTask?.error && (
-                    <span className="text-[9px] text-red-400 max-w-[200px] truncate block" title={task._jobTask.error}>
+                    <span className="text-[9px] text-on-muted max-w-[200px] truncate block" title={task._jobTask.error}>
                       {task._jobTask.error}
                     </span>
                   )}

@@ -42,7 +42,18 @@
     "cancelled": "Cancelled",
     "tasksBreakdown": "{{succeeded}} passed / {{failed}} failed",
     "noResults": "No score data",
-    "retries": "{{count}} retries"
+    "retries": "{{count}} retries",
+    "errorType": {
+      "AUTH_FAILURE": "Auth failure (invalid API key)",
+      "ACCESS_DENIED": "Access denied (insufficient permissions)",
+      "RATE_LIMITED": "Rate limited (too many requests)",
+      "MODEL_NOT_FOUND": "Model not found (wrong ID or endpoint)",
+      "CONNECTION_ERROR": "Connection error (cannot reach API)",
+      "TIMEOUT": "Execution timeout",
+      "RESOURCE_EXHAUSTED": "Resource exhausted (OOM)",
+      "CONTENT_FILTERED": "Content filtered (model refused)",
+      "UNKNOWN_ERROR": "Unknown error"
+    }
   },
 
   "benchmarks": {
