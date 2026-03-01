@@ -27,7 +27,7 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     "BOLD": "bold",
     "AHB": "ahb",
     "StereoSet": "stereoset",
-    "CValues": "cvalues",  # not in catalog
+    "CValues": "cvalues",
     "CulturalBench": "culturalbench",
     "UCCB": "uccb",
     "MGSM": "mgsm",
@@ -46,10 +46,10 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     "ChemBench": "chembench",
     "HealthBench": "healthbench",
     # 6. Tool Calling
-    "AgentDojo": "agentdojo",  # not in catalog
+    "AgentDojo": "agentdojo",
     "BFCL": "bfcl",
     "AgentHarm": "agentharm",
-    "OpenAgentSafety": "open_agent_safety",  # not in catalog
+    "OpenAgentSafety": "open_agent_safety",
     # 7. RAG
     "SafeRAG": "saferag",
     "ClashEval": "clash_eval",
@@ -81,7 +81,7 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     "TruthfulQA": "truthfulqa",
     "GDPval": "gdpval",
     # 14. Long-Running
-    "ASB (Agent Security Bench)": "asb",  # not in catalog
+    "ASB (Agent Security Bench)": "asb",
     "GDM Self-Reasoning": "gdm_self_reasoning",
     "GDM Capabilities": "gdm_capabilities",  # not in catalog
     # 15. Advanced Anomalous
@@ -515,6 +515,7 @@ def build_merged_hierarchy(
                     "display_name_en": bm_meta.get("display_name_en", bm_name),
                     "description": bm_meta.get("description", ""),
                     "description_en": bm_meta.get("description_en", ""),
+                    "reference": bm_meta.get("reference", ""),
                 }
                 sub_copy["benchmarks"].append(bm_entry)
                 sub_total += 1
