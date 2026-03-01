@@ -86,16 +86,20 @@ export default function EvalResultsPage({ onNavigate }) {
         const bTime = b.created_at || b.started_at || 0;
         return new Date(bTime) - new Date(aTime);
       });
-      // Add orphaned results (results with no matching job)
+      // Add orphaned results (results with no matching job that has actual results)
       const allEntries = [...sorted];
       for (const r of results) {
         const modelKey = (r.model || '').trim();
-        const hasJob = sorted.some(j => {
+        // Only suppress orphan if a matching job actually has result data.
+        // If all matching jobs are still running (no results yet), keep
+        // the model-level aggregate visible as a fallback.
+        const hasJobWithResults = sorted.some(j => {
           const mid = (j.model_id || '').trim();
           const midLast = mid.split('/').pop();
-          return mid === modelKey || midLast === modelKey;
+          const modelMatch = mid === modelKey || midLast === modelKey;
+          return modelMatch && jrMap[j.job_id || j.id];
         });
-        if (!hasJob) {
+        if (!hasJobWithResults) {
           allEntries.push({
             id: '_orphan_' + modelKey,
             model_id: modelKey,
