@@ -87,7 +87,7 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     # 15. Advanced Anomalous
     "Agentic Misalignment": "agentic_misalignment",
     "GDM Stealth": "gdm_stealth",
-    "Survive at All Costs": "survive_at_all_costs",  # not in catalog
+    "Survive at All Costs": "survive_at_all_costs",
 }
 
 # Static 4-level risk hierarchy derived from benchmarks_doc.csv.
