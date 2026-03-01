@@ -58,7 +58,7 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     "CyberSecEval_3": "cyberseceval_3",
     "Raccoon": "raccoon",
     "Multimodal Situational Safety": "mssbench",
-    "OSWorld": "osworld",  # not in catalog
+    "OSWorld": "osworld",
     "MathVista": "mathvista",
     "MMMU": "mmmu",
     "MMIU": "mmiu",
