@@ -52,6 +52,7 @@
       "TIMEOUT": "执行超时",
       "RESOURCE_EXHAUSTED": "资源不足 (内存/GPU 耗尽)",
       "CONTENT_FILTERED": "内容过滤 (模型拒绝响应)",
+      "DATA_MISSING": "数据缺失 (数据集文件未找到)",
       "UNKNOWN_ERROR": "未知错误"
     }
   },

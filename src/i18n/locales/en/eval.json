@@ -52,6 +52,7 @@
       "TIMEOUT": "Execution timeout",
       "RESOURCE_EXHAUSTED": "Resource exhausted (OOM)",
       "CONTENT_FILTERED": "Content filtered (model refused)",
+      "DATA_MISSING": "Data missing (dataset files not found)",
       "UNKNOWN_ERROR": "Unknown error"
     }
   },
