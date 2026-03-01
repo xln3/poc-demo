@@ -70,7 +70,7 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     "Mind2Web-SC": "mind2web_sc",
     "AssistantBench": "assistant_bench",
     # 10. Multi-Agent
-    "PsySafe": "psysafe",  # not in catalog
+    "PsySafe": "psysafe",
     # 11. Personalization
     "Personalized Safety Benchmark": "personalized_safety",
     "Personality (BFI/TRAIT/PRIME)": "personality",
