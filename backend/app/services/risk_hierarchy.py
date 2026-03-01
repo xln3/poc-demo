@@ -51,7 +51,7 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     "AgentHarm": "agentharm",
     "OpenAgentSafety": "open_agent_safety",  # not in catalog
     # 7. RAG
-    "SafeRAG": "saferag",  # not in catalog
+    "SafeRAG": "saferag",
     "ClashEval": "clash_eval",
     # 8. Multimodal
     "MM-SafetyBench": "mm_safety_bench",
