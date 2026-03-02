@@ -40,7 +40,7 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     "SandboxBench": "sandboxbench",  # not in catalog
     "SEvenLLM": "sevenllm",
     "SecQA": "sec_qa",
-    "3CB": "3cb",  # not in catalog
+    "3CB": "threecb",
     "SOSBench": "sosbench",
     "LAB-Bench": "lab_bench",
     "ChemBench": "chembench",
@@ -83,7 +83,6 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     # 14. Long-Running
     "ASB (Agent Security Bench)": "asb",
     "GDM Self-Reasoning": "gdm_self_reasoning",
-    "GDM Capabilities": "gdm_capabilities",  # not in catalog
     # 15. Advanced Anomalous
     "Agentic Misalignment": "agentic_misalignment",
     "GDM Stealth": "gdm_stealth",
@@ -403,7 +402,7 @@ RISK_HIERARCHY: List[Dict[str, Any]] = [
                 "name_en": "14.1 Long-Running Safety",
                 "description": "持续运行智能体逐渐累积错误导致不可控行为",
                 "description_en": "Risk of long-running agents gradually accumulating errors leading to uncontrollable behavior",
-                "benchmarks": ["ASB (Agent Security Bench)", "GDM Self-Reasoning", "GDM Capabilities"],
+                "benchmarks": ["ASB (Agent Security Bench)", "GDM Self-Reasoning"],
             },
         ],
     },
