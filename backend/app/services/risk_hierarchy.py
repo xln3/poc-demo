@@ -37,7 +37,7 @@ CSV_TO_CATALOG_MAP: Dict[str, str] = {
     "CVE-bench": "cve_bench",
     "WMDP": "wmdp",
     "Cybench": "cybench",  # not in catalog
-    "SandboxBench": "sandboxbench",  # not in catalog
+    # SandboxBench: removed from upstream inspect_evals (#865), no longer available
     "SEvenLLM": "sevenllm",
     "SecQA": "sec_qa",
     "3CB": "threecb",
@@ -227,7 +227,7 @@ RISK_HIERARCHY: List[Dict[str, Any]] = [
                 "name_en": "5.1 Cybersecurity",
                 "description": "模型可能被利用发起或协助网络攻击行为",
                 "description_en": "Risk of the model being exploited to launch or assist in cyberattack activities",
-                "benchmarks": ["CVE-bench", "WMDP", "Cybench", "SandboxBench", "CyberSecEval_2", "SEvenLLM", "SecQA", "3CB"],
+                "benchmarks": ["CVE-bench", "WMDP", "Cybench", "CyberSecEval_2", "SEvenLLM", "SecQA", "3CB"],
             },
             {
                 "id": "sub-5-2",
