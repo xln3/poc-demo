@@ -516,6 +516,13 @@ def build_merged_hierarchy(
                     "description": bm_meta.get("description", ""),
                     "description_en": bm_meta.get("description_en", ""),
                     "reference": bm_meta.get("reference", ""),
+                    "paper_title": bm_meta.get("paper_title", ""),
+                    "paper_url": bm_meta.get("paper_url", ""),
+                    "paper_venue": bm_meta.get("paper_venue", ""),
+                    "summary": bm_meta.get("summary", ""),
+                    "summary_en": bm_meta.get("summary_en", ""),
+                    "score_adaptation": bm_meta.get("score_adaptation", ""),
+                    "score_adaptation_en": bm_meta.get("score_adaptation_en", ""),
                 }
                 sub_copy["benchmarks"].append(bm_entry)
                 sub_total += 1

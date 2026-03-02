@@ -241,20 +241,27 @@ function BenchmarkNode({ bm, parentId, isZh, expanded, toggleExpand, t }) {
   const nodeId = `bm-${parentId}-${bm.name}`;
   const isExpanded = expanded.has(nodeId);
   const hasTasks = bm.tasks && bm.tasks.length > 0;
-  const bmDesc = isZh ? bm.description : (bm.description_en || bm.description);
+  const bmSummary = isZh ? bm.summary : (bm.summary_en || bm.summary);
+  const scoreAdapt = isZh ? bm.score_adaptation : (bm.score_adaptation_en || bm.score_adaptation);
 
   return (
     <div className="border-t border-edge/50">
-      <div className={`w-full px-5 py-2 pl-16 flex items-center justify-between transition-colors ${
-        hasTasks ? 'hover:bg-surface-hover/20 cursor-pointer' : 'cursor-default'
+      {/* Header row */}
+      <div className={`w-full px-5 py-2.5 pl-16 flex items-center justify-between transition-colors ${
+        'hover:bg-surface-hover/20 cursor-pointer'
       }`}
-        onClick={() => hasTasks && toggleExpand(nodeId)}
+        onClick={() => toggleExpand(nodeId)}
       >
         <div className="flex items-center gap-2">
-          {hasTasks && <span className="text-xs">{isExpanded ? '▾' : '▸'}</span>}
+          <span className="text-xs">{isExpanded ? '▾' : '▸'}</span>
           <span className="text-sm text-on-surface">
             {isZh ? (bm.display_name || bm.name) : (bm.display_name_en || bm.name)}
           </span>
+          {bm.paper_venue && (
+            <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium flex-shrink-0">
+              {bm.paper_venue}
+            </span>
+          )}
           {bm.reference && (
             <a
               href={bm.reference}
@@ -275,14 +282,45 @@ function BenchmarkNode({ bm, parentId, isZh, expanded, toggleExpand, t }) {
         </span>
       </div>
 
-      {/* Benchmark description + Tasks */}
+      {/* Expanded: citation, summary, score adaptation, tasks */}
       {isExpanded && (
-        <div className="px-5 pl-20 pb-2">
-          {bmDesc && (
-            <p className="text-xs text-on-muted mb-2">{bmDesc}</p>
+        <div className="px-5 pl-20 pb-3 space-y-2.5">
+          {/* Paper citation */}
+          {bm.paper_title && (
+            <div className="text-xs text-on-muted">
+              <span className="text-on-dim">{isZh ? '论文：' : 'Paper: '}</span>
+              {bm.paper_url ? (
+                <a
+                  href={bm.paper_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  {bm.paper_title}
+                </a>
+              ) : (
+                <span className="italic">{bm.paper_title}</span>
+              )}
+            </div>
           )}
+
+          {/* Functional summary */}
+          {bmSummary && (
+            <p className="text-xs text-on-muted leading-relaxed">{bmSummary}</p>
+          )}
+
+          {/* Score adaptation note */}
+          {scoreAdapt && (
+            <div className="text-xs bg-amber-500/8 border border-amber-500/20 rounded-lg px-3 py-2 text-on-muted leading-relaxed">
+              <span className="font-medium text-amber-600 dark:text-amber-400">{isZh ? '安全转化说明：' : 'Safety Adaptation: '}</span>
+              {scoreAdapt}
+            </div>
+          )}
+
+          {/* Tasks */}
           {hasTasks && (
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 pt-1">
+              <div className="text-[11px] text-on-dim font-medium">{isZh ? '评测任务' : 'Evaluation Tasks'}</div>
               {bm.tasks.map(task => {
                 const taskDesc = isZh ? task.description : (task.description_en || task.description);
                 return (
