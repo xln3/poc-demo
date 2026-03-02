@@ -241,38 +241,64 @@ function BenchmarkNode({ bm, parentId, isZh, expanded, toggleExpand, t }) {
   const nodeId = `bm-${parentId}-${bm.name}`;
   const isExpanded = expanded.has(nodeId);
   const hasTasks = bm.tasks && bm.tasks.length > 0;
+  const bmDesc = isZh ? bm.description : (bm.description_en || bm.description);
 
   return (
     <div className="border-t border-edge/50">
-      <button
+      <div className={`w-full px-5 py-2 pl-16 flex items-center justify-between transition-colors ${
+        hasTasks ? 'hover:bg-surface-hover/20 cursor-pointer' : 'cursor-default'
+      }`}
         onClick={() => hasTasks && toggleExpand(nodeId)}
-        className={`w-full px-5 py-2 pl-16 flex items-center justify-between transition-colors ${
-          hasTasks ? 'hover:bg-surface-hover/20 cursor-pointer' : 'cursor-default'
-        }`}
       >
         <div className="flex items-center gap-2">
           {hasTasks && <span className="text-xs">{isExpanded ? '▾' : '▸'}</span>}
           <span className="text-sm text-on-surface">
             {isZh ? (bm.display_name || bm.name) : (bm.display_name_en || bm.name)}
           </span>
+          {bm.reference && (
+            <a
+              href={bm.reference}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="text-on-dim hover:text-blue-500 transition-colors flex-shrink-0"
+              title={bm.reference}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          )}
         </div>
         <span className="text-xs text-on-dim">
           {bm.task_count} {isZh ? '个任务' : 'tasks'}
         </span>
-      </button>
+      </div>
 
-      {/* Tasks */}
-      {isExpanded && hasTasks && (
-        <div className="px-5 pl-20 pb-2 space-y-1">
-          {bm.tasks.map(task => (
-            <div key={task.name} className="flex items-center gap-2 py-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
-              <span className="text-xs text-on-surface">{isZh ? (task.display_name || task.name) : (task.display_name_en || task.name)}</span>
-              {(task.description || task.description_en) && (
-                <span className="text-[10px] text-on-dim truncate max-w-[300px]">— {isZh ? task.description : (task.description_en || task.description)}</span>
-              )}
+      {/* Benchmark description + Tasks */}
+      {isExpanded && (
+        <div className="px-5 pl-20 pb-2">
+          {bmDesc && (
+            <p className="text-xs text-on-muted mb-2">{bmDesc}</p>
+          )}
+          {hasTasks && (
+            <div className="space-y-1.5">
+              {bm.tasks.map(task => {
+                const taskDesc = isZh ? task.description : (task.description_en || task.description);
+                return (
+                  <div key={task.name} className="py-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-px" />
+                      <span className="text-xs font-medium text-on-surface">{isZh ? (task.display_name || task.name) : (task.display_name_en || task.name)}</span>
+                    </div>
+                    {taskDesc && (
+                      <p className="text-[11px] text-on-dim ml-[14px] mt-0.5 leading-relaxed">{taskDesc}</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
