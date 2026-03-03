@@ -47,7 +47,22 @@ async def lifespan(app: FastAPI):
     global _start_time
     _start_time = time.time()
     setup_logging()
-    logging.getLogger(__name__).info("Application starting up")
+    logger = logging.getLogger(__name__)
+    logger.info("Application starting up")
+
+    # Validate ENCRYPTION_KEY early — fail fast if misconfigured
+    try:
+        from .services.encryption import encrypt_api_key, decrypt_api_key
+        test_ct = encrypt_api_key("startup-test")
+        assert decrypt_api_key(test_ct) == "startup-test"
+        logger.info("ENCRYPTION_KEY validated successfully")
+    except Exception as e:
+        logger.error("ENCRYPTION_KEY validation failed: %s", e)
+        raise RuntimeError(
+            "ENCRYPTION_KEY is missing or invalid. "
+            "Generate one with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+        ) from e
+
     # Startup — create DB tables if they don't exist (dev convenience)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

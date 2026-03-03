@@ -13,6 +13,7 @@ from ..auth.security import require_user
 from ..db.engine import get_db
 from ..db.tables import AgentConfig, User
 from ..services import eval_bridge
+from ..services.encryption import encrypt_api_key, decrypt_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -136,7 +137,7 @@ async def create_agent(
     agent = AgentConfig(
         name=req.name,
         api_base=req.api_base,
-        api_key_encrypted=req.api_key,  # TODO: encrypt with Fernet
+        api_key_encrypted=encrypt_api_key(req.api_key) if req.api_key else "",
         model_id=req.model_id,
         system_prompt=req.system_prompt,
         tools_enabled=req.tools_enabled,
@@ -152,7 +153,7 @@ async def create_agent(
     await db.commit()
     await db.refresh(agent)
 
-    # Register with eval-poc
+    # Register with eval-poc (pass plaintext key from request, not encrypted DB value)
     try:
         eval_config = {
             "name": agent.name,
@@ -168,7 +169,6 @@ async def create_agent(
         await db.commit()
     except Exception as e:
         logger.warning("Failed to register agent with eval-poc: %s", e)
-        # Don't fail the create — eval registration can be retried
 
     return _agent_to_response(agent)
 
@@ -211,8 +211,9 @@ async def update_agent(
         raise HTTPException(status_code=404, detail="Agent not found")
 
     update_data = req.model_dump(exclude_none=True)
-    if "api_key" in update_data:
-        update_data["api_key_encrypted"] = update_data.pop("api_key")
+    raw_api_key = update_data.pop("api_key", None)
+    if raw_api_key is not None:
+        update_data["api_key_encrypted"] = encrypt_api_key(raw_api_key) if raw_api_key else ""
     for key, value in update_data.items():
         setattr(agent, key, value)
     agent.updated_at = datetime.utcnow()
@@ -273,10 +274,11 @@ async def trigger_evaluation(
     # Ensure agent is registered in eval-poc
     if not agent.eval_model_id:
         try:
+            plain_key = decrypt_api_key(agent.api_key_encrypted) if agent.api_key_encrypted else ""
             eval_config = {
                 "name": agent.name,
                 "api_base": agent.api_base,
-                "api_key": agent.api_key_encrypted or "",
+                "api_key": plain_key,
                 "model_id": agent.model_id,
                 "provider": "Custom Agent",
                 "is_agent": True,

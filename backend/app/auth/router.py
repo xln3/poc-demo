@@ -15,7 +15,7 @@ from ..db.engine import get_db
 from ..db.tables import User
 from .security import (
     hash_password, verify_password, create_access_token,
-    require_user, require_admin, revoke_token, create_token_pair,
+    require_user, require_admin, require_auth, revoke_token, create_token_pair,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -162,11 +162,13 @@ async def refresh_token(
 
 
 @router.post("/logout")
-async def logout(claims: dict = Depends(require_user)):
+async def logout(claims: dict = Depends(require_auth)):
     """Revoke the current access token (client should also discard tokens)."""
-    # require_user returns User, but we need the raw claims to get jti
-    # For simplicity, just acknowledge the logout — the client discards the token
-    return {"ok": True, "message": "Logged out. Please discard your tokens."}
+    jti = claims.get("jti")
+    exp = claims.get("exp", 0)
+    if jti:
+        revoke_token(jti, float(exp) if exp else 0)
+    return {"ok": True, "message": "Logged out. Token revoked."}
 
 
 @router.get("/me", response_model=UserResponse)

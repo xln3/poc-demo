@@ -1,6 +1,7 @@
 """Eval proxy router — all eval-poc access goes through poc-demo JWT auth."""
 
 import logging
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -71,7 +72,10 @@ async def get_dataset_description(
     import json
     from pathlib import Path
 
-    DOCS_DIR = Path("/home/xln/agent-safety-platform/eval-poc/benchmarks/docs")
+    DOCS_DIR = Path(os.environ.get(
+        "EVAL_DOCS_DIR",
+        str(Path(__file__).resolve().parents[4] / "eval-poc" / "benchmarks" / "docs")
+    ))
     if not DOCS_DIR.exists():
         return {"report": "", "samples": [], "error": "Docs directory not found"}
 
