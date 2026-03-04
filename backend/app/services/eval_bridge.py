@@ -146,6 +146,16 @@ async def get_job_task_samples(
     return resp.json()
 
 
+# ---- Health ----
+
+async def get_benchmark_health(force: bool = False) -> Dict[str, Any]:
+    """Get health status for all benchmarks."""
+    params = {"force": "true"} if force else {}
+    resp = await _get_client().get("/api/benchmarks/health", params=params)
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ---- Reports ----
 
 async def generate_eval_report(model: str) -> Dict[str, Any]:

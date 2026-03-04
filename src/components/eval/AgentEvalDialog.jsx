@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fetchEvalTemplates, runEvalTemplate } from '../../api/evalBridgeApi';
+import useBenchmarkHealth, { countHealthyTasks } from '../../hooks/useBenchmarkHealth';
 
 /**
  * AgentEvalDialog — dialog to run an eval template for a specific agent.
@@ -19,6 +20,7 @@ export default function AgentEvalDialog({ agentId, agentName, onClose, onStarted
   const [judgeModel, setJudgeModel] = useState('');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState(null);
+  const { health } = useBenchmarkHealth();
 
   useEffect(() => {
     fetchEvalTemplates()
@@ -28,6 +30,14 @@ export default function AgentEvalDialog({ agentId, agentName, onClose, onStarted
       })
       .catch(err => setError(err.message));
   }, []);
+
+  const selectedTemplate = templates.find(t => t.id === templateId);
+  const selectedTasks = selectedTemplate?.config_json?.selected_tasks || [];
+  const healthStats = useMemo(
+    () => countHealthyTasks(health, selectedTasks),
+    [health, selectedTasks]
+  );
+  const hasUnhealthy = healthStats.total > 0 && healthStats.healthy < healthStats.total;
 
   const handleStart = async () => {
     if (!templateId) return;
@@ -57,6 +67,16 @@ export default function AgentEvalDialog({ agentId, agentName, onClose, onStarted
         <p className="text-sm text-on-muted">{agentName}</p>
 
         {error && <div className="text-red-500 text-sm">{error}</div>}
+
+        {hasUnhealthy && (
+          <div className="px-3 py-2 text-xs rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            {t('runDialog.healthWarning', {
+              healthy: healthStats.healthy,
+              total: healthStats.total,
+              defaultValue: `${healthStats.healthy}/${healthStats.total} tasks ready — some may fail`,
+            })}
+          </div>
+        )}
 
         {/* Template selector */}
         <div>

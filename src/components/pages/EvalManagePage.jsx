@@ -10,6 +10,7 @@ import {
 } from '../../api/evalBridgeApi';
 import RiskHierarchySelector from '../eval/RiskHierarchySelector';
 import EvalRunDialog from '../eval/EvalRunDialog';
+import useBenchmarkHealth, { countHealthyTasks } from '../../hooks/useBenchmarkHealth';
 
 /**
  * EvalManagePage — CRUD for reusable evaluation templates
@@ -21,6 +22,7 @@ export default function EvalManagePage({ onNavigate }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [runTarget, setRunTarget] = useState(null); // template to run
+  const { health } = useBenchmarkHealth();
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -108,6 +110,7 @@ export default function EvalManagePage({ onNavigate }) {
             <TemplateCard
               key={tpl.id}
               template={tpl}
+              health={health}
               onEdit={() => { setEditing(tpl); setShowForm(true); }}
               onDelete={() => handleDelete(tpl.id)}
               onCopy={() => handleCopy(tpl.id)}
@@ -131,12 +134,13 @@ export default function EvalManagePage({ onNavigate }) {
 }
 
 
-function TemplateCard({ template, onEdit, onDelete, onCopy, onRun }) {
+function TemplateCard({ template, health, onEdit, onDelete, onCopy, onRun }) {
   const { t } = useTranslation('eval');
   const config = template.config_json || {};
   const tasks = config.selected_tasks || [];
   const benchmarks = new Set(tasks.map(t => t.benchmark));
   const riskCategories = config.risk_categories || [];
+  const hs = countHealthyTasks(health, tasks);
 
   return (
     <div className="border border-edge rounded-xl p-4 bg-canvas hover:shadow-md transition-shadow">
@@ -150,6 +154,11 @@ function TemplateCard({ template, onEdit, onDelete, onCopy, onRun }) {
             <span>{t('evalManage.riskCount', { count: riskCategories.length })}</span>
             <span>{t('evalManage.benchmarkCount', { count: benchmarks.size })}</span>
             <span>{t('evalManage.taskCount', { count: tasks.length })}</span>
+            {hs.total > 0 && (
+              <span className={hs.healthy < hs.total ? 'text-amber-500' : 'text-green-500'}>
+                {hs.healthy}/{hs.total} {t('evalManage.tasksReady', { defaultValue: 'ready' })}
+              </span>
+            )}
             {template.created_at && (
               <span>{new Date(template.created_at).toLocaleDateString()}</span>
             )}

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fetchAgents, runEvalTemplate } from '../../api/evalBridgeApi';
+import { fetchAgents, runEvalTemplate, getEvalTemplate } from '../../api/evalBridgeApi';
+import useBenchmarkHealth, { countHealthyTasks } from '../../hooks/useBenchmarkHealth';
 
 /**
  * EvalRunDialog — lightweight dialog to run an eval template against an agent.
@@ -19,6 +20,8 @@ export default function EvalRunDialog({ templateId, templateName, onClose, onSta
   const [judgeModel, setJudgeModel] = useState('');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState(null);
+  const [templateTasks, setTemplateTasks] = useState([]);
+  const { health } = useBenchmarkHealth();
 
   useEffect(() => {
     fetchAgents()
@@ -27,7 +30,19 @@ export default function EvalRunDialog({ templateId, templateName, onClose, onSta
         if (data.length > 0) setAgentId(data[0].id);
       })
       .catch(err => setError(err.message));
-  }, []);
+    // Load template tasks for health check
+    if (templateId) {
+      getEvalTemplate(templateId)
+        .then(tpl => setTemplateTasks(tpl?.config_json?.selected_tasks || []))
+        .catch(() => {});
+    }
+  }, [templateId]);
+
+  const healthStats = useMemo(
+    () => countHealthyTasks(health, templateTasks),
+    [health, templateTasks]
+  );
+  const hasUnhealthy = healthStats.total > 0 && healthStats.healthy < healthStats.total;
 
   const handleStart = async () => {
     if (!agentId) return;
@@ -57,6 +72,16 @@ export default function EvalRunDialog({ templateId, templateName, onClose, onSta
         <p className="text-sm text-on-muted">{templateName}</p>
 
         {error && <div className="text-red-500 text-sm">{error}</div>}
+
+        {hasUnhealthy && (
+          <div className="px-3 py-2 text-xs rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            {t('runDialog.healthWarning', {
+              healthy: healthStats.healthy,
+              total: healthStats.total,
+              defaultValue: `${healthStats.healthy}/${healthStats.total} tasks ready — some may fail`,
+            })}
+          </div>
+        )}
 
         {/* Agent selector */}
         <div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fetchRiskHierarchy } from '../../api/evalBridgeApi';
+import useBenchmarkHealth, { getBenchmarkStatus } from '../../hooks/useBenchmarkHealth';
 
 /**
  * RiskHierarchySelector — 4-level collapsible tree for selecting eval tasks
@@ -19,6 +20,7 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(new Set());
+  const { health } = useBenchmarkHealth();
 
   useEffect(() => {
     let cancelled = false;
@@ -29,20 +31,24 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
     return () => { cancelled = true; };
   }, []);
 
-  // Pre-filter: only keep available benchmarks, drop empty subcategories/categories
+  // Pre-filter: keep available benchmarks; also keep unavailable ones (with health info)
+  // Drop empty subcategories/categories only if they have zero benchmarks at all
   const availableHierarchy = useMemo(() => {
     return hierarchy
       .map(cat => {
         const subs = cat.subcategories
           .map(sub => {
-            const bms = sub.benchmarks.filter(bm => bm.available);
+            // Show all benchmarks that are either available OR have health data
+            const bms = sub.benchmarks.filter(bm =>
+              bm.available || (health?.benchmarks && health.benchmarks[bm.catalog_key])
+            );
             return bms.length > 0 ? { ...sub, benchmarks: bms } : null;
           })
           .filter(Boolean);
         return subs.length > 0 ? { ...cat, subcategories: subs } : null;
       })
       .filter(Boolean);
-  }, [hierarchy]);
+  }, [hierarchy, health]);
 
   // Build a Set of selected "benchmark::task" keys for O(1) lookup
   const selectedSet = useMemo(() => {
@@ -262,6 +268,7 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
             toggleCategoryAll={toggleCategoryAll}
             readOnly={readOnly}
             t={t}
+            health={health}
           />
         ))}
       </div>
@@ -270,7 +277,7 @@ export default function RiskHierarchySelector({ value = [], onChange, readOnly =
 }
 
 
-function CategoryNode({ cat, isZh, expanded, toggle, selectedSet, isTaskSelected, toggleTask, toggleBenchmarkAll, toggleSubcategoryAll, toggleCategoryAll, readOnly, t }) {
+function CategoryNode({ cat, isZh, expanded, toggle, selectedSet, isTaskSelected, toggleTask, toggleBenchmarkAll, toggleSubcategoryAll, toggleCategoryAll, readOnly, t, health }) {
   const isOpen = expanded.has(cat.id);
 
   // Count selected tasks in this category
@@ -326,6 +333,7 @@ function CategoryNode({ cat, isZh, expanded, toggle, selectedSet, isTaskSelected
               toggleSubcategoryAll={toggleSubcategoryAll}
               readOnly={readOnly}
               t={t}
+              health={health}
             />
           ))}
         </div>
@@ -335,7 +343,7 @@ function CategoryNode({ cat, isZh, expanded, toggle, selectedSet, isTaskSelected
 }
 
 
-function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelected, toggleTask, toggleBenchmarkAll, toggleSubcategoryAll, readOnly, t }) {
+function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelected, toggleTask, toggleBenchmarkAll, toggleSubcategoryAll, readOnly, t, health }) {
   const isOpen = expanded.has(sub.id);
 
   let totalAvailable = 0;
@@ -391,6 +399,7 @@ function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelec
               toggleBenchmarkAll={toggleBenchmarkAll}
               readOnly={readOnly}
               t={t}
+              health={health}
             />
           ))}
         </div>
@@ -400,18 +409,44 @@ function SubcategoryNode({ sub, isZh, expanded, toggle, selectedSet, isTaskSelec
 }
 
 
-function BenchmarkNode({ bm, parentId, isZh, expanded, toggle, selectedSet, isTaskSelected, toggleTask, toggleBenchmarkAll, readOnly, t }) {
+function HealthDot({ status, title }) {
+  const colors = {
+    healthy: 'bg-green-500',
+    degraded: 'bg-amber-500',
+    unavailable: 'bg-red-500',
+  };
+  return (
+    <span
+      className={`inline-block w-2 h-2 rounded-full shrink-0 ${colors[status] || 'bg-gray-400'}`}
+      title={title}
+    />
+  );
+}
+
+
+function BenchmarkNode({ bm, parentId, isZh, expanded, toggle, selectedSet, isTaskSelected, toggleTask, toggleBenchmarkAll, readOnly, t, health }) {
   const nodeId = `${parentId}::${bm.name}`;
   const isOpen = expanded.has(nodeId);
   const hasTasks = bm.tasks.length > 0;
+  const bmHealth = health?.benchmarks?.[bm.catalog_key];
+  const bmStatus = bmHealth?.status;
+  const isUnavailable = bmStatus === 'unavailable';
 
   let selectedCount = 0;
   bm.tasks.forEach(tk => {
     if (selectedSet.has(`${bm.catalog_key}::${tk.name}`)) selectedCount++;
   });
 
+  const healthTitle = bmStatus === 'healthy'
+    ? (isZh ? '环境就绪' : 'Ready')
+    : bmStatus === 'degraded'
+    ? (isZh ? '部分可用' : 'Partially available')
+    : bmStatus === 'unavailable'
+    ? (isZh ? '环境未就绪' : 'Not ready')
+    : '';
+
   return (
-    <div>
+    <div className={isUnavailable ? 'opacity-60' : ''}>
       <div
         className="flex items-center gap-2 px-3 py-1 hover:bg-surface-hover cursor-pointer select-none"
         onClick={() => hasTasks && toggle(nodeId)}
@@ -421,7 +456,10 @@ function BenchmarkNode({ bm, parentId, isZh, expanded, toggle, selectedSet, isTa
         ) : (
           <span className="w-4" />
         )}
-        <span className="text-sm text-on-canvas flex-1">{isZh ? (bm.display_name || bm.name) : (bm.display_name_en || bm.name)}</span>
+        {bmStatus && <HealthDot status={bmStatus} title={healthTitle} />}
+        <span className={`text-sm flex-1 ${isUnavailable ? 'text-on-muted' : 'text-on-canvas'}`}>
+          {isZh ? (bm.display_name || bm.name) : (bm.display_name_en || bm.name)}
+        </span>
         {hasTasks && (
           <span className="text-xs text-on-muted ml-1">
             {selectedCount}/{bm.tasks.length}
@@ -439,28 +477,40 @@ function BenchmarkNode({ bm, parentId, isZh, expanded, toggle, selectedSet, isTa
       </div>
       {isOpen && (
         <div className="pl-8 py-1 space-y-0.5">
-          {bm.tasks.map(tk => (
-            <label
-              key={tk.name}
-              className={`flex items-center gap-2 px-2 py-0.5 rounded text-sm hover:bg-surface-hover ${
-                readOnly ? 'cursor-default' : 'cursor-pointer'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={isTaskSelected(bm.catalog_key, tk.name)}
-                onChange={() => toggleTask(bm.catalog_key, tk.name)}
-                disabled={readOnly}
-                className="rounded"
-              />
-              <span className="text-on-canvas">{isZh ? (tk.display_name || tk.name) : (tk.display_name_en || tk.name)}</span>
-              {(tk.description || tk.description_en) && (
-                <span className="text-on-muted text-xs truncate max-w-[200px]" title={isZh ? tk.description : (tk.description_en || tk.description)}>
-                  — {isZh ? tk.description : (tk.description_en || tk.description)}
+          {bm.tasks.map(tk => {
+            const taskHealth = bmHealth?.tasks?.[tk.name];
+            const taskOk = taskHealth?.discoverable;
+            const taskError = taskHealth?.import_error;
+            return (
+              <label
+                key={tk.name}
+                className={`flex items-center gap-2 px-2 py-0.5 rounded text-sm hover:bg-surface-hover ${
+                  readOnly ? 'cursor-default' : 'cursor-pointer'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isTaskSelected(bm.catalog_key, tk.name)}
+                  onChange={() => toggleTask(bm.catalog_key, tk.name)}
+                  disabled={readOnly}
+                  className="rounded"
+                />
+                <span className={taskOk === false ? 'text-on-muted' : 'text-on-canvas'}>
+                  {isZh ? (tk.display_name || tk.name) : (tk.display_name_en || tk.name)}
                 </span>
-              )}
-            </label>
-          ))}
+                {taskOk === false && taskError && (
+                  <span className="text-red-500 text-xs truncate max-w-[180px]" title={taskError}>
+                    ({isZh ? '不可用' : 'unavailable'})
+                  </span>
+                )}
+                {taskOk !== false && (tk.description || tk.description_en) && (
+                  <span className="text-on-muted text-xs truncate max-w-[200px]" title={isZh ? tk.description : (tk.description_en || tk.description)}>
+                    — {isZh ? tk.description : (tk.description_en || tk.description)}
+                  </span>
+                )}
+              </label>
+            );
+          })}
         </div>
       )}
     </div>

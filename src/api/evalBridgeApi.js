@@ -130,6 +130,13 @@ export function fetchDatasetDescription(benchmarks = '', lang = 'zh') {
   return request('GET', `/eval/dataset-description?${params}`);
 }
 
+// ---- Benchmark Health ----
+
+export function fetchBenchmarkHealth(force = false) {
+  const params = force ? '?force=true' : '';
+  return request('GET', `/eval/benchmarks/health${params}`);
+}
+
 // ---- Risk Hierarchy ----
 
 export function fetchRiskHierarchy() {

@@ -163,6 +163,21 @@ async def get_task_meta(user: User = Depends(require_user)):
         raise HTTPException(status_code=502, detail=f"Eval backend error: {e}")
 
 
+# ---- Health endpoints ----
+
+@router.get("/benchmarks/health")
+async def get_benchmark_health(
+    force: bool = False,
+    user: User = Depends(require_user),
+):
+    """Get health status for all benchmarks."""
+    try:
+        return await eval_bridge.get_benchmark_health(force=force)
+    except Exception as e:
+        logger.error("Failed to get benchmark health: %s", e)
+        raise HTTPException(status_code=502, detail=f"Eval backend error: {e}")
+
+
 # ---- Model endpoints ----
 
 @router.get("/models")
