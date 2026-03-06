@@ -150,6 +150,59 @@ export function echartsToImages(container) {
   });
 }
 
+/**
+ * Render chart configs in an HTML string to inline <img> tags for PDF export.
+ * Creates a temporary off-screen container, initializes ECharts, captures PNG,
+ * and returns the HTML with <img> tags replacing chart placeholders.
+ */
+export function renderChartsToImagesInHtml(html) {
+  if (!html) return html;
+  ensureThemes();
+
+  const container = document.createElement('div');
+  container.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:800px;';
+  document.body.appendChild(container);
+  container.innerHTML = html;
+
+  try {
+    container.querySelectorAll('.chart-placeholder[data-chart-config]').forEach(el => {
+      let config;
+      try {
+        config = JSON.parse(el.dataset.chartConfig);
+      } catch { return; }
+      if (!config || Object.keys(config).length === 0) return;
+
+      // Explicit pixel dimensions — percentages don't resolve reliably off-screen
+      el.style.width = '760px';
+      el.style.height = '350px';
+
+      // Disable animation so ECharts renders data synchronously
+      config.animation = false;
+
+      const instance = echarts.init(el, 'report-light', { renderer: 'canvas' });
+      instance.setOption(config);
+
+      const dataUrl = instance.getDataURL({
+        type: 'png',
+        pixelRatio: 2,
+        backgroundColor: '#fff',
+      });
+      instance.dispose();
+
+      el.innerHTML = `<img src="${dataUrl}" style="width:100%;max-width:100%;" />`;
+      el.style.border = 'none';
+      el.style.background = 'none';
+      el.style.padding = '0';
+      el.style.width = '';
+      el.style.height = '';
+    });
+
+    return container.innerHTML;
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
 // ---- React hook ----
 
 /**

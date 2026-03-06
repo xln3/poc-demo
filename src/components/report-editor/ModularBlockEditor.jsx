@@ -9,6 +9,7 @@ import ChartEditorPanel from './ChartEditorPanel.jsx';
 import TableOfContents from './TableOfContents.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
 import { updateModule, generateChartConfig } from '../../api/reportEditorApi.js';
+import { renderChartsToImagesInHtml } from './EChartsRenderer.jsx';
 
 /* Error boundary to catch BlockNote internal crashes (e.g. "t2 is undefined") */
 class EditorErrorBoundary extends Component {
@@ -191,24 +192,41 @@ export default function ModularBlockEditor({
   };
 
   // Chart editor handlers
-  const handleChartClick = useCallback((config) => {
+  const editingBlockIdRef = useRef(null);
+
+  const handleChartClick = useCallback((config, blockId) => {
     setChartEditorConfig(config);
+    editingBlockIdRef.current = blockId || null;
     setSidePanel('chart');
   }, []);
 
+  // Listen for chart-block-edit custom events from ChartBlock components
+  useEffect(() => {
+    const handler = (e) => {
+      const { config, blockId } = e.detail;
+      handleChartClick(config, blockId);
+    };
+    document.addEventListener('chart-block-edit', handler);
+    return () => document.removeEventListener('chart-block-edit', handler);
+  }, [handleChartClick]);
+
   const handleChartApply = useCallback((newConfig) => {
-    // Find and update the chart block
-    if (!chartEditorConfig) return;
+    if (!editor) return;
+    const blockId = editingBlockIdRef.current;
     const blocks = editor.document;
     for (const block of blocks) {
-      if (block.type === 'chart' && block.props.config === JSON.stringify(chartEditorConfig)) {
-        editor.updateBlock(block, {
-          props: { config: JSON.stringify(newConfig) },
-        });
-        break;
+      if (block.type === 'chart') {
+        // Match by block ID if available, otherwise by config content
+        if (blockId ? block.id === blockId : block.props.config === JSON.stringify(chartEditorConfig)) {
+          editor.updateBlock(block, {
+            props: { config: JSON.stringify(newConfig) },
+          });
+          break;
+        }
       }
     }
     setChartEditorConfig(null);
+    editingBlockIdRef.current = null;
     setSidePanel(null);
   }, [editor, chartEditorConfig]);
 
@@ -245,7 +263,9 @@ export default function ModularBlockEditor({
   // PDF export
   const handleExportPDF = useCallback(async () => {
     if (!editor) return;
-    const html = await editor.blocksToHTMLLossy(editor.document);
+    const rawHtml = await editor.blocksToHTMLLossy(editor.document);
+    // Convert chart placeholders to inline images before export
+    const html = renderChartsToImagesInHtml(rawHtml);
 
     const printWin = window.open('', '_blank');
     if (!printWin) return;
@@ -254,20 +274,24 @@ export default function ModularBlockEditor({
 <meta charset="utf-8">
 <title>${report?.title || 'Report'}</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 40px; color: #333; }
-  h1, h2, h3 { margin-top: 1.5em; }
-  table { width: 100%; border-collapse: collapse; margin: 1em 0; }
-  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-  th { background: #f5f5f5; }
-  .callout { padding: 12px 16px; border-left: 4px solid; border-radius: 4px; margin: 1em 0; }
+  body { font-family: system-ui, "Noto Sans SC", sans-serif; max-width: 900px; margin: 0 auto; padding: 30px; color: #333; font-size: 12px; line-height: 1.5; }
+  h1 { font-size: 18px; border-bottom: 2px solid #333; padding-bottom: 6px; margin-top: 1em; }
+  h2 { font-size: 15px; margin-top: 1.2em; color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 3px; }
+  h3 { font-size: 13px; margin-top: 1em; color: #333; }
+  h4 { font-size: 12px; margin-top: 0.8em; color: #555; }
+  p { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 0.8em 0; font-size: 11px; }
+  th, td { border: 1px solid #ddd; padding: 5px 8px; text-align: left; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .callout { padding: 8px 12px; border-left: 4px solid; border-radius: 4px; margin: 0.8em 0; font-size: 11px; }
   .callout-warning { border-color: #f59e0b; background: #fffbeb; }
   .callout-info { border-color: #3b82f6; background: #eff6ff; }
   .callout-success { border-color: #22c55e; background: #f0fdf4; }
   .callout-error { border-color: #ef4444; background: #fef2f2; }
-  .chart-placeholder { min-height: 300px; border: 1px dashed #ddd; }
-  .risk-badge { padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+  .chart-placeholder { text-align: center; }
+  .risk-badge { padding: 2px 6px; border-radius: 9999px; font-size: 10px; font-weight: 600; }
   img { max-width: 100%; }
-  @media print { body { padding: 0; } }
+  @media print { body { padding: 0; } @page { margin: 1.5cm; size: A4; } }
 </style>
 </head><body>
 <h1>${report?.title || 'Report'}</h1>
@@ -305,6 +329,74 @@ ${html}
     }
     return result;
   }, [modules]);
+
+  // Scroll editor to the Nth module heading (H2) in the DOM
+  const scrollToModuleHeading = useCallback((moduleIdx) => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+    const h2s = container.querySelectorAll('h2');
+    if (h2s[moduleIdx]) {
+      h2s[moduleIdx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  // Scroll editor to a specific heading by text match
+  const scrollToHeading = useCallback((headingId, headingText, headingLevel) => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+    const tag = `h${headingLevel}`;
+    const candidates = container.querySelectorAll(tag);
+    for (const el of candidates) {
+      if (el.textContent.trim() === headingText) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+  }, []);
+
+  // Handle left sidebar module click — scroll + set active
+  const handleModuleClick = useCallback((idx) => {
+    setActiveModuleIdx(idx);
+    scrollToModuleHeading(idx);
+  }, [scrollToModuleHeading]);
+
+  // Handle right TOC heading click — scroll + set active module
+  const handleTocClick = useCallback((heading) => {
+    if (heading.id.startsWith('mod-') && heading.level === 2) {
+      const modIdx = modules?.findIndex(m => heading.id === `mod-${m.id}`);
+      if (modIdx >= 0) {
+        setActiveModuleIdx(modIdx);
+        scrollToModuleHeading(modIdx);
+      }
+    } else {
+      scrollToHeading(heading.id, heading.text, heading.level);
+      // Also update active module to the parent module of this heading
+      for (let i = allHeadings.indexOf(heading); i >= 0; i--) {
+        const h = allHeadings[i];
+        if (h.id.startsWith('mod-') && h.level === 2) {
+          const modIdx = modules?.findIndex(m => h.id === `mod-${m.id}`);
+          if (modIdx >= 0) setActiveModuleIdx(modIdx);
+          break;
+        }
+      }
+    }
+  }, [modules, allHeadings, scrollToModuleHeading, scrollToHeading]);
+
+  // Track scroll position to update active module in left sidebar
+  const handleEditorScroll = useCallback(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+    const h2s = container.querySelectorAll('h2');
+    const containerRect = container.getBoundingClientRect();
+    let activeIdx = 0;
+    for (let i = 0; i < h2s.length; i++) {
+      const rect = h2s[i].getBoundingClientRect();
+      if (rect.top - containerRect.top <= 80) activeIdx = i;
+    }
+    if (activeIdx !== activeModuleIdx) {
+      setActiveModuleIdx(activeIdx);
+    }
+  }, [activeModuleIdx]);
 
   // Right-side TOC state
   const [tocCollapsed, setTocCollapsed] = useState(new Set());
@@ -366,7 +458,7 @@ ${html}
               <button
                 key={mod.id}
                 type="button"
-                onClick={() => setActiveModuleIdx(mod.index)}
+                onClick={() => handleModuleClick(mod.index)}
                 className={`w-full text-left px-1.5 py-1 text-xs rounded mb-0.5 flex items-center gap-1.5 ${
                   activeModuleIdx === mod.index
                     ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
@@ -417,7 +509,7 @@ ${html}
         </div>
 
         {/* Center: Block Editor — 8 parts */}
-        <div className="min-w-0 overflow-y-auto" style={{ width: 'calc(100% * 8 / 10)' }} ref={editorContainerRef}>
+        <div className="min-w-0 overflow-y-auto" style={{ width: 'calc(100% * 8 / 10)' }} ref={editorContainerRef} onScroll={handleEditorScroll}>
           {/* Module header with action buttons */}
           {modules?.length > 0 && (
             <div className="px-4 py-2 border-b border-edge bg-surface/30 flex items-center gap-2 flex-wrap">
@@ -496,18 +588,14 @@ ${html}
                   <div
                     key={h.id}
                     className={`flex items-center gap-0.5 px-1.5 py-0.5 cursor-pointer text-[10px] transition-colors rounded mx-0.5 ${
-                      isModuleTitle
-                        ? 'font-medium text-on-canvas'
+                      isModuleTitle && modules?.findIndex(m => h.id === `mod-${m.id}`) === activeModuleIdx
+                        ? 'font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20'
+                        : isModuleTitle
+                        ? 'font-medium text-on-canvas hover:bg-surface'
                         : 'text-on-muted hover:text-on-canvas hover:bg-surface'
                     }`}
                     style={{ paddingLeft: `${4 + indent}px` }}
-                    onClick={() => {
-                      // Find the module index for this heading
-                      if (isModuleTitle) {
-                        const modIdx = modules?.findIndex(m => h.id === `mod-${m.id}`);
-                        if (modIdx >= 0) setActiveModuleIdx(modIdx);
-                      }
-                    }}
+                    onClick={() => handleTocClick(h)}
                   >
                     {expandable && (
                       <button

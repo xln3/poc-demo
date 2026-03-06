@@ -110,7 +110,7 @@ async def stream_outline_generation(
     payload = {
         "model": REPORT_LLM_MODEL,
         "messages": messages,
-        "max_tokens": 4096,
+        "max_tokens": 16384,
         "stream": True,
     }
 
@@ -248,7 +248,7 @@ async def stream_module_generation(
     payload = {
         "model": REPORT_LLM_MODEL,
         "messages": messages,
-        "max_tokens": 8192,
+        "max_tokens": 16384,
         "stream": True,
     }
 
@@ -513,7 +513,7 @@ async def generate_chart_config(
     payload = {
         "model": REPORT_LLM_MODEL,
         "messages": messages,
-        "max_tokens": 2048,
+        "max_tokens": 16384,
         "stream": False,
     }
 
@@ -535,14 +535,30 @@ async def generate_chart_config(
         content = result["choices"][0]["message"]["content"].strip()
 
         # Strip markdown code fences
-        if content.startswith("```"):
-            lines = content.split("\n")
-            content = "\n".join(lines[1:])
-            if content.endswith("```"):
-                content = content[:-3].strip()
+        content = _strip_code_fences(content)
 
-        chart_config = json.loads(content)
+        try:
+            chart_config = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.warning("Chart config JSON parse failed: %s (content length: %d)", e, len(content))
+            raise Exception(
+                f"LLM returned invalid JSON: {e}. "
+                "Try a simpler instruction or modify the JSON directly."
+            )
         return {"chart_config": chart_config, "description": instruction}
+
+
+def _strip_code_fences(content: str) -> str:
+    """Strip markdown code fences (```json ... ```) from LLM output."""
+    content = content.strip()
+    if content.startswith("```"):
+        lines = content.split("\n")
+        # Remove first line (```json or ```)
+        content = "\n".join(lines[1:])
+        # Remove trailing ```
+        if content.rstrip().endswith("```"):
+            content = content.rstrip()[:-3].strip()
+    return content
 
 
 # ---- Image generation ----

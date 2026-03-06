@@ -328,7 +328,7 @@ async def stream_section_regen(
     payload = {
         "model": REPORT_LLM_MODEL,
         "messages": messages,
-        "max_tokens": 4096,
+        "max_tokens": REPORT_LLM_MAX_TOKENS,
         "stream": True,
     }
 

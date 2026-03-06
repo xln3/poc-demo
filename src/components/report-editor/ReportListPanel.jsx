@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const STATUS_ICONS = {
@@ -15,12 +16,69 @@ export default function ReportListPanel({
   onDelete,
 }) {
   const { t } = useTranslation('reportEditor');
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (collapsed) {
+    return (
+      <div className="w-10 flex-shrink-0 border-r border-edge bg-canvas flex flex-col h-full items-center py-2 gap-2">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="p-1.5 rounded hover:bg-surface text-on-canvas/60 hover:text-on-canvas transition-colors"
+          title={t('expandSidebar', 'Expand')}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={onNew}
+          className="p-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+          title={t('newReport')}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+        <div className="flex-1 overflow-y-auto w-full">
+          {reports.map(report => (
+            <button
+              key={report.id}
+              type="button"
+              onClick={() => onSelect(report)}
+              className={`w-full p-1.5 text-center transition-colors ${
+                selectedReportId === report.id
+                  ? 'bg-blue-500/15 border-l-2 border-blue-500'
+                  : 'hover:bg-surface/50 border-l-2 border-transparent'
+              }`}
+              title={report.title || t('untitledReport')}
+            >
+              <span className="text-sm">{STATUS_ICONS[report.status] || '📄'}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-60 flex-shrink-0 border-r border-edge bg-canvas flex flex-col h-full">
       {/* Header */}
       <div className="p-3 border-b border-edge flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-on-canvas">{t('title')}</h2>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            className="p-0.5 rounded hover:bg-surface text-on-canvas/50 hover:text-on-canvas transition-colors"
+            title={t('collapseSidebar', 'Collapse')}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h2 className="text-sm font-semibold text-on-canvas">{t('title')}</h2>
+        </div>
         <button
           type="button"
           onClick={onNew}

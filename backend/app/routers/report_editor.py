@@ -961,11 +961,15 @@ async def generate_chart(
     if not data_ctx:
         data_ctx = await build_data_context(report.source_data)
 
-    chart_result = await generate_chart_config(
-        instruction=body.instruction,
-        data_context=data_ctx,
-        current_config=body.current_config,
-    )
+    try:
+        chart_result = await generate_chart_config(
+            instruction=body.instruction,
+            data_context=data_ctx,
+            current_config=body.current_config,
+        )
+    except Exception as e:
+        logger.error("Chart generation failed: %s", e)
+        raise HTTPException(status_code=422, detail=str(e))
     return chart_result
 
 

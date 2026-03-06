@@ -6,7 +6,7 @@ import * as echarts from 'echarts';
 /**
  * Custom BlockNote block for ECharts charts.
  * Renders an ECharts instance from a JSON config prop.
- * Click to open the chart editor panel.
+ * Click edit button to open the chart editor panel.
  */
 export const ChartBlock = createReactBlockSpec(
   {
@@ -26,6 +26,7 @@ export const ChartBlock = createReactBlockSpec(
       const chartRef = useRef(null);
       const instanceRef = useRef(null);
       const [error, setError] = useState(null);
+      const [hovered, setHovered] = useState(false);
 
       const isDark = document.documentElement.classList.contains('dark');
 
@@ -74,10 +75,22 @@ export const ChartBlock = createReactBlockSpec(
         return () => obs.disconnect();
       }, []);
 
+      const handleEditClick = (e) => {
+        e.stopPropagation();
+        let config;
+        try { config = JSON.parse(block.props.config || '{}'); } catch { config = {}; }
+        // Dispatch custom event for parent ModularBlockEditor to catch
+        document.dispatchEvent(new CustomEvent('chart-block-edit', {
+          detail: { config, blockId: block.id },
+        }));
+      };
+
       return (
         <div
-          className="chart-block-wrapper my-2 rounded-lg border border-edge overflow-hidden"
+          className="chart-block-wrapper my-2 rounded-lg border border-edge overflow-hidden relative"
           data-chart-block-id={block.id}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
         >
           {error ? (
             <div className="p-4 text-red-500 text-sm bg-red-50 dark:bg-red-900/20">
@@ -97,10 +110,23 @@ export const ChartBlock = createReactBlockSpec(
               {block.props.caption}
             </div>
           )}
+          {/* Edit overlay — visible on hover */}
+          {hovered && (
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleEditClick}
+                className="px-2 py-1 text-xs rounded bg-blue-600/90 text-white hover:bg-blue-700 shadow-sm backdrop-blur-sm"
+              >
+                {t('chart.edit', 'Edit Chart')}
+              </button>
+            </div>
+          )}
         </div>
       );
     },
-    toExternalHTML: (block) => {
+    toExternalHTML: (props) => {
+      const block = props.block;
       const config = block.props.config || '{}';
       const caption = block.props.caption || '';
       return (

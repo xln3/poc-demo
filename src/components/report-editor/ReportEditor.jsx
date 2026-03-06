@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { updateReport, regenerateSectionStream } from '../../api/reportEditorApi.js';
 import { consumeSSE } from '../../utils/sseReader.js';
 import { useChartRenderer, renderCharts } from './ChartRenderer.jsx';
+import { renderChartsToImagesInHtml } from './EChartsRenderer.jsx';
 import TableOfContents from './TableOfContents.jsx';
 import EditorToolbar from './EditorToolbar.jsx';
 import SelectionToolbar from './SelectionToolbar.jsx';
@@ -379,6 +380,9 @@ export default function ReportEditor({ report, onUpdated, onRegenerate }) {
   // ---- PDF export ----
 
   const handleExportPdf = () => {
+    // Convert chart placeholders to inline images before export
+    const exportHtml = renderChartsToImagesInHtml(html);
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     printWindow.document.write(`<!DOCTYPE html>
@@ -387,37 +391,37 @@ export default function ReportEditor({ report, onUpdated, onRegenerate }) {
 <meta charset="utf-8">
 <title>${report?.title || 'Report'}</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif; color: #1a1a1a; max-width: 800px; margin: 0 auto; padding: 40px; line-height: 1.7; }
-  h1 { font-size: 24px; border-bottom: 2px solid #333; padding-bottom: 8px; }
-  h2 { font-size: 20px; margin-top: 32px; color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-  h3 { font-size: 16px; margin-top: 24px; color: #333; }
-  h4 { font-size: 14px; margin-top: 16px; color: #555; }
-  p { margin-bottom: 10px; }
-  .report-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
-  .report-table th, .report-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif; color: #1a1a1a; max-width: 800px; margin: 0 auto; padding: 30px; font-size: 12px; line-height: 1.5; }
+  h1 { font-size: 18px; border-bottom: 2px solid #333; padding-bottom: 6px; }
+  h2 { font-size: 15px; margin-top: 1.2em; color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 3px; }
+  h3 { font-size: 13px; margin-top: 1em; color: #333; }
+  h4 { font-size: 12px; margin-top: 0.8em; color: #555; }
+  p { margin-bottom: 6px; }
+  .report-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11px; }
+  .report-table th, .report-table td { border: 1px solid #ddd; padding: 5px 8px; text-align: left; }
   .report-table th { background: #f5f5f5; font-weight: 600; }
   .report-table tr:nth-child(even) { background: #fafafa; }
-  .risk-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .risk-badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: 600; }
   .risk-badge[data-level="CRITICAL"] { background: #fee2e2; color: #991b1b; }
   .risk-badge[data-level="HIGH"] { background: #ffedd5; color: #9a3412; }
   .risk-badge[data-level="MEDIUM"] { background: #fef9c3; color: #854d0e; }
   .risk-badge[data-level="LOW"] { background: #dcfce7; color: #166534; }
   .risk-badge[data-level="MINIMAL"] { background: #dbeafe; color: #1e40af; }
-  .callout { padding: 12px 16px; border-radius: 6px; margin: 16px 0; border-left: 4px solid; }
+  .callout { padding: 8px 12px; border-radius: 6px; margin: 10px 0; border-left: 4px solid; font-size: 11px; }
   .callout-warning { background: #fffbeb; border-color: #f59e0b; }
   .callout-info { background: #eff6ff; border-color: #3b82f6; }
-  .chart-placeholder { padding: 20px; text-align: center; background: #f9fafb; border: 1px dashed #ddd; border-radius: 8px; color: #999; font-size: 12px; }
-  .chart-placeholder::after { content: "[Chart: " attr(data-chart) "]"; }
-  code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  img { max-width: 100%; }
+  .chart-placeholder { text-align: center; }
+  code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
   section { border-left: none !important; padding-left: 0 !important; }
   .report-block-selected { outline: none !important; }
-  @media print { body { padding: 20px; } .chart-placeholder, .report-table, section { break-inside: avoid; } }
-  @page { margin: 2cm; size: A4; }
+  @media print { body { padding: 0; } .chart-placeholder, .report-table, section { break-inside: avoid; } }
+  @page { margin: 1.5cm; size: A4; }
 </style>
 </head>
 <body>
 <h1>${report?.title || 'Safety Report'}</h1>
-${html}
+${exportHtml}
 </body>
 </html>`);
     printWindow.document.close();

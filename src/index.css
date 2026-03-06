@@ -121,38 +121,39 @@ html, body, #root {
 
 /* ========== Report Editor HTML Styles ========== */
 .report-html-content {
-  line-height: 1.7;
+  line-height: 1.5;
+  font-size: 0.8125rem;
   color: var(--color-on-canvas);
 }
 
 .report-html-content h2 {
-  font-size: 1.35rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  margin-top: 2rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.35rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--color-edge);
   color: var(--color-on-canvas);
 }
 
 .report-html-content h3 {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  margin-top: 1.5rem;
-  margin-bottom: 0.5rem;
+  margin-top: 1rem;
+  margin-bottom: 0.35rem;
   color: var(--color-on-canvas);
 }
 
 .report-html-content h4 {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  margin-top: 1rem;
-  margin-bottom: 0.4rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.3rem;
   color: var(--color-on-surface);
 }
 
 .report-html-content p {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
   color: var(--color-on-surface);
 }
 
@@ -179,8 +180,8 @@ html, body, #root {
 .report-html-content .report-table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1rem 0;
-  font-size: 0.85rem;
+  margin: 0.75rem 0;
+  font-size: 0.75rem;
 }
 
 .report-html-content .report-table th,
@@ -370,25 +371,32 @@ html, body, #root {
 }
 
 .report-block-editor .bn-block-content {
-  font-size: 0.875rem;
-  line-height: 1.625;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 /* Match heading styles to report HTML content */
 .report-block-editor [data-content-type="heading"][data-level="2"] .bn-inline-content {
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 600;
   color: var(--color-text-on-canvas, #e0e0e0);
 }
 
 .report-block-editor [data-content-type="heading"][data-level="3"] .bn-inline-content {
-  font-size: 1.1rem;
+  font-size: 0.925rem;
   font-weight: 600;
   color: var(--color-text-on-canvas, #d0d0d0);
 }
 
+/* Force content-none blocks (chart, image) to full width */
+.report-block-editor [data-content-type="chart"],
+.report-block-editor [data-content-type="reportImage"] {
+  width: 100%;
+}
+
 /* Chart block wrapper */
 .chart-block-wrapper {
+  width: 100%;
   background: var(--color-bg-surface, rgba(255,255,255,0.03));
   transition: box-shadow 0.15s ease;
 }
