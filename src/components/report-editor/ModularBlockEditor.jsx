@@ -6,6 +6,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { reportSchema, getCustomSlashMenuItems } from './blocks/schema.js';
 import ChartEditorPanel from './ChartEditorPanel.jsx';
+import TextAIPanel from './TextAIPanel.jsx';
 import TableOfContents from './TableOfContents.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
 import { updateModule, generateChartConfig } from '../../api/reportEditorApi.js';
@@ -229,6 +230,63 @@ export default function ModularBlockEditor({
     editingBlockIdRef.current = null;
     setSidePanel(null);
   }, [editor, chartEditorConfig]);
+
+  // Text AI modify — extract active module HTML
+  const [textAIModuleHtml, setTextAIModuleHtml] = useState('');
+
+  const openTextAI = useCallback(async () => {
+    if (!editor || !modules?.length) return;
+    const idx = activeModuleIdx;
+    // Extract the active module's blocks: from the idx-th H2 to the next H2
+    const allBlocks = editor.document;
+    let h2Count = -1;
+    let startIdx = -1;
+    let endIdx = allBlocks.length;
+    for (let i = 0; i < allBlocks.length; i++) {
+      if (allBlocks[i].type === 'heading' && allBlocks[i].props?.level === 2) {
+        h2Count++;
+        if (h2Count === idx) startIdx = i + 1; // content starts after H2
+        else if (h2Count === idx + 1) { endIdx = i; break; }
+      }
+    }
+    if (startIdx < 0) startIdx = 0;
+    const moduleBlocks = allBlocks.slice(startIdx, endIdx);
+    if (moduleBlocks.length > 0) {
+      const html = await editor.blocksToHTMLLossy(moduleBlocks);
+      setTextAIModuleHtml(html);
+    } else {
+      setTextAIModuleHtml('');
+    }
+    setSidePanel('text-ai');
+  }, [editor, modules, activeModuleIdx]);
+
+  const handleTextAIApply = useCallback(async (newHtml) => {
+    if (!editor || !modules?.length) return;
+    const idx = activeModuleIdx;
+    // Find the module's block range and replace
+    const allBlocks = editor.document;
+    let h2Count = -1;
+    let startIdx = -1;
+    let endIdx = allBlocks.length;
+    for (let i = 0; i < allBlocks.length; i++) {
+      if (allBlocks[i].type === 'heading' && allBlocks[i].props?.level === 2) {
+        h2Count++;
+        if (h2Count === idx) startIdx = i + 1;
+        else if (h2Count === idx + 1) { endIdx = i; break; }
+      }
+    }
+    if (startIdx < 0) return;
+    const oldBlocks = allBlocks.slice(startIdx, endIdx);
+    try {
+      const newBlocks = editor.tryParseHTMLToBlocks(newHtml);
+      if (newBlocks.length > 0 && oldBlocks.length > 0) {
+        editor.replaceBlocks(oldBlocks, newBlocks);
+      }
+    } catch (e) {
+      console.error('Failed to apply AI text:', e);
+    }
+    setSidePanel(null);
+  }, [editor, modules, activeModuleIdx]);
 
   const handleAIModifyChart = useCallback(async (instruction, currentConfig) => {
     if (!report?.id) return null;
@@ -519,6 +577,13 @@ ${html}
               <div className="ml-auto flex items-center gap-1">
                 <button
                   type="button"
+                  onClick={openTextAI}
+                  className="px-2 py-0.5 text-xs rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200"
+                >
+                  {t('textAI.button', 'AI Modify')}
+                </button>
+                <button
+                  type="button"
                   onClick={() => onModuleRegenerate?.(modules[activeModuleIdx])}
                   className="px-2 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200"
                 >
@@ -552,7 +617,15 @@ ${html}
         </div>
 
         {/* Right: Full TOC — 1 part (or side panel when open) */}
-        {sidePanel === 'chart' ? (
+        {sidePanel === 'text-ai' ? (
+          <TextAIPanel
+            visible={true}
+            reportId={report?.id}
+            moduleHtml={textAIModuleHtml}
+            onApply={handleTextAIApply}
+            onClose={() => setSidePanel(null)}
+          />
+        ) : sidePanel === 'chart' ? (
           <ChartEditorPanel
             visible={true}
             chartConfig={chartEditorConfig}
