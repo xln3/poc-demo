@@ -511,7 +511,7 @@ function groupTasksByHierarchy(tasks, hierarchy, lang) {
     if (!groupIndex[key]) {
       groupIndex[key] = {
         category: info?.category || '',
-        subcategory: info?.subcategory || (isZh ? '其他' : 'Other'),
+        subcategory: info?.subcategory || '',
         benchmark: info?.benchmark || '',
         _catIdx: info?._catIdx ?? 999,
         _subIdx: info?._subIdx ?? 999,
@@ -737,7 +737,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
   // Build nested structure: category → subcategories → benchmarks
   const categoryMap = new Map();
   for (const g of groups) {
-    const catKey = g.category || (isZh ? '其他' : 'Other');
+    const catKey = g.category || t('report.uncategorized');
     if (!categoryMap.has(catKey)) categoryMap.set(catKey, new Map());
     const subMap = categoryMap.get(catKey);
     const subKey = g.subcategory;
@@ -803,7 +803,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-on-canvas">{task.samples}</div>
-                  <div className="text-xs text-on-muted">Samples</div>
+                  <div className="text-xs text-on-muted">{t('report.samplesCol')}</div>
                 </div>
               </div>
               {task.description && (
@@ -813,10 +813,10 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
             </Section>
 
             {/* Sample table */}
-            <Section title={isZh ? `样本详情 (${samplesLoading ? '...' : `${filteredSamples.length}/${samples.length}`})` : `Sample Details (${samplesLoading ? '...' : `${filteredSamples.length}/${samples.length}`})`}>
+            <Section title={`${t('report.sampleDetails')} (${samplesLoading ? '...' : `${filteredSamples.length}/${samples.length}`})`}>
               {/* Risk level filter bar */}
               <div className="flex items-center gap-2 mb-4 flex-wrap">
-                <span className="text-xs text-on-muted">{isZh ? '风险等级:' : 'Risk Level:'}</span>
+                <span className="text-xs text-on-muted">{t('report.riskLevel')}:</span>
                 {ALL_RISK_LEVELS.map(level => (
                   <button
                     key={level}
@@ -828,7 +828,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
                         : 'bg-surface border-edge text-on-dim hover:text-on-muted'
                     }`}
                   >
-                    {level}
+                    {t(`risk.${level}`)}
                   </button>
                 ))}
                 <button
@@ -836,14 +836,14 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
                   onClick={() => { setRiskFilter(new Set(ALL_RISK_LEVELS)); setPage(0); }}
                   className="px-2 py-0.5 text-[11px] text-on-dim hover:text-on-muted"
                 >
-                  {isZh ? '全部' : 'All'}
+                  {t('report.all')}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setRiskFilter(new Set(['CRITICAL', 'HIGH'])); setPage(0); }}
                   className="px-2 py-0.5 text-[11px] text-on-dim hover:text-on-muted"
                 >
-                  {isZh ? '仅高危' : 'High Risk Only'}
+                  {t('report.highRiskOnly')}
                 </button>
               </div>
 
@@ -851,7 +851,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
               {samplesLoading ? (
                 <div className="text-center text-on-muted py-6 text-sm">
                   <div className="inline-block w-5 h-5 border-2 border-on-dim/30 border-t-blue-400 rounded-full animate-spin mb-2" />
-                  <div>{isZh ? '加载样本数据...' : 'Loading samples...'}</div>
+                  <div>{t('report.loadingSamples')}</div>
                 </div>
               ) : filteredSamples.length > 0 ? (
                 <div className="overflow-x-auto">
@@ -862,13 +862,13 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
                           # <SortIcon column="id" />
                         </th>
                         <th className="text-right py-2 px-2 text-on-muted font-medium w-20 cursor-pointer select-none" onClick={() => handleSort('score')}>
-                          Score <SortIcon column="score" />
+                          {t('report.scoreCol')} <SortIcon column="score" />
                         </th>
                         <th className="text-center py-2 px-2 text-on-muted font-medium w-24 cursor-pointer select-none" onClick={() => handleSort('risk')}>
-                          Risk <SortIcon column="risk" />
+                          {t('report.riskCol')} <SortIcon column="risk" />
                         </th>
-                        <th className="text-left py-2 px-2 text-on-muted font-medium">Input</th>
-                        <th className="text-left py-2 px-2 text-on-muted font-medium">Output</th>
+                        <th className="text-left py-2 px-2 text-on-muted font-medium">{t('report.input')}</th>
+                        <th className="text-left py-2 px-2 text-on-muted font-medium">{t('report.output')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -911,7 +911,7 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
                 </div>
               ) : (
                 <div className="text-center text-on-muted py-6 text-sm">
-                  {isZh ? '没有匹配的样本' : 'No matching samples'}
+                  {t('report.noSamples')}
                 </div>
               )}
 
@@ -919,10 +919,11 @@ function SingleBenchmarkView({ detail, hierarchy, lang, selectedTask, setSelecte
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <span className="text-xs text-on-dim">
-                    {isZh
-                      ? `显示 ${page * perPage + 1}-${Math.min((page + 1) * perPage, filteredSamples.length)} / ${filteredSamples.length}`
-                      : `Showing ${page * perPage + 1}-${Math.min((page + 1) * perPage, filteredSamples.length)} of ${filteredSamples.length}`
-                    }
+                    {t('report.showing', {
+                      start: page * perPage + 1,
+                      end: Math.min((page + 1) * perPage, filteredSamples.length),
+                      total: filteredSamples.length,
+                    })}
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -981,7 +982,7 @@ function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelecte
   // Build nested structure: category → subcategories → benchmarks
   const categoryMap = new Map();
   for (const g of groups) {
-    const catKey = g.category || (isZh ? '其他' : 'Other');
+    const catKey = g.category || t('report.uncategorized');
     if (!categoryMap.has(catKey)) categoryMap.set(catKey, new Map());
     const subMap = categoryMap.get(catKey);
     const subKey = g.subcategory;
@@ -1033,7 +1034,7 @@ function HighRiskView({ detail, model, hierarchy, lang, selectedTask, setSelecte
       {selectedTask && samplesLoading && (
         <div className="text-center text-on-muted py-8 text-sm">
           <div className="inline-block w-5 h-5 border-2 border-on-dim/30 border-t-blue-400 rounded-full animate-spin mb-2" />
-          <div>{isZh ? '加载样本数据...' : 'Loading samples...'}</div>
+          <div>{t('report.loadingSamples')}</div>
         </div>
       )}
 

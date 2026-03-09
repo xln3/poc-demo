@@ -3,6 +3,13 @@
  */
 
 import { authFetch } from '../auth.js';
+import i18n from '../i18n/index.js';
+
+/** Get current UI language code (zh or en) */
+function getLang() {
+  const lang = i18n.language || 'zh';
+  return lang.startsWith('en') ? 'en' : 'zh';
+}
 
 async function request(method, path, body = null) {
   const opts = {
@@ -62,7 +69,8 @@ export function rollbackReport(reportId, version) {
  */
 export function generateReportStream(reportId) {
   const controller = new AbortController();
-  const promise = authFetch(`/report-editor/${reportId}/generate`, {
+  const lang = getLang();
+  const promise = authFetch(`/report-editor/${reportId}/generate?lang=${lang}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: controller.signal,
@@ -75,7 +83,8 @@ export function generateReportStream(reportId) {
  */
 export function regenerateSectionStream(reportId, selectedHtml, instruction) {
   const controller = new AbortController();
-  const promise = authFetch(`/report-editor/${reportId}/regenerate-section`, {
+  const lang = getLang();
+  const promise = authFetch(`/report-editor/${reportId}/regenerate-section?lang=${lang}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ selected_html: selectedHtml, instruction }),
@@ -93,7 +102,8 @@ export function regenerateSectionStream(reportId, selectedHtml, instruction) {
 
 export function generateOutlineStream(reportId) {
   const controller = new AbortController();
-  const promise = authFetch(`/report-editor/${reportId}/generate-outline`, {
+  const lang = getLang();
+  const promise = authFetch(`/report-editor/${reportId}/generate-outline?lang=${lang}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: controller.signal,
@@ -113,7 +123,8 @@ export function updateOutline(reportId, data) {
 
 export function generateModulesStream(reportId) {
   const controller = new AbortController();
-  const promise = authFetch(`/report-editor/${reportId}/generate-modules`, {
+  const lang = getLang();
+  const promise = authFetch(`/report-editor/${reportId}/generate-modules?lang=${lang}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: controller.signal,
@@ -135,7 +146,8 @@ export function updateModule(reportId, moduleId, data) {
 
 export function regenerateModuleStream(reportId, moduleId) {
   const controller = new AbortController();
-  const promise = authFetch(`/report-editor/${reportId}/modules/${moduleId}/regenerate`, {
+  const lang = getLang();
+  const promise = authFetch(`/report-editor/${reportId}/modules/${moduleId}/regenerate?lang=${lang}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: controller.signal,
@@ -150,7 +162,8 @@ export function insertModule(reportId, data) {
 // ---- Charts ----
 
 export function generateChartConfig(reportId, data) {
-  return request('POST', `/report-editor/${reportId}/generate-chart`, data);
+  const lang = getLang();
+  return request('POST', `/report-editor/${reportId}/generate-chart?lang=${lang}`, data);
 }
 
 // ---- Images ----

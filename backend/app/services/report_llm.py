@@ -23,9 +23,9 @@ REPORT_LLM_MODEL = os.environ.get("REPORT_LLM_MODEL", "claude-sonnet-4-6")
 REPORT_LLM_MAX_TOKENS = int(os.environ.get("REPORT_LLM_MAX_TOKENS", "16384"))
 
 
-# ---- Scenario system prompts ----
+# ---- Scenario system prompts (bilingual) ----
 
-SCENARIO_PROMPTS: Dict[str, str] = {
+SCENARIO_PROMPTS_ZH: Dict[str, str] = {
     "single_agent": """你是一位专业的AI安全评测分析师。请基于下方的「数据上下文」，为目标智能体撰写一份全面的安全评测报告。
 
 报告要求：
@@ -66,10 +66,57 @@ SCENARIO_PROMPTS: Dict[str, str] = {
 
 格式要求见下方通用格式指引。""",
 
-    "custom": "",  # User provides their own
+    "custom": "",
 }
 
-HTML_FORMAT_GUIDE = """
+SCENARIO_PROMPTS_EN: Dict[str, str] = {
+    "single_agent": """You are a professional AI safety evaluation analyst. Based on the "Data Context" below, write a comprehensive safety evaluation report for the target agent.
+
+Report requirements:
+1. Executive Summary: overall safety score, risk level distribution, key findings
+2. Detailed analysis by risk category: discuss scores, high-risk tasks, and typical failure cases for each category
+3. Safety recommendations: suggest improvements based on findings
+4. Conclusion
+
+See the HTML format guide below for formatting requirements.""",
+
+    "comparison": """You are a professional AI safety evaluation analyst. Based on the "Data Context" below, write a multi-agent safety comparison report.
+
+Report requirements:
+1. Executive Summary: overall score comparison across agents
+2. Category-by-category comparison: compare agent performance by risk category
+3. Strengths and weaknesses analysis: safety advantages and shortcomings of each agent
+4. Recommendations and conclusion
+
+See the HTML format guide below for formatting requirements.""",
+
+    "time_compare": """You are a professional AI safety evaluation analyst. Based on the "Data Context" below, write a temporal change analysis report for the same agent across different evaluation batches.
+
+Report requirements:
+1. Executive Summary: safety score trends over time
+2. Category-level changes: analyze improvements/regressions by risk category
+3. Root cause analysis: hypothesize reasons for changes
+4. Trend predictions and recommendations
+
+See the HTML format guide below for formatting requirements.""",
+
+    "risk_deep_dive": """You are a professional AI safety evaluation analyst. Based on the "Data Context" below, perform an in-depth analysis of the specified risk category.
+
+Report requirements:
+1. Risk category overview: definition, importance, industry standards
+2. Detailed evaluation results: analyze scores and failure modes per task
+3. Failure case analysis: list typical high-risk/critical samples, analyze inputs and outputs
+4. Improvement recommendations: specific and actionable security hardening measures
+
+See the HTML format guide below for formatting requirements.""",
+
+    "custom": "",
+}
+
+# Legacy alias for backward compatibility
+SCENARIO_PROMPTS = SCENARIO_PROMPTS_ZH
+
+HTML_FORMAT_GUIDE_ZH = """
 ## 通用HTML格式指引
 
 你必须生成语义化的HTML内容（不需要<html>/<head>/<body>标签，只需要正文内容）。
@@ -90,6 +137,41 @@ HTML_FORMAT_GUIDE = """
 
 ⚠️ 重要：你只能使用「数据上下文」中提供的真实数据。绝对不要编造任何数字、分数、样本内容。如果某项数据不存在，请明确说明"数据不可用"而非捏造。
 """
+
+HTML_FORMAT_GUIDE_EN = """
+## HTML Format Guide
+
+You must generate semantic HTML content (no <html>/<head>/<body> tags needed — only the body content).
+
+Structure requirements:
+- Use <h2 id="section-xxx"> for top-level headings (sections)
+- Use <h3 id="sub-xxx"> for sub-headings
+- Use <h4 id="detail-xxx"> for detail headings
+- Wrap each section with <section data-section-id="xxx">
+- Data tables use <table class="report-table"> with <thead> and <tbody>
+- Risk level badges use <span class="risk-badge" data-level="HIGH">HIGH</span> (supports CRITICAL/HIGH/MEDIUM/LOW/MINIMAL)
+- Use chart placeholders where charts are needed:
+  - Safety score gauge: <div class="chart-placeholder" data-chart="gauge" data-score="82" data-label="Overall Safety Score"></div>
+  - Radar chart: <div class="chart-placeholder" data-chart="radar" data-items="Privacy:75,Content Safety:88,Adversarial Robustness:62"></div>
+  - Score bar: <div class="chart-placeholder" data-chart="score_bar" data-items="Task A:92,Task B:45,Task C:78"></div>
+- Important conclusions use <div class="callout callout-warning"> or <div class="callout callout-info">
+- Lists use <ul>/<ol>, code uses <code>
+
+⚠️ Important: You may ONLY use real data from the "Data Context" provided. Never fabricate any numbers, scores, or sample content. If data is unavailable, explicitly state "data not available" instead of making it up.
+"""
+
+# Legacy alias
+HTML_FORMAT_GUIDE = HTML_FORMAT_GUIDE_ZH
+
+
+def get_scenario_prompts(lang: str = "zh") -> Dict[str, str]:
+    """Return scenario prompts in the requested language."""
+    return SCENARIO_PROMPTS_EN if lang.startswith("en") else SCENARIO_PROMPTS_ZH
+
+
+def get_html_format_guide(lang: str = "zh") -> str:
+    """Return HTML format guide in the requested language."""
+    return HTML_FORMAT_GUIDE_EN if lang.startswith("en") else HTML_FORMAT_GUIDE_ZH
 
 
 # ---- Data context builder ----
@@ -216,18 +298,26 @@ async def stream_report_html(
     system_prompt: str,
     data_context: str,
     scenario_type: str = "single_agent",
+    lang: str = "zh",
 ) -> AsyncIterator[str]:
     """Stream HTML report generation from LLM as SSE events."""
 
-    # Build the scenario system prompt
-    scenario_base = SCENARIO_PROMPTS.get(scenario_type, "")
-    full_system = (scenario_base + "\n\n" + HTML_FORMAT_GUIDE).strip()
+    # Build the scenario system prompt in the correct language
+    prompts = get_scenario_prompts(lang)
+    format_guide = get_html_format_guide(lang)
+    scenario_base = prompts.get(scenario_type, "")
+    full_system = (scenario_base + "\n\n" + format_guide).strip()
     if system_prompt:
-        full_system = system_prompt + "\n\n" + HTML_FORMAT_GUIDE
+        full_system = system_prompt + "\n\n" + format_guide
+
+    if lang.startswith("en"):
+        user_msg = f"## Data Context\n\n```json\n{data_context}\n```\n\nPlease generate the report based on the data above."
+    else:
+        user_msg = f"## 数据上下文\n\n```json\n{data_context}\n```\n\n请根据以上数据生成报告。"
 
     messages = [
         {"role": "system", "content": full_system},
-        {"role": "user", "content": f"## 数据上下文\n\n```json\n{data_context}\n```\n\n请根据以上数据生成报告。"},
+        {"role": "user", "content": user_msg},
     ]
 
     payload = {
@@ -279,10 +369,55 @@ async def stream_section_regen(
     selected_html: str,
     instruction: str,
     data_context: str,
+    lang: str = "zh",
 ) -> AsyncIterator[str]:
     """Stream regeneration of a selected HTML section."""
 
-    system = """你是一位专业的AI安全评测报告编辑助手。用户会给你一份报告的完整HTML内容和一个选中的片段，以及修改指令。
+    if lang.startswith("en"):
+        system = """You are a professional AI safety evaluation report editing assistant. The user will provide you with the full HTML content of a report, a selected fragment, and modification instructions.
+Please regenerate the HTML content of the selected fragment based on the instructions.
+
+Requirements:
+1. Only output the replacement HTML fragment (do not output the full report, do not wrap in ```html code blocks)
+2. Maintain the same HTML structure and class naming as the original report
+3. Only use real data from the data context — do not fabricate numbers
+4. Maintain a professional safety analysis tone
+
+You may use the following rich content elements in your output:
+- Data tables: <table class="report-table"><thead>...</thead><tbody>...</tbody></table>
+- Risk badges: <span class="risk-badge" data-level="HIGH">HIGH</span> (supports CRITICAL/HIGH/MEDIUM/LOW/MINIMAL)
+- Safety score gauge: <div class="chart-placeholder" data-chart="gauge" data-score="82" data-label="Safety Score"></div>
+- Radar chart: <div class="chart-placeholder" data-chart="radar" data-items="Privacy:75,Content Safety:88"></div>
+- Score bar: <div class="chart-placeholder" data-chart="score_bar" data-items="Task A:92,Task B:45"></div>
+- Warning box: <div class="callout callout-warning">content</div>
+- Info box: <div class="callout callout-info">content</div>
+
+Output the HTML content directly, without any wrapper markup."""
+
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"""## Full Report HTML
+```html
+{report_content[:10000]}
+```
+
+## Selected HTML Fragment
+```html
+{selected_html}
+```
+
+## Data Context
+```json
+{data_context[:15000]}
+```
+
+## Modification Instructions
+{instruction}
+
+Please output the replacement HTML fragment:"""},
+        ]
+    else:
+        system = """你是一位专业的AI安全评测报告编辑助手。用户会给你一份报告的完整HTML内容和一个选中的片段，以及修改指令。
 请根据指令重新生成该片段的HTML内容。
 
 要求：
@@ -302,9 +437,9 @@ async def stream_section_regen(
 
 直接输出HTML内容，不要加任何包裹标记。"""
 
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": f"""## 完整报告HTML
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"""## 完整报告HTML
 ```html
 {report_content[:10000]}
 ```
@@ -323,7 +458,7 @@ async def stream_section_regen(
 {instruction}
 
 请输出替换后的HTML片段："""},
-    ]
+        ]
 
     payload = {
         "model": REPORT_LLM_MODEL,

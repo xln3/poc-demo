@@ -260,7 +260,11 @@
     "showing": "Showing {{start}}-{{end}} of {{total}}",
     "hideSamples": "Hide Samples",
     "viewSamples": "View Samples",
-    "riskPoints": "risk points"
+    "riskPoints": "risk points",
+    "input": "Input",
+    "output": "Output",
+    "other": "Other",
+    "selectTask": "Select a task to view details"
   },
 
   "dataset": {

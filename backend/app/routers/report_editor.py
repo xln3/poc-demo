@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc
@@ -322,6 +322,7 @@ async def get_db_context():
 @router.post("/{report_id}/generate")
 async def generate_report_stream(
     report_id: str,
+    lang: str = Query("zh", description="Report language: zh or en"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -350,6 +351,7 @@ async def generate_report_stream(
                 system_prompt=report.system_prompt or "",
                 data_context=data_context,
                 scenario_type=report.scenario_type,
+                lang=lang,
             ):
                 # Extract content for accumulation
                 if chunk.startswith("data: ") and "[DONE]" not in chunk:
@@ -391,6 +393,7 @@ class SectionRegenRequest(BaseModel):
 async def regenerate_section(
     report_id: str,
     body: SectionRegenRequest,
+    lang: str = Query("zh", description="Report language: zh or en"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -408,6 +411,7 @@ async def regenerate_section(
             selected_html=body.selected_html,
             instruction=body.instruction,
             data_context=data_context,
+            lang=lang,
         ),
         media_type="text/event-stream",
     )
@@ -422,6 +426,7 @@ async def regenerate_section(
 @router.post("/{report_id}/generate-outline")
 async def generate_outline_stream(
     report_id: str,
+    lang: str = Query("zh", description="Report language: zh or en"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -439,6 +444,7 @@ async def generate_outline_stream(
             scenario_type=report.scenario_type,
             data_context=data_context,
             system_prompt=report.system_prompt,
+            lang=lang,
         ):
             # Capture outline_complete for DB save
             if "outline_complete" in event_str:
@@ -538,6 +544,7 @@ async def update_outline(
 @router.post("/{report_id}/generate-modules")
 async def generate_modules_stream(
     report_id: str,
+    lang: str = Query("zh", description="Report language: zh or en"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -596,6 +603,7 @@ async def generate_modules_stream(
             modules_meta=modules_meta,
             full_data_context=data_context,
             system_prompt=report.system_prompt,
+            lang=lang,
         ):
             # Save module content on completion
             if "module_complete" in event_str:
@@ -789,6 +797,7 @@ async def update_module(
 async def regenerate_module_stream(
     report_id: str,
     module_id: str,
+    lang: str = Query("zh", description="Report language: zh or en"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -843,6 +852,7 @@ async def regenerate_module_stream(
             data_context=module_data_ctx,
             preceding_summaries=preceding,
             system_prompt=report.system_prompt,
+            lang=lang,
         ):
             if "module_complete" in event_str:
                 try:
@@ -947,6 +957,7 @@ class ChartGenRequest(BaseModel):
 async def generate_chart(
     report_id: str,
     body: ChartGenRequest,
+    lang: str = Query("zh", description="Report language: zh or en"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -966,6 +977,7 @@ async def generate_chart(
             instruction=body.instruction,
             data_context=data_ctx,
             current_config=body.current_config,
+            lang=lang,
         )
     except Exception as e:
         logger.error("Chart generation failed: %s", e)

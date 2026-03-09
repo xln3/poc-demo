@@ -260,7 +260,11 @@
     "showing": "显示 {{start}}-{{end}} / {{total}}",
     "hideSamples": "隐藏样本",
     "viewSamples": "查看样本",
-    "riskPoints": "个风险点"
+    "riskPoints": "个风险点",
+    "input": "输入",
+    "output": "输出",
+    "other": "其他",
+    "selectTask": "请选择一个任务查看详情"
   },
 
   "dataset": {

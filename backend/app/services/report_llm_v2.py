@@ -23,7 +23,10 @@ from .report_llm import (
     REPORT_LLM_BASE_URL,
     REPORT_LLM_MODEL,
     HTML_FORMAT_GUIDE,
+    HTML_FORMAT_GUIDE_EN,
+    HTML_FORMAT_GUIDE_ZH,
     build_data_context,
+    get_html_format_guide,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,7 +40,7 @@ MAX_PARALLEL_MODULES = 3
 
 # ---- Outline generation ----
 
-OUTLINE_SYSTEM_PROMPT = """你是一位专业的AI安全评测报告架构师。请基于下方的「数据上下文」和报告场景类型，生成一份结构化的报告大纲（JSON格式）。
+OUTLINE_SYSTEM_PROMPT_ZH = """你是一位专业的AI安全评测报告架构师。请基于下方的「数据上下文」和报告场景类型，生成一份结构化的报告大纲（JSON格式）。
 
 大纲要求：
 1. 根据数据内容和场景类型，将报告拆分为 3-8 个独立模块
@@ -71,7 +74,44 @@ OUTLINE_SYSTEM_PROMPT = """你是一位专业的AI安全评测报告架构师。
 - 第一个模块通常是"执行摘要"，不依赖其他模块
 - 最后一个模块通常是"结论与建议"，依赖所有分析模块"""
 
-OUTLINE_SCENARIO_HINTS = {
+OUTLINE_SYSTEM_PROMPT_EN = """You are a professional AI safety evaluation report architect. Based on the "Data Context" and report scenario type below, generate a structured report outline (JSON format).
+
+Outline requirements:
+1. Split the report into 3-8 independent modules based on data content and scenario type
+2. Each module should have a clear theme and data dependencies
+3. Specify inter-module dependencies (e.g., "Comparison Analysis" depends on "Per-Agent Details")
+4. Suggest chart types needed for each module
+
+Output format (strict JSON, no markdown code block wrappers):
+{
+  "modules": [
+    {
+      "title": "Module Title",
+      "title_en": "Module Title",
+      "description": "Content description and analysis direction for this module",
+      "data_keys": ["Model A", "Model B"],
+      "depends_on_indices": [],
+      "suggested_charts": [
+        {"type": "gauge", "description": "Overall safety score gauge"},
+        {"type": "radar", "description": "Multi-dimension radar chart"},
+        {"type": "bar", "description": "Task score bar chart"}
+      ]
+    }
+  ]
+}
+
+Notes:
+- data_keys should reference actual key names from the data context (model names or special keys like _benchmark_meta)
+- depends_on_indices is an index array indicating which preceding modules this module depends on
+- suggested_charts type can be: gauge, radar, bar, line, pie, heatmap, scatter, treemap, sunburst, funnel
+- Module count should be reasonable: 3-5 for single agent, 4-7 for multi-agent comparison
+- The first module is typically "Executive Summary" with no dependencies
+- The last module is typically "Conclusions & Recommendations" depending on all analysis modules"""
+
+# Legacy alias
+OUTLINE_SYSTEM_PROMPT = OUTLINE_SYSTEM_PROMPT_ZH
+
+OUTLINE_SCENARIO_HINTS_ZH = {
     "single_agent": "报告类型：单智能体全面安全评测。重点关注各风险维度的详细分析。",
     "comparison": "报告类型：多智能体对比分析。重点关注横向对比和各智能体优劣势。",
     "time_compare": "报告类型：时序变化分析。重点关注同一智能体不同时期的安全性变化趋势。",
@@ -79,11 +119,22 @@ OUTLINE_SCENARIO_HINTS = {
     "custom": "报告类型：自定义。根据用户需求灵活组织。",
 }
 
+OUTLINE_SCENARIO_HINTS_EN = {
+    "single_agent": "Report type: Comprehensive single-agent safety evaluation. Focus on detailed analysis of each risk dimension.",
+    "comparison": "Report type: Multi-agent comparison analysis. Focus on cross-comparison and strengths/weaknesses of each agent.",
+    "time_compare": "Report type: Temporal change analysis. Focus on safety trend changes across evaluation batches.",
+    "risk_deep_dive": "Report type: Specific risk deep-dive analysis. Focus on detailed examination of a single risk category.",
+    "custom": "Report type: Custom. Organize flexibly based on user requirements.",
+}
+
+OUTLINE_SCENARIO_HINTS = OUTLINE_SCENARIO_HINTS_ZH
+
 
 async def stream_outline_generation(
     scenario_type: str,
     data_context: str,
     system_prompt: Optional[str] = None,
+    lang: str = "zh",
 ) -> AsyncIterator[str]:
     """Stream outline generation as SSE events.
 
@@ -93,18 +144,30 @@ async def stream_outline_generation(
       data: {"type": "error", "error": "..."}
       data: [DONE]
     """
-    scenario_hint = OUTLINE_SCENARIO_HINTS.get(scenario_type, "")
-    full_system = OUTLINE_SYSTEM_PROMPT
+    is_en = lang.startswith("en")
+    hints = OUTLINE_SCENARIO_HINTS_EN if is_en else OUTLINE_SCENARIO_HINTS_ZH
+    scenario_hint = hints.get(scenario_type, "")
+    full_system = OUTLINE_SYSTEM_PROMPT_EN if is_en else OUTLINE_SYSTEM_PROMPT_ZH
     if system_prompt:
-        full_system += f"\n\n用户补充要求：{system_prompt}"
+        prefix = "Additional user requirements:" if is_en else "用户补充要求："
+        full_system += f"\n\n{prefix}{system_prompt}"
 
-    messages = [
-        {"role": "system", "content": full_system},
-        {"role": "user", "content": (
+    if is_en:
+        user_content = (
+            f"{scenario_hint}\n\n"
+            f"## Data Context\n\n```json\n{data_context}\n```\n\n"
+            "Please generate the report outline JSON:"
+        )
+    else:
+        user_content = (
             f"{scenario_hint}\n\n"
             f"## 数据上下文\n\n```json\n{data_context}\n```\n\n"
             "请生成报告大纲JSON："
-        )},
+        )
+
+    messages = [
+        {"role": "system", "content": full_system},
+        {"role": "user", "content": user_content},
     ]
 
     payload = {
@@ -176,11 +239,7 @@ async def stream_outline_generation(
 
 # ---- Module generation ----
 
-MODULE_SYSTEM_PROMPT = """你是一位专业的AI安全评测报告撰写专家。你正在撰写报告的一个模块（章节）。
-
-请基于提供的数据上下文和模块描述，生成该模块的HTML内容。
-
-""" + HTML_FORMAT_GUIDE + """
+_MODULE_EXTRA_ZH = """
 
 额外的图表支持：
 除了基本的 gauge/radar/score_bar 占位符外，你还可以使用 ECharts 图表：
@@ -201,6 +260,42 @@ MODULE_SYSTEM_PROMPT = """你是一位专业的AI安全评测报告撰写专家�
 4. 只使用「数据上下文」中提供的真实数据，绝对不要编造数字
 5. data-chart-config 中的 JSON 必须使用单引号包裹或正确转义"""
 
+_MODULE_EXTRA_EN = """
+
+Additional chart support:
+Besides basic gauge/radar/score_bar placeholders, you can also use ECharts charts:
+<div class="chart-placeholder" data-chart-config='{ ECharts option JSON }'>
+  <p class="chart-fallback">Loading chart...</p>
+</div>
+
+Common ECharts option structures:
+- Bar chart: {"xAxis":{"type":"category","data":[...]},"yAxis":{"type":"value"},"series":[{"type":"bar","data":[...]}]}
+- Line chart: {"xAxis":{"type":"category","data":[...]},"yAxis":{"type":"value"},"series":[{"type":"line","data":[...]}]}
+- Pie chart: {"series":[{"type":"pie","data":[{"name":"A","value":100},...]}]}
+- Radar chart: {"radar":{"indicator":[{"name":"A","max":100},...]},"series":[{"type":"radar","data":[{"value":[...]}]}]}
+
+⚠️ Important:
+1. Only output the HTML content fragment for this module (do not output the full report)
+2. Do not wrap in markdown code blocks
+3. Wrap module content with <section data-module-index="N">
+4. Only use real data from the "Data Context" — never fabricate numbers
+5. JSON in data-chart-config must use single quotes or be properly escaped"""
+
+MODULE_SYSTEM_PROMPT_ZH = """你是一位专业的AI安全评测报告撰写专家。你正在撰写报告的一个模块（章节）。
+
+请基于提供的数据上下文和模块描述，生成该模块的HTML内容。
+
+""" + HTML_FORMAT_GUIDE_ZH + _MODULE_EXTRA_ZH
+
+MODULE_SYSTEM_PROMPT_EN = """You are a professional AI safety evaluation report writing expert. You are writing one module (section) of the report.
+
+Based on the provided data context and module description, generate the HTML content for this module.
+
+""" + HTML_FORMAT_GUIDE_EN + _MODULE_EXTRA_EN
+
+# Legacy alias
+MODULE_SYSTEM_PROMPT = MODULE_SYSTEM_PROMPT_ZH
+
 
 async def stream_module_generation(
     module_index: int,
@@ -209,6 +304,7 @@ async def stream_module_generation(
     data_context: str,
     preceding_summaries: Optional[str] = None,
     system_prompt: Optional[str] = None,
+    lang: str = "zh",
 ) -> AsyncIterator[str]:
     """Stream HTML generation for a single module.
 
@@ -217,11 +313,33 @@ async def stream_module_generation(
       data: {"type": "module_complete", "module_index": N}
       data: {"type": "module_error", "module_index": N, "error": "..."}
     """
-    full_system = MODULE_SYSTEM_PROMPT
+    is_en = lang.startswith("en")
+    full_system = MODULE_SYSTEM_PROMPT_EN if is_en else MODULE_SYSTEM_PROMPT_ZH
     if system_prompt:
-        full_system += f"\n\n用户补充要求：{system_prompt}"
+        prefix = "Additional user requirements:" if is_en else "用户补充要求："
+        full_system += f"\n\n{prefix}{system_prompt}"
 
-    user_content = f"""## 当前模块信息
+    if is_en:
+        user_content = f"""## Current Module Info
+- Module index: {module_index + 1}
+- Module title: {module_title}
+- Module description: {module_description}
+
+## Data Context
+
+```json
+{data_context}
+```
+"""
+        if preceding_summaries:
+            user_content += f"""
+## Preceding Module Summaries (for context continuity)
+
+{preceding_summaries}
+"""
+        user_content += "\nPlease generate the HTML content for this module:"
+    else:
+        user_content = f"""## 当前模块信息
 - 模块序号: {module_index + 1}
 - 模块标题: {module_title}
 - 模块描述: {module_description}
@@ -232,13 +350,13 @@ async def stream_module_generation(
 {data_context}
 ```
 """
-    if preceding_summaries:
-        user_content += f"""
+        if preceding_summaries:
+            user_content += f"""
 ## 前序模块概要（供参考保持连贯性）
 
 {preceding_summaries}
 """
-    user_content += "\n请生成该模块的HTML内容："
+        user_content += "\n请生成该模块的HTML内容："
 
     messages = [
         {"role": "system", "content": full_system},
@@ -379,6 +497,7 @@ async def orchestrate_module_generation(
     modules_meta: List[Dict[str, Any]],
     full_data_context: str,
     system_prompt: Optional[str] = None,
+    lang: str = "zh",
 ) -> AsyncIterator[str]:
     """Coordinate parallel/sequential module generation using topological sort.
 
@@ -429,6 +548,7 @@ async def orchestrate_module_generation(
                 data_context=data_ctx,
                 preceding_summaries=preceding,
                 system_prompt=system_prompt,
+                lang=lang,
             ):
                 events.append(event_str)
                 # Parse to extract content for dependency tracking
@@ -471,7 +591,7 @@ async def orchestrate_module_generation(
 
 # ---- Chart config generation ----
 
-CHART_SYSTEM_PROMPT = """你是一位数据可视化专家。请根据用户的自然语言描述和提供的数据，生成一个 ECharts option 配置JSON。
+CHART_SYSTEM_PROMPT_ZH = """你是一位数据可视化专家。请根据用户的自然语言描述和提供的数据，生成一个 ECharts option 配置JSON。
 
 要求：
 1. 输出严格的 JSON 格式（不要用 markdown 代码块包裹）
@@ -488,25 +608,56 @@ CHART_SYSTEM_PROMPT = """你是一位数据可视化专家。请根据用户的�
   "series": [{"type": "bar", "data": [85, 72]}]
 }"""
 
+CHART_SYSTEM_PROMPT_EN = """You are a data visualization expert. Based on the user's natural language description and provided data, generate an ECharts option configuration JSON.
+
+Requirements:
+1. Output strict JSON format (do not wrap in markdown code blocks)
+2. The configuration should be a complete ECharts option object
+3. Include appropriate titles, axis labels, and legends
+4. Use a professional safety evaluation color scheme
+5. Ensure data accurately reflects the input
+
+Example output format:
+{
+  "title": {"text": "Safety Score Comparison"},
+  "xAxis": {"type": "category", "data": ["Model A", "Model B"]},
+  "yAxis": {"type": "value", "max": 100},
+  "series": [{"type": "bar", "data": [85, 72]}]
+}"""
+
+CHART_SYSTEM_PROMPT = CHART_SYSTEM_PROMPT_ZH
+
 
 async def generate_chart_config(
     instruction: str,
     data_context: Optional[str] = None,
     current_config: Optional[dict] = None,
+    lang: str = "zh",
 ) -> dict:
     """Generate or modify an ECharts config from natural language.
 
     Returns: {"chart_config": {...}, "description": "..."}
     """
-    user_content = f"## 指令\n{instruction}"
-    if data_context:
-        user_content += f"\n\n## 相关数据\n```json\n{data_context[:5000]}\n```"
-    if current_config:
-        user_content += f"\n\n## 当前配置（请在此基础上修改）\n```json\n{json.dumps(current_config, ensure_ascii=False, indent=2)}\n```"
-    user_content += "\n\n请生成 ECharts option JSON："
+    is_en = lang.startswith("en")
+    chart_prompt = CHART_SYSTEM_PROMPT_EN if is_en else CHART_SYSTEM_PROMPT_ZH
+
+    if is_en:
+        user_content = f"## Instruction\n{instruction}"
+        if data_context:
+            user_content += f"\n\n## Related Data\n```json\n{data_context[:5000]}\n```"
+        if current_config:
+            user_content += f"\n\n## Current Config (modify based on this)\n```json\n{json.dumps(current_config, ensure_ascii=False, indent=2)}\n```"
+        user_content += "\n\nPlease generate the ECharts option JSON:"
+    else:
+        user_content = f"## 指令\n{instruction}"
+        if data_context:
+            user_content += f"\n\n## 相关数据\n```json\n{data_context[:5000]}\n```"
+        if current_config:
+            user_content += f"\n\n## 当前配置（请在此基础上修改）\n```json\n{json.dumps(current_config, ensure_ascii=False, indent=2)}\n```"
+        user_content += "\n\n请生成 ECharts option JSON："
 
     messages = [
-        {"role": "system", "content": CHART_SYSTEM_PROMPT},
+        {"role": "system", "content": chart_prompt},
         {"role": "user", "content": user_content},
     ]
 

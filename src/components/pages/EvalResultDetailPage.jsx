@@ -964,7 +964,7 @@ function BenchmarkDetailsTab({ detail, hierarchy, lang, selectedTask, setSelecte
                           : 'bg-surface border-edge text-on-dim hover:text-on-muted'
                       }`}
                     >
-                      {level}
+                      {t(`risk.${level}`)}
                     </button>
                   ))}
                   <button type="button" onClick={() => { setRiskFilter(new Set(ALL_RISK_LEVELS)); setPage(0); }} className="px-2 py-0.5 text-[11px] text-on-dim hover:text-on-muted">
@@ -994,8 +994,8 @@ function BenchmarkDetailsTab({ detail, hierarchy, lang, selectedTask, setSelecte
                           <th className="text-center py-2 px-2 text-on-muted font-medium w-24 cursor-pointer select-none" onClick={() => handleSort('risk')}>
                             {t('report.riskCol')} <SortIcon column="risk" />
                           </th>
-                          <th className="text-left py-2 px-2 text-on-muted font-medium">Input</th>
-                          <th className="text-left py-2 px-2 text-on-muted font-medium">Output</th>
+                          <th className="text-left py-2 px-2 text-on-muted font-medium">{t('report.input')}</th>
+                          <th className="text-left py-2 px-2 text-on-muted font-medium">{t('report.output')}</th>
                         </tr>
                       </thead>
                       <tbody>
