@@ -66,6 +66,35 @@ async def lifespan(app: FastAPI):
     # Startup — create DB tables if they don't exist (dev convenience)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Recover any reports stuck in "generating" status from a previous crash
+    try:
+        from .db.engine import AsyncSessionLocal
+        from .db.tables import Report, ReportOutline, ReportModule
+        from sqlalchemy import update
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                update(Report)
+                .where(Report.status == "generating")
+                .values(status="draft")
+            )
+            if result.rowcount:
+                logger.info("Recovered %d report(s) stuck in 'generating' status", result.rowcount)
+            # Also reset stuck outlines and modules
+            await session.execute(
+                update(ReportOutline)
+                .where(ReportOutline.status == "generating")
+                .values(status="draft")
+            )
+            await session.execute(
+                update(ReportModule)
+                .where(ReportModule.status == "generating")
+                .values(status="pending")
+            )
+            await session.commit()
+    except Exception as e:
+        logger.warning("Failed to recover stuck reports on startup: %s", e)
+
     yield
     # Shutdown - cleanup all containers
     logging.getLogger(__name__).info("Application shutting down")

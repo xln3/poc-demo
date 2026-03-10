@@ -50,12 +50,58 @@ class TemplateResponse(BaseModel):
         from_attributes = True
 
 
+def _normalize_config(config: dict) -> dict:
+    """Normalize config_json to ensure consistent field naming.
+
+    Canonical schema:
+        selected_tasks: [{benchmark: str, task: str}, ...]
+        selected_benchmarks: [str, ...]  (derived from selected_tasks)
+        risk_categories: [str, ...]
+
+    Legacy/alternate field names are accepted on input and converted:
+        - "benchmarks" (flat list) → selected_benchmarks
+        - "tasks" → selected_tasks
+    """
+    if not config:
+        return {}
+
+    out = dict(config)
+
+    # Accept legacy "tasks" key as alias for "selected_tasks"
+    if "tasks" in out and "selected_tasks" not in out:
+        out["selected_tasks"] = out.pop("tasks")
+    elif "tasks" in out:
+        out.pop("tasks")
+
+    # Accept bare "benchmarks" key as alias for "selected_benchmarks"
+    if "benchmarks" in out and "selected_benchmarks" not in out:
+        out["selected_benchmarks"] = out.pop("benchmarks")
+    elif "benchmarks" in out:
+        out.pop("benchmarks")
+
+    selected_tasks = out.get("selected_tasks", [])
+
+    # Ensure selected_benchmarks is always derived from selected_tasks
+    if selected_tasks:
+        out["selected_benchmarks"] = list(
+            {t["benchmark"] for t in selected_tasks if isinstance(t, dict) and "benchmark" in t}
+        )
+    elif "selected_benchmarks" not in out:
+        out["selected_benchmarks"] = []
+
+    # Ensure all expected keys exist
+    out.setdefault("selected_tasks", [])
+    out.setdefault("risk_categories", [])
+
+    return out
+
+
 def _template_to_response(tpl: EvalTemplate) -> dict:
     return {
         "id": tpl.id,
         "name": tpl.name,
         "description": tpl.description or "",
-        "config_json": tpl.config_json or {},
+        "config_json": _normalize_config(tpl.config_json or {}),
         "created_at": tpl.created_at.isoformat() if tpl.created_at else "",
         "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else "",
     }
@@ -88,7 +134,7 @@ async def create_template(
     tpl = EvalTemplate(
         name=req.name,
         description=req.description,
-        config_json=req.config_json,
+        config_json=_normalize_config(req.config_json),
         created_by=user.id,
     )
     db.add(tpl)
@@ -135,6 +181,8 @@ async def update_template(
         raise HTTPException(status_code=404, detail="Template not found")
 
     update_data = req.model_dump(exclude_none=True)
+    if "config_json" in update_data:
+        update_data["config_json"] = _normalize_config(update_data["config_json"])
     for key, value in update_data.items():
         setattr(tpl, key, value)
     tpl.updated_at = datetime.utcnow()
@@ -243,15 +291,9 @@ async def run_template(
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Failed to register agent: {e}")
 
-    # Extract benchmarks from template config
-    config = tpl.config_json or {}
-    selected_tasks = config.get("selected_tasks", [])
-    # Deduplicate benchmarks from selected tasks
-    benchmarks = list({t["benchmark"] for t in selected_tasks if "benchmark" in t})
-
-    if not benchmarks:
-        # Fallback: use selected_benchmarks if available
-        benchmarks = config.get("selected_benchmarks", [])
+    # Extract benchmarks from normalized template config
+    config = _normalize_config(tpl.config_json or {})
+    benchmarks = config.get("selected_benchmarks", [])
 
     if not benchmarks:
         raise HTTPException(status_code=400, detail="No benchmarks selected in template")

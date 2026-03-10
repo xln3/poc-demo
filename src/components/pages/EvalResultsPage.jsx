@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   listEvaluations, fetchResults, fetchResultByJob,
@@ -10,15 +10,20 @@ import RiskLevelBadge from '../eval/RiskLevelBadge';
  * EvalResultsPage — evaluation job status table
  * Shows all past and running evaluations with status, progress, duration.
  * Uses job-scoped results for scores (not model-level aggregated data).
+ *
+ * Progressive loading: shows the jobs table immediately after fetching the
+ * job list, then loads job-scoped score data in the background.
  */
 export default function EvalResultsPage({ onNavigate }) {
   const { t } = useTranslation('eval');
   const [jobs, setJobs] = useState([]);
   const [resultMap, setResultMap] = useState({});
   const [jobResultMap, setJobResultMap] = useState({});
+  const [scoresLoading, setScoresLoading] = useState(false);
   const [hierarchy, setHierarchy] = useState(null);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef(null);
+  const abortRef = useRef(null);
 
   // Build reverse map: catalog_key → { categoryId, subcategoryId }
   const benchmarkToCategoryMap = useMemo(() => {
@@ -38,35 +43,66 @@ export default function EvalResultsPage({ onNavigate }) {
     return map;
   }, [hierarchy]);
 
-  const loadData = async () => {
-    try {
-      const [jobList, results] = await Promise.all([
-        listEvaluations().catch(() => []),
-        fetchResults().catch(() => []),
-      ]);
-      // Build model→result lookup (for orphaned entries only)
-      const rmap = {};
-      for (const r of results) {
-        rmap[r.model] = r;
-        rmap[r.model.trim()] = r;
-        const lastSeg = r.model.split('/').pop().trim();
-        if (lastSeg) rmap[lastSeg] = r;
-      }
-      setResultMap(rmap);
+  /**
+   * Phase 1: Fetch job list + model-level results + hierarchy in parallel.
+   * Renders the table immediately so the user sees structure + status.
+   */
+  const loadJobsAndResults = useCallback(async () => {
+    const [jobList, results] = await Promise.all([
+      listEvaluations().catch(() => []),
+      fetchResults().catch(() => []),
+    ]);
 
-      // Fetch job-scoped results for all non-orphan jobs (including failed/cancelled)
-      const validJobs = (Array.isArray(jobList) ? jobList : []).filter(
-        j => !j.id?.startsWith('_orphan_')
+    // Build model→result lookup (for orphaned entries only)
+    const rmap = {};
+    for (const r of results) {
+      rmap[r.model] = r;
+      rmap[r.model.trim()] = r;
+      const lastSeg = r.model.split('/').pop().trim();
+      if (lastSeg) rmap[lastSeg] = r;
+    }
+    setResultMap(rmap);
+
+    // Sort jobs: running first, then by created_at desc
+    const sorted = [...(Array.isArray(jobList) ? jobList : [])].sort((a, b) => {
+      if (a.status === 'running' && b.status !== 'running') return -1;
+      if (b.status === 'running' && a.status !== 'running') return 1;
+      const aTime = a.created_at || a.started_at || 0;
+      const bTime = b.created_at || b.started_at || 0;
+      return new Date(bTime) - new Date(aTime);
+    });
+
+    return { jobList, results, rmap, sorted };
+  }, []);
+
+  /**
+   * Phase 2: Fetch job-scoped results in batches, updating state progressively.
+   * Each batch of results appears on screen as soon as it resolves.
+   */
+  const loadJobResults = useCallback(async (jobList, sorted, rmap, signal) => {
+    const validJobs = (Array.isArray(jobList) ? jobList : []).filter(
+      j => !j.id?.startsWith('_orphan_') && j.status !== 'pending'
+    );
+
+    if (validJobs.length === 0) return {};
+
+    setScoresLoading(true);
+    const BATCH_SIZE = 6;
+    const jrMap = {};
+
+    for (let i = 0; i < validJobs.length; i += BATCH_SIZE) {
+      if (signal?.aborted) break;
+
+      const batch = validJobs.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map(j =>
+          fetchResultByJob(j.id)
+            .then(detail => ({ jobId: j.id, detail }))
+            .catch(() => ({ jobId: j.id, detail: null }))
+        )
       );
-      const jobResultPromises = validJobs
-        .filter(j => j.status !== 'pending')
-        .map(j => fetchResultByJob(j.id)
-          .then(detail => ({ jobId: j.id, detail }))
-          .catch(() => ({ jobId: j.id, detail: null }))
-        );
-      const jobResults = await Promise.allSettled(jobResultPromises);
-      const jrMap = {};
-      for (const settled of jobResults) {
+
+      for (const settled of batchResults) {
         if (settled.status === 'fulfilled' && settled.value.detail) {
           const { jobId, detail } = settled.value;
           jrMap[jobId] = {
@@ -76,60 +112,85 @@ export default function EvalResultsPage({ onNavigate }) {
           };
         }
       }
-      setJobResultMap(jrMap);
 
-      // Sort jobs: running first, then by created_at desc
-      const sorted = [...(Array.isArray(jobList) ? jobList : [])].sort((a, b) => {
-        if (a.status === 'running' && b.status !== 'running') return -1;
-        if (b.status === 'running' && a.status !== 'running') return 1;
-        const aTime = a.created_at || a.started_at || 0;
-        const bTime = b.created_at || b.started_at || 0;
-        return new Date(bTime) - new Date(aTime);
-      });
-      // Add orphaned results (results with no matching job that has actual results)
-      const allEntries = [...sorted];
-      for (const r of results) {
-        const modelKey = (r.model || '').trim();
-        // Only suppress orphan if a matching job actually has result data.
-        // If all matching jobs are still running (no results yet), keep
-        // the model-level aggregate visible as a fallback.
-        const hasJobWithResults = sorted.some(j => {
-          const mid = (j.model_id || '').trim();
-          const midLast = mid.split('/').pop();
-          const modelMatch = mid === modelKey || midLast === modelKey;
-          return modelMatch && jrMap[j.job_id || j.id];
-        });
-        if (!hasJobWithResults) {
-          allEntries.push({
-            id: '_orphan_' + modelKey,
-            model_id: modelKey,
-            status: 'completed',
-            created_at: r.eval_date || '',
-            completed_at: r.eval_date || '',
-            tasks: [],
-            benchmarks: [],
-            _isOrphan: true,
-          });
-        }
+      // Update state after each batch so scores appear progressively
+      if (!signal?.aborted) {
+        setJobResultMap(prev => ({ ...prev, ...jrMap }));
       }
-      setJobs(allEntries);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
     }
-  };
 
-  // Load hierarchy once on mount
-  useEffect(() => {
-    fetchRiskHierarchy().then(setHierarchy).catch(() => {});
+    setScoresLoading(false);
+    return jrMap;
   }, []);
 
+  /**
+   * Build the final job list including orphaned results.
+   */
+  const buildJobEntries = useCallback((sorted, results, rmap, jrMap) => {
+    const allEntries = [...sorted];
+    for (const r of results) {
+      const modelKey = (r.model || '').trim();
+      const hasJobWithResults = sorted.some(j => {
+        const mid = (j.model_id || '').trim();
+        const midLast = mid.split('/').pop();
+        const modelMatch = mid === modelKey || midLast === modelKey;
+        return modelMatch && jrMap[j.job_id || j.id];
+      });
+      if (!hasJobWithResults) {
+        allEntries.push({
+          id: '_orphan_' + modelKey,
+          model_id: modelKey,
+          status: 'completed',
+          created_at: r.eval_date || '',
+          completed_at: r.eval_date || '',
+          tasks: [],
+          benchmarks: [],
+          _isOrphan: true,
+        });
+      }
+    }
+    return allEntries;
+  }, []);
+
+  const loadData = useCallback(async () => {
+    // Abort any in-flight phase-2 fetches from the previous cycle
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      // Phase 1: show the table fast
+      const { jobList, results, rmap, sorted } = await loadJobsAndResults();
+
+      // Show jobs immediately (scores will fill in progressively)
+      const initialEntries = buildJobEntries(sorted, results, rmap, {});
+      setJobs(initialEntries);
+      setLoading(false);
+
+      // Phase 2: fetch job-scoped scores in batches
+      const jrMap = await loadJobResults(jobList, sorted, rmap, controller.signal);
+
+      // Rebuild entries with orphan suppression now that we have scores
+      if (!controller.signal.aborted) {
+        const finalEntries = buildJobEntries(sorted, results, rmap, jrMap);
+        setJobs(finalEntries);
+      }
+    } catch {
+      // ignore
+      setLoading(false);
+    }
+  }, [loadJobsAndResults, loadJobResults, buildJobEntries]);
+
+  // Load hierarchy once on mount (in parallel with first loadData)
   useEffect(() => {
+    fetchRiskHierarchy().then(setHierarchy).catch(() => {});
     loadData();
     // Poll every 5s if there are running jobs
     pollRef.current = setInterval(loadData, 5000);
-    return () => clearInterval(pollRef.current);
+    return () => {
+      clearInterval(pollRef.current);
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, []);
 
   // Stop polling when no running jobs
@@ -193,11 +254,12 @@ export default function EvalResultsPage({ onNavigate }) {
               const jobResult = jobResultMap[jobId];
               const modelResult = resultMap[mid] || resultMap[midLast] || resultMap[job.model_id || job.model];
               return (
-                <JobRow
+                <MemoizedJobRow
                   key={jobId}
                   job={job}
                   jobResult={jobResult}
                   modelResult={modelResult}
+                  scoresLoading={scoresLoading}
                   benchmarkToCategoryMap={benchmarkToCategoryMap}
                   t={t}
                   onNavigate={onNavigate}
@@ -212,7 +274,7 @@ export default function EvalResultsPage({ onNavigate }) {
   );
 }
 
-function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavigate, onCancel }) {
+function JobRow({ job, jobResult, modelResult, scoresLoading, benchmarkToCategoryMap, t, onNavigate, onCancel }) {
   const modelName = (job.model_id || job.model || '-').trim();
   const agentName = job.agent_name || null;
   const displayName = agentName || modelName;
@@ -248,6 +310,8 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
   const score = effectiveResult ? Math.round(effectiveResult.avg_score) : null;
   const riskLevel = effectiveResult?.risk_level;
   const hasResults = !!effectiveResult;
+  // Show shimmer if scores are still loading and this non-orphan job has no result yet
+  const scoreLoading = scoresLoading && !isOrphan && !jobResult && status !== 'pending';
 
   // Hierarchy counts from job.benchmarks using the reverse map
   const benchmarks = job.benchmarks || [];
@@ -289,6 +353,10 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
           <div className="flex items-center justify-center gap-1.5">
             <span className="font-semibold text-on-canvas">{score}</span>
             {riskLevel && <RiskLevelBadge level={riskLevel} />}
+          </div>
+        ) : scoreLoading ? (
+          <div className="flex justify-center">
+            <div className="h-4 w-10 rounded bg-surface-raised/70 animate-pulse" />
           </div>
         ) : (
           <span className="text-on-dim">-</span>
@@ -368,6 +436,8 @@ function JobRow({ job, jobResult, modelResult, benchmarkToCategoryMap, t, onNavi
     </tr>
   );
 }
+
+const MemoizedJobRow = memo(JobRow);
 
 function StatusBadge({ status, t, tasksDone, tasksTotal, tasksSucceeded, tasksFailed }) {
   const hasPartialFailure = status === 'completed' && tasksFailed > 0;

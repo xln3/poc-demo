@@ -1,3 +1,8 @@
+# DEPRECATED — This is the old standalone poc-demo compose file.
+# Production uses the unified platform at the repo root:
+#   /agent-safety-platform/docker-compose.yml  (includes poc-demo + eval-poc + nginx)
+#   /agent-safety-platform/Dockerfile.unified-frontend  (nginx with deploy/nginx-unified.conf)
+#
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,7 +15,7 @@ services:
     volumes:
       - ../.data/pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poc}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poc} -d ${POSTGRES_DB:-poc_demo}"]
       interval: 5s
       retries: 5
     restart: unless-stopped

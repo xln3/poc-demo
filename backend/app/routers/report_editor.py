@@ -2,7 +2,7 @@
 
 import json as _json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -95,7 +95,23 @@ async def list_reports(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """List all reports (summary)."""
+    """List all reports (summary). Auto-recovers stale 'generating' reports (>10 min)."""
+    # Auto-recover reports stuck in "generating" for more than 10 minutes
+    stale_cutoff = datetime.utcnow() - timedelta(minutes=10)
+    stale_result = await db.execute(
+        select(Report).where(
+            Report.status == "generating",
+            Report.updated_at < stale_cutoff,
+        )
+    )
+    stale_reports = stale_result.scalars().all()
+    if stale_reports:
+        for r in stale_reports:
+            r.status = "draft"
+            r.updated_at = datetime.utcnow()
+            logger.info("Auto-recovered stale report %s (%s) from 'generating' to 'draft'", r.id, r.title)
+        await db.commit()
+
     result = await db.execute(
         select(Report).order_by(desc(Report.created_at))
     )
@@ -378,6 +394,18 @@ async def generate_report_stream(
                         await save_db.commit()
         except Exception as e:
             logger.error("Stream generation error: %s", e)
+            # Reset report status back to draft on error
+            try:
+                async with get_db_context() as err_db:
+                    res = await err_db.execute(select(Report).where(Report.id == report_id))
+                    rpt = res.scalar_one_or_none()
+                    if rpt and rpt.status == "generating":
+                        rpt.status = "draft"
+                        rpt.updated_at = datetime.utcnow()
+                        await err_db.commit()
+                        logger.info("Reset report %s to 'draft' after generation error", report_id)
+            except Exception as db_err:
+                logger.error("Failed to reset report status after error: %s", db_err)
             yield f"data: {_json.dumps({'error': str(e)})}\n\n"
             yield "data: [DONE]\n\n"
 
@@ -599,93 +627,118 @@ async def generate_modules_stream(
 
     async def event_stream():
         module_contents = {}
-        async for event_str in orchestrate_module_generation(
-            modules_meta=modules_meta,
-            full_data_context=data_context,
-            system_prompt=report.system_prompt,
-            lang=lang,
-        ):
-            # Save module content on completion
-            if "module_complete" in event_str:
-                try:
-                    data_line = event_str.strip().split("data: ", 1)[1]
-                    parsed = _json.loads(data_line)
-                    if parsed.get("type") == "module_complete":
-                        idx = parsed.get("module_index", -1)
-                        content = parsed.get("content", "")
-                        module_contents[idx] = content
-                        # Save to DB
-                        async with get_db_context() as save_db:
-                            res = await save_db.execute(
-                                select(ReportModule)
-                                .where(
-                                    ReportModule.report_id == report_id,
-                                    ReportModule.order_index == idx,
+        try:
+            async for event_str in orchestrate_module_generation(
+                modules_meta=modules_meta,
+                full_data_context=data_context,
+                system_prompt=report.system_prompt,
+                lang=lang,
+            ):
+                # Save module content on completion
+                if "module_complete" in event_str:
+                    try:
+                        data_line = event_str.strip().split("data: ", 1)[1]
+                        parsed = _json.loads(data_line)
+                        if parsed.get("type") == "module_complete":
+                            idx = parsed.get("module_index", -1)
+                            content = parsed.get("content", "")
+                            module_contents[idx] = content
+                            # Save to DB
+                            async with get_db_context() as save_db:
+                                res = await save_db.execute(
+                                    select(ReportModule)
+                                    .where(
+                                        ReportModule.report_id == report_id,
+                                        ReportModule.order_index == idx,
+                                    )
                                 )
-                            )
-                            mod = res.scalar_one_or_none()
-                            if mod:
-                                mod.content = content
-                                mod.status = "ready"
-                                mod.updated_at = datetime.utcnow()
-                                await save_db.commit()
-                except Exception as e:
-                    logger.error("Failed to save module content: %s", e)
+                                mod = res.scalar_one_or_none()
+                                if mod:
+                                    mod.content = content
+                                    mod.status = "ready"
+                                    mod.updated_at = datetime.utcnow()
+                                    await save_db.commit()
+                    except Exception as e:
+                        logger.error("Failed to save module content: %s", e)
 
-            elif "module_error" in event_str:
-                try:
-                    data_line = event_str.strip().split("data: ", 1)[1]
-                    parsed = _json.loads(data_line)
-                    if parsed.get("type") == "module_error":
-                        idx = parsed.get("module_index", -1)
-                        async with get_db_context() as save_db:
-                            res = await save_db.execute(
-                                select(ReportModule)
-                                .where(
-                                    ReportModule.report_id == report_id,
-                                    ReportModule.order_index == idx,
+                elif "module_error" in event_str:
+                    try:
+                        data_line = event_str.strip().split("data: ", 1)[1]
+                        parsed = _json.loads(data_line)
+                        if parsed.get("type") == "module_error":
+                            idx = parsed.get("module_index", -1)
+                            async with get_db_context() as save_db:
+                                res = await save_db.execute(
+                                    select(ReportModule)
+                                    .where(
+                                        ReportModule.report_id == report_id,
+                                        ReportModule.order_index == idx,
+                                    )
                                 )
-                            )
-                            mod = res.scalar_one_or_none()
-                            if mod:
-                                mod.status = "error"
-                                mod.generation_meta = {"error": parsed.get("error", "")}
-                                mod.updated_at = datetime.utcnow()
-                                await save_db.commit()
-                except Exception as e:
-                    logger.error("Failed to save module error: %s", e)
+                                mod = res.scalar_one_or_none()
+                                if mod:
+                                    mod.status = "error"
+                                    mod.generation_meta = {"error": parsed.get("error", "")}
+                                    mod.updated_at = datetime.utcnow()
+                                    await save_db.commit()
+                    except Exception as e:
+                        logger.error("Failed to save module error: %s", e)
 
-            yield event_str
+                yield event_str
 
-        # Assemble final report content and update status
-        async with get_db_context() as save_db:
-            res = await save_db.execute(select(Report).where(Report.id == report_id))
-            rpt = res.scalar_one_or_none()
-            if rpt:
-                rpt.status = "ready"
-                rpt.updated_at = datetime.utcnow()
-                # Assemble content from all modules
-                assembled = []
-                mods_res = await save_db.execute(
-                    select(ReportModule)
-                    .where(ReportModule.report_id == report_id)
-                    .order_by(ReportModule.order_index)
+            # Assemble final report content and update status
+            async with get_db_context() as save_db:
+                res = await save_db.execute(select(Report).where(Report.id == report_id))
+                rpt = res.scalar_one_or_none()
+                if rpt:
+                    rpt.status = "ready"
+                    rpt.updated_at = datetime.utcnow()
+                    # Assemble content from all modules
+                    assembled = []
+                    mods_res = await save_db.execute(
+                        select(ReportModule)
+                        .where(ReportModule.report_id == report_id)
+                        .order_by(ReportModule.order_index)
+                    )
+                    for mod in mods_res.scalars().all():
+                        if mod.content:
+                            assembled.append(mod.content)
+                    rpt.content = "\n\n".join(assembled)
+                    await save_db.commit()
+
+                # Mark outline as approved (generation done)
+                ol_res = await save_db.execute(
+                    select(ReportOutline).where(ReportOutline.report_id == report_id)
                 )
-                for mod in mods_res.scalars().all():
-                    if mod.content:
-                        assembled.append(mod.content)
-                rpt.content = "\n\n".join(assembled)
-                await save_db.commit()
+                ol = ol_res.scalar_one_or_none()
+                if ol:
+                    ol.status = "approved"
+                    ol.updated_at = datetime.utcnow()
+                    await save_db.commit()
 
-            # Mark outline as approved (generation done)
-            ol_res = await save_db.execute(
-                select(ReportOutline).where(ReportOutline.report_id == report_id)
-            )
-            ol = ol_res.scalar_one_or_none()
-            if ol:
-                ol.status = "approved"
-                ol.updated_at = datetime.utcnow()
-                await save_db.commit()
+        except Exception as e:
+            logger.error("Module generation stream error: %s", e)
+            # Reset report and outline status back to draft on error
+            try:
+                async with get_db_context() as err_db:
+                    res = await err_db.execute(select(Report).where(Report.id == report_id))
+                    rpt = res.scalar_one_or_none()
+                    if rpt and rpt.status == "generating":
+                        rpt.status = "draft"
+                        rpt.updated_at = datetime.utcnow()
+                    ol_res = await err_db.execute(
+                        select(ReportOutline).where(ReportOutline.report_id == report_id)
+                    )
+                    ol = ol_res.scalar_one_or_none()
+                    if ol and ol.status == "generating":
+                        ol.status = "draft"
+                        ol.updated_at = datetime.utcnow()
+                    await err_db.commit()
+                    logger.info("Reset report %s to 'draft' after module generation error", report_id)
+            except Exception as db_err:
+                logger.error("Failed to reset report status after module error: %s", db_err)
+            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -845,37 +898,56 @@ async def regenerate_module_stream(
 
     async def event_stream():
         final_content = None
-        async for event_str in stream_module_generation(
-            module_index=mod.order_index,
-            module_title=mod.title,
-            module_description=mod.description or "",
-            data_context=module_data_ctx,
-            preceding_summaries=preceding,
-            system_prompt=report.system_prompt,
-            lang=lang,
-        ):
-            if "module_complete" in event_str:
-                try:
-                    data_line = event_str.strip().split("data: ", 1)[1]
-                    parsed = _json.loads(data_line)
-                    if parsed.get("type") == "module_complete":
-                        final_content = parsed.get("content", "")
-                except Exception:
-                    pass
-            yield event_str
+        try:
+            async for event_str in stream_module_generation(
+                module_index=mod.order_index,
+                module_title=mod.title,
+                module_description=mod.description or "",
+                data_context=module_data_ctx,
+                preceding_summaries=preceding,
+                system_prompt=report.system_prompt,
+                lang=lang,
+            ):
+                if "module_complete" in event_str:
+                    try:
+                        data_line = event_str.strip().split("data: ", 1)[1]
+                        parsed = _json.loads(data_line)
+                        if parsed.get("type") == "module_complete":
+                            final_content = parsed.get("content", "")
+                    except Exception:
+                        pass
+                yield event_str
 
-        # Save to DB
-        if final_content is not None:
-            async with get_db_context() as save_db:
-                res = await save_db.execute(
-                    select(ReportModule).where(ReportModule.id == module_id)
-                )
-                m = res.scalar_one_or_none()
-                if m:
-                    m.content = final_content
-                    m.status = "ready"
-                    m.updated_at = datetime.utcnow()
-                    await save_db.commit()
+            # Save to DB
+            if final_content is not None:
+                async with get_db_context() as save_db:
+                    res = await save_db.execute(
+                        select(ReportModule).where(ReportModule.id == module_id)
+                    )
+                    m = res.scalar_one_or_none()
+                    if m:
+                        m.content = final_content
+                        m.status = "ready"
+                        m.updated_at = datetime.utcnow()
+                        await save_db.commit()
+
+        except Exception as e:
+            logger.error("Single module regeneration error for %s: %s", module_id, e)
+            # Reset module status back to pending on error
+            try:
+                async with get_db_context() as err_db:
+                    res = await err_db.execute(
+                        select(ReportModule).where(ReportModule.id == module_id)
+                    )
+                    m = res.scalar_one_or_none()
+                    if m and m.status == "generating":
+                        m.status = "error"
+                        m.generation_meta = {"error": str(e)}
+                        m.updated_at = datetime.utcnow()
+                        await err_db.commit()
+            except Exception as db_err:
+                logger.error("Failed to reset module status after error: %s", db_err)
+            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
 
         yield "data: [DONE]\n\n"
 
