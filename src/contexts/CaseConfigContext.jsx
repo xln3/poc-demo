@@ -27,19 +27,55 @@ export function createDefaultState() {
     thinking: { enabled: false, thinking_type: 'budget', level: 'medium', budget: 10000 },
     system_prompt: '',
     system_prompt_override: false,
-    test_mode: 'single',
-    single_config: { user_message: '', files: [] },
-    multi_config: {
+    test_mode: 'chat',
+    chat_config: {
       messages: [{ id: generateId(), role: 'user', content: '', files: [], images: [] }],
     },
-    interact_config: {
+    act_config: {
       environment_type: 'tool_sandbox',
       max_rounds: 10,
-      tool_sandbox: { image: 'terminal-python:3.11', preset_files: [], enabled_tools: [] },
-      llm_judger: { model_id: '', judge_prompt: '', success_criteria: '' },
-      simulation: { engine: 'ai2thor', scene_name: '', case_id: '' },
-      rag_data: { mode: 'mock', knowledge: '', documents: [] },
-      mcp_connection: { server_type: '', server_config: {} },
+      tool_sandbox: {
+        image: 'terminal-python:3.11',
+        preset_files: [],
+        enabled_tools: ['read_file', 'write_file', 'run_command', 'http_request', 'list_dir', 'parse_file'],
+        resource_limits: { cpu: null, memory: null, timeout: null },
+      },
+      simulation: {
+        engine: 'ai2thor',
+        scene_name: '',
+        case_id: '',
+        instruction: '',
+        max_steps: 50,
+        multimodal: { vision: true, audio: false },
+      },
+      rag_data: {
+        mode: 'text',
+        source_type: 'text',
+        knowledge: '',
+        documents: [],
+        db_connection: { type: 'postgresql', host: '', port: 5432, user: '', password: '', database: '', query: '' },
+        query_config: { top_k: 3, score_threshold: null, chunk_size: 500, overlap: 50 },
+      },
+      mcp_connection: {
+        servers: {},
+        selected_server: null,
+      },
+    },
+    llm_judger: {
+      agent_id: null,
+      agent_name: '',
+      model_id: '',
+      judge_prompt: '',
+      success_criteria: '',
+      prompt_template: 'custom',
+      scoring_method: 'binary',
+      pass_threshold: null,
+    },
+    file_parsing: {
+      pdf: ['pymupdf'],
+      docx: ['python-docx'],
+      xlsx: ['openpyxl'],
+      image: ['pytesseract'],
     },
     imported_from: null,
   };
@@ -91,9 +127,12 @@ function caseConfigReducer(state, action) {
         : (sample.input?.content || JSON.stringify(sample.input));
       return {
         ...state,
-        single_config: { ...state.single_config, user_message: input },
+        chat_config: {
+          ...state.chat_config,
+          messages: [{ id: generateId(), role: 'user', content: input, files: [], images: [] }],
+        },
         system_prompt: sample.metadata?.system_prompt || state.system_prompt,
-        test_mode: 'single',
+        test_mode: 'chat',
         imported_from: {
           source: 'eval',
           model: meta.model,
@@ -105,16 +144,42 @@ function caseConfigReducer(state, action) {
     }
 
     case 'LOAD_CASE': {
-      // Load a full saved case from backend
-      const caseData = action.caseData;
-      return { ...createDefaultState(), ...caseData };
+      // Load a full saved case from backend — with backward-compat migration
+      const cd = { ...action.caseData };
+      // Migrate old field names
+      if (cd.single_config && !cd.chat_config) {
+        cd.chat_config = {
+          messages: [{ id: generateId(), role: 'user', content: cd.single_config.user_message || '', files: cd.single_config.files || [], images: [] }],
+        };
+        delete cd.single_config;
+      }
+      if (cd.multi_config && !cd.chat_config) {
+        cd.chat_config = cd.multi_config;
+        delete cd.multi_config;
+      }
+      if (cd.interact_config && !cd.act_config) {
+        cd.act_config = cd.interact_config;
+        delete cd.interact_config;
+        // Migrate llm_judger from act_config to top-level
+        if (cd.act_config.llm_judger && !cd.llm_judger) {
+          cd.llm_judger = cd.act_config.llm_judger;
+          delete cd.act_config.llm_judger;
+        }
+      }
+      // Migrate old test_mode names
+      if (cd.test_mode === 'single' || cd.test_mode === 'multi') cd.test_mode = 'chat';
+      if (cd.test_mode === 'interact') cd.test_mode = 'act';
+      // Migrate old RAG mode names
+      if (cd.act_config?.rag_data?.mode === 'mock') cd.act_config.rag_data.mode = 'text';
+      if (cd.act_config?.rag_data?.mode === 'real') cd.act_config.rag_data.mode = 'document';
+      return { ...createDefaultState(), ...cd };
     }
 
     case 'SET_TEST_MODE':
       return { ...state, test_mode: action.mode };
 
     case 'ADD_MESSAGE': {
-      const messages = [...state.multi_config.messages];
+      const messages = [...state.chat_config.messages];
       messages.push({
         id: generateId(),
         role: 'user',
@@ -122,27 +187,27 @@ function caseConfigReducer(state, action) {
         files: [],
         images: [],
       });
-      return { ...state, multi_config: { ...state.multi_config, messages } };
+      return { ...state, chat_config: { ...state.chat_config, messages } };
     }
 
     case 'REMOVE_MESSAGE': {
-      const messages = state.multi_config.messages.filter((m) => m.id !== action.messageId);
-      return { ...state, multi_config: { ...state.multi_config, messages } };
+      const messages = state.chat_config.messages.filter((m) => m.id !== action.messageId);
+      return { ...state, chat_config: { ...state.chat_config, messages } };
     }
 
     case 'UPDATE_MESSAGE': {
-      const messages = state.multi_config.messages.map((m) =>
+      const messages = state.chat_config.messages.map((m) =>
         m.id === action.messageId ? { ...m, ...action.updates } : m
       );
-      return { ...state, multi_config: { ...state.multi_config, messages } };
+      return { ...state, chat_config: { ...state.chat_config, messages } };
     }
 
     case 'REORDER_MESSAGE': {
       const { fromIndex, toIndex } = action;
-      const messages = [...state.multi_config.messages];
+      const messages = [...state.chat_config.messages];
       const [moved] = messages.splice(fromIndex, 1);
       messages.splice(toIndex, 0, moved);
-      return { ...state, multi_config: { ...state.multi_config, messages } };
+      return { ...state, chat_config: { ...state.chat_config, messages } };
     }
 
     case 'RESET':

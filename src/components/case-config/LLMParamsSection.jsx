@@ -5,7 +5,7 @@ function NullableNumberInput({ label, value, onChange, placeholder, min, max, st
   const isSet = value !== null && value !== undefined;
   return (
     <div className="flex-1 min-w-0">
-      <label className="text-xs text-on-dim mb-1 block">{label}</label>
+      <label className="text-sm font-medium text-on-canvas mb-1.5 block">{label}</label>
       <div className="relative">
         <input
           type="number"
@@ -42,11 +42,8 @@ export default function LLMParamsSection() {
   const params = config.llm_params;
 
   return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-on-canvas">
-        {t('caseConfig.llmParams')}
-      </label>
-      <div className="flex gap-3">
+    <div>
+      <div className="flex gap-2">
         <NullableNumberInput
           label={t('caseConfig.temperature')}
           value={params.temperature}

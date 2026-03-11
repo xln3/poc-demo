@@ -2,9 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { useCaseConfig } from '../../hooks/useCaseConfig.js';
 
 const MODES = [
-  { key: 'single', labelKey: 'caseConfig.modeSingle' },
-  { key: 'multi',  labelKey: 'caseConfig.modeMulti'  },
-  { key: 'interact', labelKey: 'caseConfig.modeInteract' },
+  { key: 'chat', labelKey: 'caseConfig.modeChat' },
+  { key: 'act',  labelKey: 'caseConfig.modeAct' },
 ];
 
 export default function TestModeSelector() {

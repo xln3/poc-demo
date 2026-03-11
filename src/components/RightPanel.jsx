@@ -1,5 +1,6 @@
-import { forwardRef } from 'react';
+import { forwardRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchAgents } from '../api/evalBridgeApi.js';
 
 const RightPanel = forwardRef(function RightPanel({
   rightPanelTab, setRightPanelTab, rightSubTab, setRightSubTab,
@@ -12,6 +13,29 @@ const RightPanel = forwardRef(function RightPanel({
   judgeConfig, setJudgeConfig, humanJudgment, setHumanJudgment, submitHumanJudgment,
 }, logRef) {
   const { t } = useTranslation();
+  const [agents, setAgents] = useState([]);
+
+  useEffect(() => {
+    fetchAgents()
+      .then((data) => setAgents(Array.isArray(data) ? data : data.items || []))
+      .catch(() => {});
+  }, []);
+
+  const handleReviewAgentChange = (e) => {
+    const agentId = e.target.value;
+    if (!agentId) {
+      setJudgeConfig(prev => ({ ...prev, agent_id: null, model: '' }));
+      return;
+    }
+    const agent = agents.find((a) => a.id === agentId);
+    if (agent) {
+      setJudgeConfig(prev => ({
+        ...prev,
+        agent_id: agent.id,
+        model: agent.model_id || agent.name,
+      }));
+    }
+  };
 
   return (
     <div className="bg-surface rounded-lg p-3 flex flex-col min-h-0">
@@ -242,13 +266,24 @@ const RightPanel = forwardRef(function RightPanel({
               <div className="space-y-3 p-1">
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-on-dim w-16">{t('review.modelLabel')}</label>
-                  <input
-                    type="text"
-                    value={judgeConfig.model}
-                    onChange={(e) => setJudgeConfig(prev => ({ ...prev, model: e.target.value }))}
-                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-cyan-500 font-mono"
-                  />
+                  <select
+                    value={judgeConfig.agent_id || ''}
+                    onChange={handleReviewAgentChange}
+                    className="flex-1 text-xs bg-surface-raised px-2 py-1 rounded border border-edge-strong focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="">{t('caseConfig.selectAgent')}</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} {a.model_id ? `(${a.model_id})` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+                {judgeConfig.agent_id && (
+                  <div className="text-xs text-on-dim px-1">
+                    {t('caseConfig.model')}: <span className="font-mono">{judgeConfig.model}</span>
+                  </div>
+                )}
                 <div className="flex items-start gap-2">
                   <label className="text-xs text-on-dim w-16 pt-1">{t('review.promptTemplate')}</label>
                   <textarea

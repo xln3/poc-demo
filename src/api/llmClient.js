@@ -118,6 +118,7 @@ export async function callLLM({
   systemPrompt = '',
   modelId = null,
   providerId = null,
+  agentId = null,
   llmParams = {},
   thinkingConfig = null,
   stream = false,
@@ -127,13 +128,13 @@ export async function callLLM({
   const startTime = Date.now();
   const params = { ...CONFIG.llmParams, ...llmParams };
 
-  // --- Backend proxy mode (providerId given) ---
-  if (providerId) {
+  // --- Backend proxy mode (providerId or agentId given) ---
+  if (providerId || agentId) {
     const body = {
       messages,
       system_prompt: systemPrompt || '',
-      provider_id: providerId,
-      model: modelId || CONFIG.api.model,
+      ...(providerId ? { provider_id: providerId } : { agent_id: agentId }),
+      ...(modelId ? { model: modelId } : agentId ? {} : { model: CONFIG.api.model }),
       temperature: params.temperature,
       max_tokens: params.max_tokens,
       top_p: params.top_p,

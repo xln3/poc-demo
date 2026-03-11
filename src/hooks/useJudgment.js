@@ -8,6 +8,7 @@ export function useJudgment() {
   const [judgeConfig, setJudgeConfig] = useState({
     model: CONFIG.judgeModel,
     systemPrompt: CONFIG.defaultJudgePrompt,
+    agent_id: null,
   });
   const [judgeConfigOpen, setJudgeConfigOpen] = useState(false);
 

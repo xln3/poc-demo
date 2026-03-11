@@ -28,14 +28,14 @@ export default function AgentSelector() {
   };
 
   return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-on-canvas">
+    <div>
+      <label className="text-sm font-medium text-on-canvas mb-1.5 block">
         {t('caseConfig.agent')}
       </label>
       <select
         value={config.agent.agent_id || ''}
         onChange={handleSelect}
-        className="w-full px-3 py-2 bg-surface border border-edge rounded-lg text-sm text-on-canvas
+        className="w-full px-3 py-1.5 bg-surface border border-edge rounded-lg text-sm text-on-canvas
                    focus:outline-none focus:ring-2 focus:ring-blue-500/40"
       >
         <option value="">{loading ? t('batchTest.loading') : t('caseConfig.selectAgent')}</option>
@@ -45,12 +45,13 @@ export default function AgentSelector() {
           </option>
         ))}
       </select>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
       {config.agent.agent_id && (
-        <div className="flex gap-3 text-xs text-on-dim">
-          {config.agent.model_id && <span>{t('caseConfig.model')}: {config.agent.model_id}</span>}
-          {config.agent.api_base && <span>{t('caseConfig.apiBase')}: {config.agent.api_base}</span>}
-        </div>
+        <p className="text-xs text-on-dim mt-1 truncate">
+          {config.agent.model_id && <span>{config.agent.model_id}</span>}
+          {config.agent.model_id && config.agent.api_base && <span> · </span>}
+          {config.agent.api_base && <span>{config.agent.api_base}</span>}
+        </p>
       )}
     </div>
   );

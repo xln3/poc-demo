@@ -36,9 +36,12 @@ export default function RealTestControlPanel({
   apiError,
   // Current attack
   currentAttack,
+  // Custom test payload from Config page (enables Start Test without scenario)
+  customTestPayload,
 }) {
   const { t } = useTranslation();
   const isDemo = appMode === 'demo';
+  const canRun = !!(currentAttack || customTestPayload);
 
   // Provider display name
   const providerName = providers.find(p => p.id === selectedProviderId)?.provider_name;
@@ -56,7 +59,7 @@ export default function RealTestControlPanel({
       {/* Config summary + execution buttons */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         {/* Left: config summary badges */}
-        <div className={`flex items-center gap-2 flex-wrap${!currentAttack ? ' opacity-40' : ''}`}>
+        <div className={`flex items-center gap-2 flex-wrap${!canRun ? ' opacity-40' : ''}`}>
           {/* Model badge */}
           <span className="text-xs px-2 py-0.5 bg-surface-raised rounded text-on-surface">
             {providerName ? `${providerName} / ` : ''}{modelName}
@@ -259,10 +262,10 @@ export default function RealTestControlPanel({
           ) : dialogMode === 'single' ? (
             <button
               onClick={() => { startRecording(); runRealTest(); }}
-              disabled={apiStatus === 'loading' || isDemo || !currentAttack}
-              title={!currentAttack ? t('hints.selectScenarioFirst') : undefined}
+              disabled={apiStatus === 'loading' || isDemo || !canRun}
+              title={!canRun ? t('hints.selectScenarioFirst') : undefined}
               className={`px-4 py-1.5 rounded text-xs font-medium transition ${
-                apiStatus === 'loading' || isDemo || !currentAttack
+                apiStatus === 'loading' || isDemo || !canRun
                   ? 'bg-surface-hover cursor-not-allowed'
                   : 'bg-green-600 hover:bg-green-500'
               }`}
@@ -272,9 +275,9 @@ export default function RealTestControlPanel({
           ) : conversationMode === 'idle' ? (
             <button
               onClick={() => { startRecording(); startConversation(); }}
-              disabled={apiStatus === 'loading' || isDemo || !currentAttack}
-              title={!currentAttack ? t('hints.selectScenarioFirst') : undefined}
-              className={`px-4 py-1.5 rounded text-xs font-medium transition ${isDemo || !currentAttack ? 'bg-surface-hover cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
+              disabled={apiStatus === 'loading' || isDemo || !canRun}
+              title={!canRun ? t('hints.selectScenarioFirst') : undefined}
+              className={`px-4 py-1.5 rounded text-xs font-medium transition ${isDemo || !canRun ? 'bg-surface-hover cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
             >
               {t('buttons.startTest')}
             </button>

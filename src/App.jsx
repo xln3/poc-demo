@@ -102,6 +102,7 @@ export default function App() {
   const [apiError, setApiError] = useState('');
   const [realResponse, setRealResponse] = useState('');
   const [selectedModel, setSelectedModel] = useState(CONFIG.models[0]?.id || '');
+  const [selectedAgentId, setSelectedAgentId] = useState(null);
   const { providers, selectedProviderId, setSelectedProviderId, providerModels, reloadProviders } = useProviders();
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
   const [documentReadme, setDocumentReadme] = useState('');
@@ -485,6 +486,123 @@ export default function App() {
     playbackProgress, playbackTotal,
     startPlayback, pausePlayback, resumePlayback, stopPlayback, exitPlayback, skipToEnd
   } = playback;
+
+  // Apply case config from ConfigPage → Run tab
+  // Maps v3 CaseConfig fields to App.jsx state setters so Run page can execute with saved config
+  const applyCaseConfig = useCallback((caseConfig) => {
+    if (!caseConfig) return;
+
+    // Agent → LLM provider
+    if (caseConfig.agent?.agent_id) setSelectedAgentId(caseConfig.agent.agent_id);
+    if (caseConfig.agent?.model_id) setSelectedModel(caseConfig.agent.model_id);
+    if (caseConfig.llm_params) {
+      if (caseConfig.llm_params.temperature != null) setLlmTemperature(caseConfig.llm_params.temperature);
+      if (caseConfig.llm_params.max_tokens != null) setLlmMaxTokens(caseConfig.llm_params.max_tokens);
+      if (caseConfig.llm_params.top_p != null) setLlmTopP(caseConfig.llm_params.top_p);
+    }
+
+    // Thinking
+    if (caseConfig.thinking) {
+      setThinkingEnabled(caseConfig.thinking.enabled || false);
+      if (caseConfig.thinking.budget) setThinkingBudget(caseConfig.thinking.budget);
+    }
+
+    // System prompt
+    if (caseConfig.system_prompt) {
+      setCustomSystemPrompt(caseConfig.system_prompt);
+    }
+
+    // Test mode → dialog mode
+    if (caseConfig.test_mode === 'chat' || caseConfig.test_mode === 'act') {
+      setDialogMode('multi');
+    } else {
+      setDialogMode('single');
+    }
+
+    // Test payload — chat mode first message or act mode
+    if (caseConfig.test_mode === 'chat') {
+      const firstMsg = caseConfig.chat_config?.messages?.[0];
+      if (firstMsg?.content) {
+        setCustomTestPayload(firstMsg.content);
+      }
+      if (firstMsg?.files?.length > 0) {
+        setPayloadFiles(firstMsg.files);
+      }
+    } else if (caseConfig.test_mode === 'act') {
+      setCustomTestPayload('[interactive session]');
+    }
+
+    // File parsing config → MCP parsers
+    if (caseConfig.file_parsing) {
+      setMcpParsers(caseConfig.file_parsing);
+    }
+
+    // LLM Judger config (standalone, applies to all modes)
+    if (caseConfig.llm_judger) {
+      const j = caseConfig.llm_judger;
+      setJudgeConfig({
+        model: j.model_id || null,
+        systemPrompt: j.judge_prompt || '',
+        agent_id: j.agent_id || null,
+      });
+    }
+
+    // Act config — only apply the selected environment type
+    if (caseConfig.test_mode === 'act') {
+      const ic = caseConfig.act_config;
+      const envType = ic?.environment_type;
+
+      if (envType === 'tool_sandbox' && ic.tool_sandbox) {
+        setSandboxEnabled(true);
+        if (ic.tool_sandbox.image) setSandboxImage(ic.tool_sandbox.image);
+        if (ic.tool_sandbox.enabled_tools) {
+          setToolsEnabled(true);
+          setEnabledTools(ic.tool_sandbox.enabled_tools);
+        }
+      }
+
+      if (envType === 'rag_data' && ic.rag_data) {
+        setRagEnabled(true);
+        setRagMode(ic.rag_data.mode === 'document' ? 'real' : 'mock');
+        if (ic.rag_data.knowledge) setRagKnowledge(ic.rag_data.knowledge);
+        if (ic.rag_data.documents) setRagDocuments(ic.rag_data.documents);
+      }
+
+      if (envType === 'mcp_connection' && ic.mcp_connection) {
+        const servers = ic.mcp_connection.servers || {};
+        const hasEnabled = Object.values(servers).some((s) => s?.enabled);
+        if (hasEnabled) {
+          setMcpServerEnabled(true);
+          setMcpServerConfigs(servers);
+          if (ic.mcp_connection.selected_server) {
+            setSelectedMcpServer(ic.mcp_connection.selected_server);
+          }
+        }
+      }
+
+      if (envType === 'simulation' && ic.simulation?.engine) {
+        setSimEngine(ic.simulation.engine);
+      }
+    }
+
+    // Clear conversation state for fresh run
+    setMessages([]);
+    setLogs([]);
+    setToolCallHistory([]);
+    setApiStatus('idle');
+    setRealResponse('');
+    setLastTestResult(null);
+  }, [
+    setSelectedAgentId, setSelectedModel, setLlmTemperature, setLlmMaxTokens, setLlmTopP,
+    setThinkingEnabled, setThinkingBudget, setCustomSystemPrompt, setCustomTestPayload,
+    setDialogMode, setPayloadFiles, setMcpParsers,
+    setToolsEnabled, setEnabledTools,
+    setSandboxEnabled, setSandboxImage,
+    setRagEnabled, setRagMode, setRagKnowledge, setRagDocuments,
+    setMcpServerEnabled, setMcpServerConfigs, setSelectedMcpServer,
+    setSimEngine, setJudgeConfig,
+    setMessages, setLogs, setToolCallHistory, setApiStatus, setRealResponse, setLastTestResult,
+  ]);
 
   // Datasets hook - 数据集管理
   const datasets = useDatasets();
@@ -1113,7 +1231,7 @@ export default function App() {
     setThinkingEntries, setApiInteractions, setExpandedThinking, setExpandedApiInteraction,
     setLeftPanelTab, payloadFiles, customTestPayload,
     getActualPayload, getDisplayPayload,
-    selectedModel, customSystemPrompt,
+    selectedModel, selectedAgentId, customSystemPrompt,
     ragEnabled, ragMode, ragKnowledge, ragServiceAvailable,
     performRagQuery, formatRAGContext, formatRAGLogs,
     toolsEnabled, sandboxStatus, enabledTools,
@@ -1134,7 +1252,7 @@ export default function App() {
     setThinkingEntries, setApiInteractions, setExpandedThinking, setExpandedApiInteraction,
     setLeftPanelTab, payloadFiles, customTestPayload,
     getActualPayload, getDisplayPayload, setInitialPayload, initialPayload,
-    selectedModel, customSystemPrompt,
+    selectedModel, selectedAgentId, customSystemPrompt,
     ragEnabled, ragMode, ragKnowledge, ragServiceAvailable,
     performRagQuery, formatRAGContext, formatRAGLogs,
     toolsEnabled, sandboxStatus, enabledTools,
@@ -1145,7 +1263,7 @@ export default function App() {
     getFileTypeForMcp, mcpParsers,
     addTestRecord, startThinkingRecord, finalizeThinkingRecord, addResponseRecord,
     userInput, setUserInput, apiStatus,
-    setLastTestResult,
+    setLastTestResult, judgeConfig,
   });
 
   // 加载已保存的测试结果列表
@@ -1487,7 +1605,7 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* 配置 tab — v3 self-contained ConfigPage */}
         {activeTab === 'config' && (
-          <ConfigPage setActiveTab={setActiveTab} caseId={editingCaseId} />
+          <ConfigPage setActiveTab={setActiveTab} caseId={editingCaseId} onApplyCaseConfig={applyCaseConfig} />
         )}
 
         {/* 运行 tab */}
@@ -1548,6 +1666,7 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
               apiError,
               // Current attack (for disable logic)
               currentAttack: translatedAttack || currentAttack,
+              customTestPayload,
             }}
             conversationPanel={{
               leftPanelTab, setLeftPanelTab,

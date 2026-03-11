@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCaseConfig } from '../../hooks/useCaseConfig.js';
 
@@ -5,12 +6,35 @@ export default function SingleModeEditor() {
   const { t } = useTranslation();
   const { config, updateField } = useCaseConfig();
   const sc = config.single_config;
+  const fileRef = useRef(null);
+
+  const handleFileUpload = (e) => {
+    const newFiles = Array.from(e.target.files).map((f) => ({
+      name: f.name,
+      size: f.size,
+      type: f.type,
+    }));
+    updateField('single_config.files', [...sc.files, ...newFiles]);
+    e.target.value = '';
+  };
 
   return (
     <div className="space-y-2">
-      <label className="text-sm font-medium text-on-canvas">
-        {t('caseConfig.userMessage')}
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium text-on-canvas">
+          {t('caseConfig.userMessage')}
+        </label>
+        <label className="cursor-pointer text-xs px-2 py-1 bg-surface-raised hover:bg-surface-hover rounded border border-edge transition">
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          {t('caseConfig.attachFile')}
+        </label>
+      </div>
       <textarea
         value={sc.user_message}
         onChange={(e) => updateField('single_config.user_message', e.target.value)}

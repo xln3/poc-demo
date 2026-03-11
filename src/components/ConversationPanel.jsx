@@ -110,8 +110,8 @@ const ConversationPanel = forwardRef(function ConversationPanel({
             )}
           </div>
 
-          {/* 多轮对话输入框 */}
-          {dialogMode === 'multi' && conversationMode === 'active' && (
+          {/* 多轮对话输入框 — 多轮模式下活跃时显示，单轮模式下测试完成后也显示 */}
+          {(conversationMode === 'active' || (dialogMode === 'single' && messages.length > 0 && apiStatus !== 'loading')) && (
             <div className="border-t border-edge pt-2 mt-2 flex-shrink-0">
               <div className="flex gap-2">
                 <input

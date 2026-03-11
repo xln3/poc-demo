@@ -42,6 +42,7 @@ export default function ImportFromEvalDialog({ open, onClose }) {
     setSelectedJobId('');
     setTasks([]);
     setSamples([]);
+    setError(null);
     listEvaluations()
       .then((data) => {
         const allJobs = Array.isArray(data) ? data : data.items || [];
@@ -58,9 +59,14 @@ export default function ImportFromEvalDialog({ open, onClose }) {
     setLoading((l) => ({ ...l, tasks: true }));
     setSelectedTask('');
     setSamples([]);
+    setError(null);
     fetchResultByJob(selectedJobId)
       .then((data) => {
-        const taskList = data.tasks ? Object.keys(data.tasks) : [];
+        // tasks may be a list of {task, display_name, ...} or a dict keyed by task name
+        const raw = data.tasks || [];
+        const taskList = Array.isArray(raw)
+          ? raw.map((t) => t.task || t.name || String(t))
+          : Object.keys(raw);
         setTasks(taskList);
       })
       .catch((e) => setError(e.message))
@@ -77,8 +83,10 @@ export default function ImportFromEvalDialog({ open, onClose }) {
       .finally(() => setLoading((l) => ({ ...l, samples: false })));
   }, [selectedJobId, selectedTask]);
 
+  const getJobId = (j) => j.job_id || j.id;
+
   const handleImport = (sample) => {
-    const job = jobs.find((j) => j.job_id === selectedJobId);
+    const job = jobs.find((j) => getJobId(j) === selectedJobId);
     loadSample(sample, {
       model: job?.model_id || '',
       task: selectedTask,
@@ -128,8 +136,8 @@ export default function ImportFromEvalDialog({ open, onClose }) {
               className="w-full px-2 py-1.5 bg-surface border border-edge rounded-lg text-xs text-on-canvas disabled:opacity-50">
               <option value="">{loading.jobs ? '...' : t('caseConfig.selectJob')}</option>
               {jobs.map((j) => (
-                <option key={j.job_id} value={j.job_id}>
-                  {j.status} - {j.created_at ? new Date(j.created_at).toLocaleDateString() : j.job_id.slice(0, 8)}
+                <option key={getJobId(j)} value={getJobId(j)}>
+                  {j.status} - {j.created_at ? new Date(j.created_at).toLocaleDateString() : getJobId(j).slice(0, 8)}
                 </option>
               ))}
             </select>

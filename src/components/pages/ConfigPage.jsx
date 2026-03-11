@@ -9,26 +9,27 @@ import {
   ThinkingSection,
   SystemPromptEditor,
   TestModeSelector,
-  SingleModeEditor,
   MultiModeEditor,
   InteractModeEditor,
+  LLMJudgerConfig,
+  FileParsingConfig,
   ImportFromEvalDialog,
 } from '../case-config/index.js';
 import { saveCaseToServer, getCaseDetail, updateCase } from '../../caseApi.js';
 
 /**
- * ConfigPage — v3 self-contained case config page.
+ * ConfigPage — v4 self-contained case config page.
  * Wraps all components in CaseConfigProvider.
  */
-export default function ConfigPage({ setActiveTab, caseId }) {
+export default function ConfigPage({ setActiveTab, caseId, onApplyCaseConfig }) {
   return (
     <CaseConfigProvider>
-      <ConfigPageInner setActiveTab={setActiveTab} caseId={caseId} />
+      <ConfigPageInner setActiveTab={setActiveTab} caseId={caseId} onApplyCaseConfig={onApplyCaseConfig} />
     </CaseConfigProvider>
   );
 }
 
-function ConfigPageInner({ setActiveTab, caseId }) {
+function ConfigPageInner({ setActiveTab, caseId, onApplyCaseConfig }) {
   const { t } = useTranslation();
   const { config, loadCase, toSavePayload } = useCaseConfig();
   const [saving, setSaving] = useState(false);
@@ -40,8 +41,7 @@ function ConfigPageInner({ setActiveTab, caseId }) {
     if (!caseId) return;
     getCaseDetail(caseId)
       .then((data) => {
-        // v3 cases store their fields at top level
-        if (data.schema_version === '3.0.0' || data.test_mode) {
+        if (data.schema_version === '3.0.0' || data.schema_version === '4.0.0' || data.test_mode) {
           loadCase(data);
         }
       })
@@ -73,15 +73,14 @@ function ConfigPageInner({ setActiveTab, caseId }) {
   }, [toast]);
 
   const modeEditors = {
-    single: SingleModeEditor,
-    multi: MultiModeEditor,
-    interact: InteractModeEditor,
+    chat: MultiModeEditor,
+    act: InteractModeEditor,
   };
-  const ModeEditor = modeEditors[config.test_mode] || SingleModeEditor;
+  const ModeEditor = modeEditors[config.test_mode] || MultiModeEditor;
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto p-6 space-y-6">
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
         {/* Toast */}
         {toast && (
           <div className={`px-4 py-2 rounded-lg text-sm ${
@@ -101,10 +100,26 @@ function ConfigPageInner({ setActiveTab, caseId }) {
 
         <hr className="border-edge" />
 
-        <AgentSelector />
-        <LLMParamsSection />
-        <ThinkingSection />
+        {/* Agent + LLM Params + Thinking — compact single row */}
+        <div className="grid grid-cols-[3fr_4fr_2fr] gap-4 items-start">
+          <AgentSelector />
+          <LLMParamsSection />
+          <ThinkingSection />
+        </div>
         <SystemPromptEditor />
+        <FileParsingConfig />
+
+        <hr className="border-edge" />
+
+        {/* LLM Judger — standalone section */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-on-canvas">
+            {t('caseConfig.envLLMJudger')}
+          </label>
+          <div className="border border-edge rounded-lg p-3">
+            <LLMJudgerConfig />
+          </div>
+        </div>
 
         <hr className="border-edge" />
 
@@ -125,7 +140,10 @@ function ConfigPageInner({ setActiveTab, caseId }) {
           <button
             type="button"
             onClick={() => {
-              handleSave().then(() => setActiveTab?.('run'));
+              handleSave().then(() => {
+                onApplyCaseConfig?.(config);
+                setActiveTab?.('run');
+              });
             }}
             disabled={saving}
             className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700

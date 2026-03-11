@@ -9,15 +9,15 @@ export default function ThinkingSection() {
   const { enabled, thinking_type, level, budget } = config.thinking;
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-on-canvas">
-          {t('caseConfig.thinking')}
-        </label>
+    <div>
+      <label className="text-sm font-medium text-on-canvas mb-1.5 block">
+        {t('caseConfig.thinking')}
+      </label>
+      <div className="flex items-center gap-2 h-[30px]">
         <button
           type="button"
           onClick={() => updateField('thinking.enabled', !enabled)}
-          className={`relative w-9 h-5 rounded-full transition-colors ${
+          className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
             enabled ? 'bg-blue-600' : 'bg-gray-400 dark:bg-gray-600'
           }`}
         >
@@ -26,20 +26,32 @@ export default function ThinkingSection() {
           }`} />
         </button>
         {thinking_type && (
-          <span className="text-xs text-on-dim px-2 py-0.5 bg-surface border border-edge rounded">
+          <span className="text-xs text-on-dim px-1.5 py-0.5 bg-surface border border-edge rounded shrink-0">
             {thinking_type}
           </span>
+        )}
+        {enabled && thinking_type === 'budget' && (
+          <input
+            type="number"
+            value={budget}
+            onChange={(e) => updateField('thinking.budget', Number(e.target.value))}
+            min={1000}
+            max={100000}
+            step={1000}
+            className="w-20 px-2 py-1 bg-surface border border-edge rounded-lg text-sm text-on-canvas
+                       focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          />
         )}
       </div>
 
       {enabled && thinking_type === 'level' && (
-        <div className="flex gap-1">
+        <div className="flex gap-1 mt-1.5">
           {LEVEL_OPTIONS.map((opt) => (
             <button
               key={opt}
               type="button"
               onClick={() => updateField('thinking.level', opt)}
-              className={`px-3 py-1 text-xs rounded-lg border transition-colors ${
+              className={`px-2.5 py-0.5 text-xs rounded-lg border transition-colors ${
                 level === opt
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-surface text-on-surface border-edge hover:bg-surface-hover'
@@ -51,25 +63,8 @@ export default function ThinkingSection() {
         </div>
       )}
 
-      {enabled && thinking_type === 'budget' && (
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-on-dim">{t('caseConfig.thinkingBudget')}:</label>
-          <input
-            type="number"
-            value={budget}
-            onChange={(e) => updateField('thinking.budget', Number(e.target.value))}
-            min={1000}
-            max={100000}
-            step={1000}
-            className="w-28 px-2.5 py-1.5 bg-surface border border-edge rounded-lg text-sm text-on-canvas
-                       focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-          />
-          <span className="text-xs text-on-dim">tokens</span>
-        </div>
-      )}
-
       {enabled && thinking_type === 'toggle' && (
-        <p className="text-xs text-on-dim">{t('caseConfig.thinkingToggleHint')}</p>
+        <p className="text-xs text-on-dim mt-1">{t('caseConfig.thinkingToggleHint')}</p>
       )}
     </div>
   );

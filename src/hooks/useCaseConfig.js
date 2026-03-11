@@ -49,7 +49,7 @@ export function useCaseConfig() {
 
   const toSavePayload = useCallback(() => {
     return {
-      schema_version: '3.0.0',
+      schema_version: '4.0.0',
       ...config,
     };
   }, [config]);

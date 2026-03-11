@@ -14,7 +14,7 @@ export function useRealTest(deps) {
       setThinkingEntries, setApiInteractions, setExpandedThinking, setExpandedApiInteraction,
       setLeftPanelTab, payloadFiles, customTestPayload,
       getActualPayload, getDisplayPayload,
-      selectedModel, customSystemPrompt,
+      selectedModel, selectedAgentId, customSystemPrompt,
       ragEnabled, ragMode, ragKnowledge, ragServiceAvailable,
       performRagQuery, formatRAGContext, formatRAGLogs,
       toolsEnabled, sandboxStatus, enabledTools,
@@ -25,8 +25,14 @@ export function useRealTest(deps) {
       setLastTestResult, judgeConfig,
     } = d.current;
 
-    const attack = currentAttack;
-    const scenario = currentScenario;
+    // Fallback: when coming from Config→Run, no scenario is selected
+    const attack = currentAttack || {
+      id: 'custom-case', name: 'Custom Test', type: 'custom',
+      level: 'medium', description: '', testPayload: customTestPayload || '',
+    };
+    const scenario = currentScenario || {
+      name: 'Custom Test', systemPrompt: customSystemPrompt || '',
+    };
 
     setApiStatus('loading');
     setApiError('');
@@ -51,7 +57,7 @@ export function useRealTest(deps) {
     // 优先级：用户添加的文件 + 自定义 payload > 攻击的 realTestPayload > 攻击的 testPayload
     let actualPayload;
     const hasUserFiles = payloadFiles.length > 0;
-    const hasCustomPayload = customTestPayload !== currentAttack.testPayload;
+    const hasCustomPayload = customTestPayload !== attack.testPayload;
 
     if (hasUserFiles || hasCustomPayload) {
       // 用户有自定义内容，发送实际文件内容（模拟文档解析后的文本注入）
@@ -193,7 +199,8 @@ export function useRealTest(deps) {
             activeSystemPrompt,
             selectedModel,
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
-            toolDefinitions
+            toolDefinitions,
+            null, null, selectedAgentId
           );
         } else {
           // 普通 API 调用
@@ -201,7 +208,8 @@ export function useRealTest(deps) {
             messageHistory,
             activeSystemPrompt,
             selectedModel,
-            { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP }
+            { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
+            null, null, selectedAgentId
           );
         }
 
@@ -375,7 +383,7 @@ export function useRealTest(deps) {
         : actualPayload;
       const judgeResult = await CONFIG.judgeAttackSuccess(
         attack, activeSystemPrompt, finalResponse, judgeContext,
-        judgeConfig.systemPrompt, judgeConfig.model
+        judgeConfig.systemPrompt, judgeConfig.model, judgeConfig.agent_id || null
       );
 
       setApiStatus('success');
@@ -383,7 +391,7 @@ export function useRealTest(deps) {
       // 保存测试结果
       setLastTestResult({
         timestamp: new Date().toISOString(),
-        scenario: currentScenario.name,
+        scenario: scenario.name,
         attack: {
           id: attack.id,
           name: attack.name,

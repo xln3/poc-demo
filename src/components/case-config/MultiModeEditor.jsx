@@ -5,7 +5,7 @@ import MultiMessageItem from './MultiMessageItem.jsx';
 export default function MultiModeEditor() {
   const { t } = useTranslation();
   const { config, addMessage, removeMessage, updateMessage, reorderMessage } = useCaseConfig();
-  const messages = config.multi_config.messages;
+  const messages = config.chat_config.messages;
 
   return (
     <div className="space-y-3">

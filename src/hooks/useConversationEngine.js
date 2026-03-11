@@ -15,7 +15,7 @@ export function useConversationEngine(deps) {
       setThinkingEntries, setApiInteractions, setExpandedThinking, setExpandedApiInteraction,
       setLeftPanelTab, payloadFiles, customTestPayload,
       getActualPayload, getDisplayPayload, setInitialPayload,
-      selectedModel, customSystemPrompt,
+      selectedModel, selectedAgentId, customSystemPrompt,
       ragEnabled, ragMode, ragKnowledge, ragServiceAvailable,
       performRagQuery, formatRAGContext, formatRAGLogs,
       toolsEnabled, sandboxStatus, enabledTools,
@@ -27,8 +27,14 @@ export function useConversationEngine(deps) {
       addTestRecord, startThinkingRecord, finalizeThinking, addResponseRecord,
     } = d.current;
 
-    const attack = currentAttack;
-    const scenario = currentScenario;
+    // Fallback: when coming from Config→Run, no scenario is selected
+    const attack = currentAttack || {
+      id: 'custom-case', name: 'Custom Test', type: 'custom',
+      level: 'medium', description: '', testPayload: customTestPayload || '',
+    };
+    const scenario = currentScenario || {
+      name: 'Custom Test', systemPrompt: customSystemPrompt || '',
+    };
 
     setApiStatus('loading');
     setApiError('');
@@ -54,7 +60,7 @@ export function useConversationEngine(deps) {
     // 构建实际发送的 payload
     let actualPayload;
     const hasUserFiles = payloadFiles.length > 0;
-    const hasCustomPayload = customTestPayload !== currentAttack.testPayload;
+    const hasCustomPayload = customTestPayload !== attack.testPayload;
 
     if (hasUserFiles || hasCustomPayload) {
       actualPayload = getActualPayload();
@@ -230,7 +236,8 @@ export function useConversationEngine(deps) {
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
             toolDefinitions,
             thinkingConfig,
-            onDelta
+            onDelta,
+            null, selectedAgentId
           );
         } else {
           response = await CONFIG.callModelStream(
@@ -239,7 +246,8 @@ export function useConversationEngine(deps) {
             selectedModel,
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
             thinkingConfig,
-            onDelta
+            onDelta,
+            null, selectedAgentId
           );
         }
 
@@ -458,8 +466,10 @@ export function useConversationEngine(deps) {
       getFileTypeForMcp, mcpParsers,
       addTestRecord, startThinkingRecord, finalizeThinking, addResponseRecord,
       userInput, setUserInput, apiStatus,
-      selectedModel,
+      selectedModel, selectedAgentId,
     } = d.current;
+
+    const scenario = currentScenario || { name: 'Custom Test', systemPrompt: customSystemPrompt || '' };
 
     const content = userInput.trim();
     if (!content || apiStatus === 'loading') return;
@@ -478,7 +488,7 @@ export function useConversationEngine(deps) {
     const newHistory = [...conversationHistory, { role: 'user', content }];
 
     // 获取配置
-    let activeSystemPrompt = customSystemPrompt || currentScenario.systemPrompt;
+    let activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
 
     // 如果启用 RAG，注入检索内容到系统提示词
     if (ragEnabled) {
@@ -579,7 +589,8 @@ export function useConversationEngine(deps) {
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
             toolDefinitions,
             thinkingConfig,
-            onDelta
+            onDelta,
+            null, selectedAgentId
           );
         } else {
           response = await CONFIG.callModelStream(
@@ -588,7 +599,8 @@ export function useConversationEngine(deps) {
             selectedModel,
             { temperature: llmTemperature, max_tokens: llmMaxTokens, top_p: llmTopP },
             thinkingConfig,
-            onDelta
+            onDelta,
+            null, selectedAgentId
           );
         }
 
@@ -769,9 +781,15 @@ export function useConversationEngine(deps) {
       setApiStatus, setMessages, setLogs,
       setConversationHistory, setConversationMode, conversationHistory,
       customSystemPrompt, initialPayload,
-      selectedModel,
+      selectedModel, selectedAgentId, judgeConfig,
       setLastTestResult,
     } = d.current;
+
+    const attack = currentAttack || {
+      id: 'custom-case', name: 'Custom Test', type: 'custom',
+      level: 'medium', description: '', testPayload: '',
+    };
+    const scenario = currentScenario || { name: 'Custom Test', systemPrompt: customSystemPrompt || '' };
 
     setConversationMode('judging');
 
@@ -792,24 +810,27 @@ export function useConversationEngine(deps) {
     }]);
 
     // 调用评判
-    const activeSystemPrompt = customSystemPrompt || currentScenario.systemPrompt;
+    const activeSystemPrompt = customSystemPrompt || scenario.systemPrompt;
     const judgeResult = await CONFIG.judgeAttackSuccess(
-      currentAttack,
+      attack,
       activeSystemPrompt,
       fullConversation,
-      initialPayload
+      initialPayload,
+      judgeConfig?.systemPrompt,
+      judgeConfig?.model,
+      judgeConfig?.agent_id || null
     );
 
     // 保存测试结果
     setLastTestResult({
       timestamp: new Date().toISOString(),
-      scenario: currentScenario.name,
+      scenario: scenario.name,
       attack: {
-        id: currentAttack.id,
-        name: currentAttack.name,
-        type: currentAttack.type,
-        level: currentAttack.level,
-        description: currentAttack.description
+        id: attack.id,
+        name: attack.name,
+        type: attack.type,
+        level: attack.level,
+        description: attack.description
       },
       model: selectedModel,
       systemPrompt: activeSystemPrompt,

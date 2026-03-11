@@ -7,6 +7,16 @@ export default function MultiMessageItem({ message, index, total, onUpdate, onRe
     ? t('caseConfig.initialMessage')
     : t('caseConfig.followUp', { n: index });
 
+  const handleFileUpload = (e) => {
+    const newFiles = Array.from(e.target.files).map((f) => ({
+      name: f.name,
+      size: f.size,
+      type: f.type,
+    }));
+    onUpdate(message.id, { files: [...(message.files || []), ...newFiles] });
+    e.target.value = '';
+  };
+
   return (
     <div className="group relative bg-surface border border-edge rounded-lg p-3 space-y-2">
       {/* Header */}
@@ -22,6 +32,11 @@ export default function MultiMessageItem({ message, index, total, onUpdate, onRe
 
         {/* Action buttons */}
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* File upload */}
+          <label className="cursor-pointer p-1 text-xs text-on-dim hover:text-blue-500 transition" title={t('caseConfig.attachFile')}>
+            <input type="file" multiple onChange={handleFileUpload} className="hidden" />
+            📎
+          </label>
           {index > 0 && (
             <button type="button" onClick={() => onMove(index, index - 1)}
               className="p-1 text-xs text-on-dim hover:text-on-canvas" title="Move up">

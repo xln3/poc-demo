@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 from ..db.engine import get_db
-from ..db.tables import User, LLMProvider, ApiUsage
+from ..db.tables import User, LLMProvider, ApiUsage, AgentConfig
 from ..auth.security import require_user, get_current_user
 from ..services.encryption import encrypt_api_key, decrypt_api_key, mask_api_key
 
@@ -106,8 +106,9 @@ class ProviderResponse(BaseModel):
 class ChatRequest(BaseModel):
     messages: list
     system_prompt: str = ""
-    provider_id: int
-    model: str
+    provider_id: Optional[int] = None
+    agent_id: Optional[str] = None  # Use agent's API config instead of provider
+    model: Optional[str] = None  # If absent with agent_id, uses agent's model_id
     temperature: float = 0.7
     max_tokens: int = 4096
     top_p: float = 1.0
@@ -229,20 +230,40 @@ async def chat_proxy(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Proxy LLM chat request — reads API key from DB, forwards to provider."""
-    result = await db.execute(
-        select(LLMProvider).where(LLMProvider.id == req.provider_id, LLMProvider.user_id == user.id)
-    )
-    provider = result.scalar_one_or_none()
-    if not provider:
-        raise HTTPException(status_code=404, detail="Provider not found")
-
-    api_key = decrypt_api_key(provider.api_key_encrypted)
-    url = provider.base_url + "/chat/completions" if not provider.base_url.endswith("/chat/completions") else provider.base_url
+    """Proxy LLM chat request — reads API key from DB, forwards to provider or agent."""
+    logger.info("chat_proxy: agent_id=%s, provider_id=%s, model=%r", req.agent_id, req.provider_id, req.model)
+    provider = None
+    effective_model = req.model  # may be overridden by agent
+    if req.agent_id:
+        # Agent-based routing: use agent's API config
+        result = await db.execute(
+            select(AgentConfig).where(AgentConfig.id == req.agent_id, AgentConfig.created_by == user.id)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        api_key = decrypt_api_key(agent.api_key_encrypted) if agent.api_key_encrypted else ""
+        base = agent.api_base.rstrip("/")
+        url = base + "/chat/completions" if not base.endswith("/chat/completions") else base
+        # Use agent's model_id if no model specified or if the model doesn't match agent
+        if not effective_model:
+            effective_model = agent.model_id
+    elif req.provider_id:
+        # Legacy provider-based routing
+        result = await db.execute(
+            select(LLMProvider).where(LLMProvider.id == req.provider_id, LLMProvider.user_id == user.id)
+        )
+        provider = result.scalar_one_or_none()
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+        api_key = decrypt_api_key(provider.api_key_encrypted)
+        url = provider.base_url + "/chat/completions" if not provider.base_url.endswith("/chat/completions") else provider.base_url
+    else:
+        raise HTTPException(status_code=400, detail="Either provider_id or agent_id is required")
 
     # Build request body
     body = {
-        "model": req.model,
+        "model": effective_model or req.model,
         "messages": (
             [{"role": "system", "content": req.system_prompt}] if req.system_prompt else []
         ) + req.messages,
@@ -258,6 +279,12 @@ async def chat_proxy(
     if req.thinking:
         body["thinking"] = req.thinking
 
+    # Usage tracking identifiers (agents have no pricing info)
+    source_id = provider.id if req.provider_id and provider else (req.agent_id or 0)
+    input_price = getattr(provider, 'input_price_per_1k', None) if req.provider_id else None
+    output_price = getattr(provider, 'output_price_per_1k', None) if req.provider_id else None
+
+    logger.info("chat_proxy: effective_model=%r, url=%s", effective_model, url)
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
@@ -265,8 +292,8 @@ async def chat_proxy(
 
     if req.stream:
         return StreamingResponse(
-            _stream_proxy(url, headers, body, user.id, provider.id, req.model,
-                          provider.input_price_per_1k, provider.output_price_per_1k),
+            _stream_proxy(url, headers, body, user.id, source_id, effective_model or req.model,
+                          input_price, output_price),
             media_type="text/event-stream",
         )
 
@@ -275,15 +302,15 @@ async def chat_proxy(
         resp = await client.post(url, json=body, headers=headers)
 
     if resp.status_code != 200:
-        logger.warning("LLM upstream error %d: %s", resp.status_code, resp.text[:500])
-        raise HTTPException(status_code=502, detail=f"LLM provider returned {resp.status_code}")
+        logger.warning("LLM upstream error %d (model=%r): %s", resp.status_code, body.get("model"), resp.text[:500])
+        raise HTTPException(status_code=502, detail=f"LLM provider returned {resp.status_code}: {resp.text[:200]}")
 
     data = resp.json()
 
     # Record usage
     usage = data.get("usage", {})
-    await _record_usage(db, user.id, provider.id, req.model, usage,
-                        provider.input_price_per_1k, provider.output_price_per_1k)
+    await _record_usage(db, user.id, source_id, effective_model or req.model, usage,
+                        input_price, output_price)
 
     return data
 
