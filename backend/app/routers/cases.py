@@ -44,7 +44,7 @@ async def seed_demo_cases(db: AsyncSession = Depends(get_db)):
 
     Skips cases whose name already exists in the database.
     """
-    from backend.seed_demo_cases import build_demo_cases
+    from ..services.demo_cases import build_demo_cases
 
     cases = build_demo_cases()
     inserted = 0
