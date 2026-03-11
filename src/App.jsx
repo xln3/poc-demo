@@ -1615,6 +1615,8 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
             chatRef={chatRef} logRef={logRef}
             simulator={simulator}
             thinkingEnabled={thinkingEnabled}
+            sandboxStatus={sandboxStatus}
+            toolCallHistory={toolCallHistory}
             playbackBar={{
               isPlaybackMode, playbackCase,
               isPlaybackPlaying, isPlaybackPaused,
