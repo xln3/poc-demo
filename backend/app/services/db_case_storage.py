@@ -23,19 +23,20 @@ class DBCaseStorage:
 
     @staticmethod
     def _extract_summary(data: dict) -> dict:
-        """Extract summary from v1 or v3 format case."""
+        """Extract summary from v1, v3, or v4 format case."""
         schema_version = data.get("schema_version", "")
 
-        # v3 format (from new Cases Config page)
-        if schema_version == "3.0.0" or "test_mode" in data:
+        # v3/v4 format (from Cases Config page)
+        if schema_version in ("3.0.0", "4.0.0") or "test_mode" in data:
             meta = data.get("meta", {})
             agent = data.get("agent", {})
             return {
                 "id": meta.get("case_id") or data.get("id"),
                 "savedAt": data.get("savedAt") or meta.get("createdAt"),
-                "schemaVersion": "3.0.0",
+                "schemaVersion": schema_version or "3.0.0",
                 "name": meta.get("name") or "",
                 "description": meta.get("description") or "",
+                "tags": meta.get("tags", []),
                 "test_mode": data.get("test_mode"),
                 "agent_name": agent.get("agent_name"),
                 "modelId": agent.get("model_id"),
@@ -66,12 +67,12 @@ class DBCaseStorage:
         }
 
     async def save_case(self, db: AsyncSession, case_data: dict) -> dict:
-        """Save a new test case (v1 or v3 format)."""
+        """Save a new test case (v1, v3, or v4 format)."""
         now = datetime.now().isoformat()
         schema_version = case_data.get("schema_version", "")
 
-        if schema_version == "3.0.0" or "test_mode" in case_data:
-            # v3 format
+        if schema_version in ("3.0.0", "4.0.0") or "test_mode" in case_data:
+            # v3/v4 format
             meta = case_data.get("meta", {})
             if not meta.get("case_id"):
                 meta["case_id"] = self._generate_id()
@@ -156,8 +157,8 @@ class DBCaseStorage:
 
         now = datetime.now().isoformat()
 
-        # v3 full-document update (frontend sends the entire config)
-        if updates.get("schema_version") == "3.0.0" or "test_mode" in updates:
+        # v3/v4 full-document update (frontend sends the entire config)
+        if updates.get("schema_version") in ("3.0.0", "4.0.0") or "test_mode" in updates:
             updates["id"] = case_id
             updates["savedAt"] = now
             meta = updates.get("meta", {})

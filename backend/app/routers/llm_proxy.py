@@ -261,6 +261,11 @@ async def chat_proxy(
     else:
         raise HTTPException(status_code=400, detail="Either provider_id or agent_id is required")
 
+    # Strip provider prefix from model_id (e.g., "openai/gpt-4o" → "gpt-4o")
+    # Eval-poc uses "openai/<model>" format, but LLM APIs expect bare model names.
+    if effective_model and "/" in effective_model:
+        effective_model = effective_model.split("/", 1)[1]
+
     # Build request body
     body = {
         "model": effective_model or req.model,
