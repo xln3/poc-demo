@@ -111,7 +111,7 @@ export default function MCPConnectionConfig() {
           placeholder={t('caseConfig.mcpSearch')}
           className="w-full px-1.5 py-0.5 mb-1 text-[11px] bg-surface-hover border border-edge-strong rounded text-on-canvas focus:border-emerald-500 focus:outline-none"
         />
-        <div className="max-h-[180px] overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600">
+        <div className="max-h-[180px] overflow-y-auto space-y-0.5 pr-0.5 custom-scroll-thin">
           {filteredServerIds.map((id) => {
             const srv = available[id];
             const isEnabled = servers[id]?.enabled;
@@ -146,15 +146,15 @@ export default function MCPConnectionConfig() {
         {selectedCatalog ? (
           <>
             {/* Header row */}
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-base leading-none">{selectedCatalog.icon}</span>
-              <span className="text-sm font-medium text-on-canvas flex-1 truncate">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="text-sm leading-none">{selectedCatalog.icon}</span>
+              <span className="text-[13px] font-medium text-on-canvas flex-1 truncate">
                 {selectedCatalog.name}
               </span>
               <button
                 type="button"
                 onClick={handleToggle}
-                className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${
+                className={`px-2 py-0.5 text-[11px] rounded font-medium transition-colors ${
                   selectedConfig?.enabled
                     ? 'bg-red-600 hover:bg-red-700 text-white'
                     : 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -167,10 +167,10 @@ export default function MCPConnectionConfig() {
             </div>
 
             {/* Description */}
-            <p className="text-[11px] text-on-muted mb-2">{selectedCatalog.description}</p>
+            <p className="text-[10px] text-on-muted mb-1.5 leading-tight">{selectedCatalog.description}</p>
 
             {/* Config fields */}
-            <div className="flex-1 overflow-y-auto space-y-2">
+            <div className="flex-1 overflow-y-auto space-y-1.5">
               {(selectedCatalog.fields || []).map((field) => {
                 if (field.type === 'checkbox') {
                   return (
@@ -200,15 +200,15 @@ export default function MCPConnectionConfig() {
 
             {/* Tools section */}
             {selectedCatalog.tools && selectedCatalog.tools.length > 0 && (
-              <div className="border-t border-edge mt-2 pt-2">
-                <span className="text-xs text-on-muted block mb-1">
+              <div className="border-t border-edge mt-1.5 pt-1.5">
+                <span className="text-[10px] text-on-muted block mb-0.5">
                   {t('caseConfig.mcpProvidedTools')}
                 </span>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-0.5">
                   {selectedCatalog.tools.map((tool) => (
                     <span
                       key={tool}
-                      className="px-1.5 py-0.5 text-[10px] rounded-full bg-emerald-600/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                      className="px-1 py-px text-[9px] rounded-full bg-emerald-600/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 leading-tight"
                     >
                       {tool}
                     </span>

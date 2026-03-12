@@ -71,6 +71,22 @@
   .custom-scroll::-webkit-scrollbar-thumb:hover {
     background: var(--color-scroll-thumb-hover);
   }
+
+  .custom-scroll-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .custom-scroll-thin::-webkit-scrollbar-track {
+    background: var(--color-scroll-track);
+    border-radius: 2px;
+  }
+  .custom-scroll-thin::-webkit-scrollbar-thumb {
+    background: var(--color-scroll-thumb);
+    border-radius: 2px;
+  }
+  .custom-scroll-thin::-webkit-scrollbar-thumb:hover {
+    background: var(--color-scroll-thumb-hover);
+  }
 }
 
 html, body, #root {
