@@ -98,10 +98,10 @@ export default function MCPConnectionConfig() {
   }, [serverIds, searchQuery]);
 
   return (
-    <div className="grid grid-cols-3 gap-3" style={{ minHeight: 200 }}>
+    <div className="grid grid-cols-3 gap-2" style={{ minHeight: 160 }}>
       {/* Left column: server list */}
       <div className="col-span-1 flex flex-col">
-        <h4 className="text-xs font-medium text-on-canvas mb-1.5">
+        <h4 className="text-[11px] font-medium text-on-canvas mb-1">
           {t('caseConfig.mcpAvailableServers')}
         </h4>
         <input
@@ -109,9 +109,9 @@ export default function MCPConnectionConfig() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={t('caseConfig.mcpSearch')}
-          className="w-full px-2 py-1 mb-1.5 text-xs bg-surface-hover border border-edge-strong rounded text-on-canvas focus:border-emerald-500 focus:outline-none"
+          className="w-full px-1.5 py-0.5 mb-1 text-[11px] bg-surface-hover border border-edge-strong rounded text-on-canvas focus:border-emerald-500 focus:outline-none"
         />
-        <div className="max-h-[240px] overflow-y-auto space-y-1 pr-0.5">
+        <div className="max-h-[180px] overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600">
           {filteredServerIds.map((id) => {
             const srv = available[id];
             const isEnabled = servers[id]?.enabled;
@@ -121,7 +121,7 @@ export default function MCPConnectionConfig() {
                 key={id}
                 type="button"
                 onClick={() => handleSelect(id)}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors ${
+                className={`w-full flex items-center gap-1.5 px-1.5 py-1 rounded text-[11px] text-left transition-colors ${
                   isSelected
                     ? 'bg-emerald-600 text-white'
                     : 'bg-surface-hover/50 hover:bg-surface-hover text-on-surface'
@@ -136,7 +136,7 @@ export default function MCPConnectionConfig() {
             );
           })}
         </div>
-        <p className="text-[10px] text-on-muted mt-1.5">
+        <p className="text-[10px] text-on-muted mt-1">
           {t('caseConfig.mcpEnabledCount', { count: enabledCount })}
         </p>
       </div>
