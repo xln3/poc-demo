@@ -285,7 +285,8 @@ async def chat_proxy(
         body["thinking"] = req.thinking
 
     # Usage tracking identifiers (agents have no pricing info)
-    source_id = provider.id if req.provider_id and provider else (req.agent_id or 0)
+    # provider_id column is INTEGER — use 0 for agent-based calls
+    source_id = provider.id if req.provider_id and provider else 0
     input_price = getattr(provider, 'input_price_per_1k', None) if req.provider_id else None
     output_price = getattr(provider, 'output_price_per_1k', None) if req.provider_id else None
 
@@ -357,7 +358,10 @@ async def _stream_proxy(url, headers, body, user_id, provider_id, model, input_p
 
 
 async def _record_usage(db, user_id, provider_id, model, usage_dict, input_price=None, output_price=None):
-    """Write a row to api_usage."""
+    """Write a row to api_usage.  Skip if no valid provider_id (agent-based calls)."""
+    if not provider_id:
+        return  # Agent-based calls have no provider FK — skip usage recording
+
     prompt_tokens = usage_dict.get("prompt_tokens", 0)
     completion_tokens = usage_dict.get("completion_tokens", 0)
 
