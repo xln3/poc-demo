@@ -1,13 +1,13 @@
-# 构建阶段
+# Build stage — build the poc-demo frontend
 FROM node:24-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --registry=https://registry.npmmirror.com
 COPY . .
 RUN npm run build
 
-# 运行阶段
+# Runtime stage — serve with nginx + unified gateway
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+COPY deploy/nginx-unified.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80 443

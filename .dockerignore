@@ -1,0 +1,9 @@
+# Shared .dockerignore for both Dockerfile.backend and Dockerfile.frontend
+# Both use poc-demo/ as build context
+node_modules/
+dist/
+.data/
+certs/
+.git/
+.env
+__pycache__/
