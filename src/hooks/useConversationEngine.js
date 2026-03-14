@@ -25,6 +25,7 @@ export function useConversationEngine(deps) {
       sandboxClient, mcpClient, mcpServerConfigs,
       getFileTypeForMcp, mcpParsers,
       addTestRecord, startThinkingRecord, finalizeThinking, addResponseRecord,
+      maxToolCalls,
     } = d.current;
 
     // Fallback: when coming from Config→Run, no scenario is selected
@@ -56,6 +57,19 @@ export function useConversationEngine(deps) {
     setExpandedApiInteraction(new Set());
     thinkingIndexRef.current = 0;
     setLeftPanelTab('thinking');
+
+    // Act mode / no initial payload: set up state and wait for user input
+    const hasInitialPayload = !!(customTestPayload || currentAttack?.testPayload || currentAttack?.realTestPayload || payloadFiles.length > 0);
+    if (!hasInitialPayload) {
+      const modelName = CONFIG.models.find(m => m.id === selectedModel)?.name || selectedModel;
+      setLogs([
+        { type: 'model', content: i18n.t('labels.model', { name: modelName }), status: 'normal' },
+        { type: 'info', content: i18n.t('labels.waitingForInput'), status: 'normal' },
+      ]);
+      setInitialPayload('');
+      setApiStatus('idle');
+      return;
+    }
 
     // 构建实际发送的 payload
     let actualPayload;
@@ -224,6 +238,8 @@ export function useConversationEngine(deps) {
       };
 
       // 工具调用循环（第一轮）
+      const toolCallLimit = maxToolCalls || 100;
+      let toolCallCount = 0;
       while (true) {
         let response;
 
@@ -266,6 +282,13 @@ export function useConversationEngine(deps) {
         const toolCalls = response.tool_calls || [];
 
         if (toolCalls.length > 0 && useToolCalling) {
+          toolCallCount += toolCalls.length;
+          if (toolCallCount > toolCallLimit) {
+            setLogs(prev => [...prev,
+              { type: 'alert', content: i18n.t('errors.maxToolCallsReached', { max: toolCallLimit }), status: 'warning' }
+            ]);
+            break;
+          }
           // 将 assistant 消息添加到历史
           messageHistory.push({
             role: 'assistant',
@@ -467,6 +490,7 @@ export function useConversationEngine(deps) {
       addTestRecord, startThinkingRecord, finalizeThinking, addResponseRecord,
       userInput, setUserInput, apiStatus,
       selectedModel, selectedAgentId,
+      maxToolCalls,
     } = d.current;
 
     const scenario = currentScenario || { name: 'Custom Test', systemPrompt: customSystemPrompt || '' };
@@ -577,6 +601,8 @@ export function useConversationEngine(deps) {
       };
 
       // 工具调用循环
+      const toolCallLimit = maxToolCalls || 100;
+      let toolCallCount = 0;
       while (true) {
         let response;
 
@@ -619,6 +645,13 @@ export function useConversationEngine(deps) {
         const toolCalls = response.tool_calls || [];
 
         if (toolCalls.length > 0 && useToolCalling) {
+          toolCallCount += toolCalls.length;
+          if (toolCallCount > toolCallLimit) {
+            setLogs(prev => [...prev,
+              { type: 'alert', content: i18n.t('errors.maxToolCallsReached', { max: toolCallLimit }), status: 'warning' }
+            ]);
+            break;
+          }
           messageHistory.push({
             role: 'assistant',
             content: response.content || null,
@@ -647,8 +680,8 @@ export function useConversationEngine(deps) {
             const categoryColor = toolConfig?.category === 'safe' ? 'normal' : toolConfig?.category === 'risky' ? 'warning' : 'danger';
 
             setLogs(prev => [...prev,
-              { type: 'tool', content: `🔧 调用工具: ${toolLabel}`, status: categoryColor },
-              { type: 'data', content: `   参数: ${JSON.stringify(toolArgs)}`, status: 'normal' }
+              { type: 'tool', content: i18n.t('errors.toolCalling', { name: toolLabel }), status: categoryColor },
+              { type: 'data', content: `   ${i18n.t('labels.parameters', { params: JSON.stringify(toolArgs) })}`, status: 'normal', expandable: true, fullContent: JSON.stringify(toolArgs, null, 2) }
             ]);
 
             // 执行工具（沙箱工具或 MCP 工具）

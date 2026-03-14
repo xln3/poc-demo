@@ -73,6 +73,7 @@
     "result": "Result: {{result}}",
     "toolCallSummary": "Tool: {{name}}({{args}}...)",
     "toolCallDetail": "Call: {{name}}({{args}})\nResult: {{result}}",
+    "waitingForInput": "Interactive mode — type your first message below",
     "responseReceived": "Response received ({{count}} chars)",
     "finalResponseReceived": "Final response received ({{count}} chars){{summary}}",
     "apiTiming": "⏱️ API time: {{time}}ms",

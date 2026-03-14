@@ -100,6 +100,8 @@ function CaseCard({ caseItem, t, onEdit, onDelete }) {
     single: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
     multi: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
     interact: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    chat: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
+    act: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   };
 
   return (

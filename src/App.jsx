@@ -529,7 +529,8 @@ export default function App() {
         setPayloadFiles(firstMsg.files);
       }
     } else if (caseConfig.test_mode === 'act') {
-      setCustomTestPayload('[interactive session]');
+      // Act mode: interactive session — user types their own first message
+      setCustomTestPayload('');
     }
 
     // File parsing config → MCP parsers
@@ -1261,9 +1262,10 @@ export default function App() {
     appendApiInteraction, finalizeApiInteraction,
     sandboxClient, mcpClient, mcpServerConfigs,
     getFileTypeForMcp, mcpParsers,
-    addTestRecord, startThinkingRecord, finalizeThinkingRecord, addResponseRecord,
+    addTestRecord, startThinkingRecord, finalizeThinking, addResponseRecord,
     userInput, setUserInput, apiStatus,
     setLastTestResult, judgeConfig,
+    maxToolCalls,
   });
 
   // 加载已保存的测试结果列表
@@ -1668,7 +1670,7 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
               apiError,
               // Current attack (for disable logic)
               currentAttack: translatedAttack || currentAttack,
-              customTestPayload,
+              customTestPayload, selectedAgentId,
             }}
             conversationPanel={{
               leftPanelTab, setLeftPanelTab,

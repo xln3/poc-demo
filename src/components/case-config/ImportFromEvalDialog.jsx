@@ -46,7 +46,7 @@ export default function ImportFromEvalDialog({ open, onClose }) {
     listEvaluations()
       .then((data) => {
         const allJobs = Array.isArray(data) ? data : data.items || [];
-        const filtered = allJobs.filter((j) => j.agent_id === selectedAgentId);
+        const filtered = allJobs.filter((j) => j.agent_id === selectedAgentId && j.status === 'completed');
         setJobs(filtered);
       })
       .catch((e) => setError(e.message))

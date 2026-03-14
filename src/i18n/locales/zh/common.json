@@ -73,6 +73,7 @@
     "result": "结果: {{result}}",
     "toolCallSummary": "工具：{{name}}({{args}}...)",
     "toolCallDetail": "调用: {{name}}({{args}})\n结果: {{result}}",
+    "waitingForInput": "交互模式 — 请在下方输入您的第一条消息",
     "responseReceived": "收到响应 ({{count}} 字符)",
     "finalResponseReceived": "收到最终响应 ({{count}} 字符){{summary}}",
     "apiTiming": "⏱️ API 耗时: {{time}}ms",

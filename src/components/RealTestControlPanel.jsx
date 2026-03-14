@@ -38,10 +38,12 @@ export default function RealTestControlPanel({
   currentAttack,
   // Custom test payload from Config page (enables Start Test without scenario)
   customTestPayload,
+  // Agent ID — set when case config is applied (enables act mode Start Test)
+  selectedAgentId,
 }) {
   const { t } = useTranslation();
   const isDemo = appMode === 'demo';
-  const canRun = !!(currentAttack || customTestPayload);
+  const canRun = !!(currentAttack || customTestPayload || selectedAgentId);
 
   // Provider display name
   const providerName = providers.find(p => p.id === selectedProviderId)?.provider_name;

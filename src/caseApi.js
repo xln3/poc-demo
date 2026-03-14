@@ -17,7 +17,7 @@ const BASE_URL = '';  // 使用 Vite 代理
  */
 export async function saveCaseToServer(testCase) {
   // v3 format skips v1 validation
-  if (testCase.schema_version !== '3.0.0') {
+  if (testCase.schema_version !== '3.0.0' && testCase.schema_version !== '4.0.0') {
     const validation = validateTestCase(testCase);
     if (!validation.valid) {
       throw new Error(`测试用例验证失败: ${validation.errors.join('; ')}`);
@@ -116,8 +116,10 @@ export async function exportCases(ids = []) {
  */
 export async function importCases(testCases) {
   // Validate all cases first — fail fast before any writes
+  // v3/v4 format cases skip v1 validation
   const validationErrors = [];
   for (const testCase of testCases) {
+    if (testCase.schema_version === '3.0.0' || testCase.schema_version === '4.0.0') continue;
     const validation = validateTestCase(testCase);
     if (!validation.valid) {
       validationErrors.push(`${testCase.meta?.caseId || 'unknown'}: ${validation.errors.join('; ')}`);

@@ -58,8 +58,10 @@ function ConfigPageInner({ setActiveTab, caseId, onApplyCaseConfig }) {
         await saveCaseToServer(payload);
       }
       setToast({ type: 'success', msg: t('success.caseSaved', { id: config.meta.case_id }) });
+      return true;
     } catch (e) {
       setToast({ type: 'error', msg: e.message });
+      return false;
     } finally {
       setSaving(false);
     }
@@ -139,11 +141,12 @@ function ConfigPageInner({ setActiveTab, caseId, onApplyCaseConfig }) {
           </button>
           <button
             type="button"
-            onClick={() => {
-              handleSave().then(() => {
+            onClick={async () => {
+              const ok = await handleSave();
+              if (ok) {
                 onApplyCaseConfig?.(config);
                 setActiveTab?.('run');
-              });
+              }
             }}
             disabled={saving}
             className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700
