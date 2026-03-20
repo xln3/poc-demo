@@ -273,17 +273,22 @@ async def run_template(
         raise HTTPException(status_code=404, detail="Agent not found")
 
     # Ensure agent is registered in eval-poc
+    from .agents import _build_capability_summary, _build_generate_config
+    from ..services.encryption import decrypt_api_key
+    gen_config = _build_generate_config(agent.features or {})
     if not agent.eval_model_id:
         try:
-            from .agents import _build_capability_summary
+            plain_key = decrypt_api_key(agent.api_key_encrypted) if agent.api_key_encrypted else ""
             eval_config = {
                 "name": agent.name,
                 "api_base": agent.api_base,
-                "api_key": agent.api_key_encrypted or "",
+                "api_key": plain_key,
                 "model_id": agent.model_id,
                 "provider": "Custom Agent",
                 "is_agent": True,
                 "description": _build_capability_summary(agent),
+                "system_prompt": agent.system_prompt or None,
+                "generate_config": gen_config,
             }
             eval_resp = await eval_bridge.register_eval_agent(eval_config)
             agent.eval_model_id = eval_resp.get("id")
@@ -308,6 +313,8 @@ async def run_template(
             "judge_model": req.judge_model,
             "agent_id": str(agent.id),
             "agent_name": agent.name,
+            "system_prompt": agent.system_prompt or None,
+            "generate_config": gen_config,
         }
         eval_job = await eval_bridge.start_evaluation(eval_payload)
         return eval_job

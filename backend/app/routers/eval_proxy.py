@@ -26,6 +26,8 @@ class EvalStartRequest(BaseModel):
     judge_model: Optional[str] = None
     agent_id: Optional[str] = None
     agent_name: Optional[str] = None
+    system_prompt: Optional[str] = None
+    generate_config: Optional[dict] = None
 
 
 class RegisterModelRequest(BaseModel):
@@ -36,6 +38,8 @@ class RegisterModelRequest(BaseModel):
     model_id: str = ""
     description: str = ""
     is_agent: bool = False
+    system_prompt: Optional[str] = None
+    generate_config: Optional[dict] = None
 
 
 class ReproduceRequest(BaseModel):

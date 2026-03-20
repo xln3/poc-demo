@@ -96,6 +96,30 @@ def _agent_to_response(agent: AgentConfig) -> dict:
     }
 
 
+def _build_generate_config(features: dict) -> dict | None:
+    """Build generate_config from agent features for inspect-ai passthrough.
+
+    Returns None if thinking is not enabled, otherwise returns a dict with
+    reasoning_effort and/or reasoning_tokens as stored in the agent config.
+    """
+    if not features:
+        return None
+    thinking = features.get("thinking", {})
+    if not thinking or not thinking.get("enabled"):
+        return None
+    _VALID_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
+    result = {}
+    mode = thinking.get("mode")
+    # UI modes "on"/"auto" mean "enable thinking" — don't constrain effort.
+    # Only pass reasoning_effort for values inspect_ai actually accepts.
+    if mode and mode in _VALID_REASONING_EFFORTS:
+        result["reasoning_effort"] = mode
+    budget = thinking.get("budget")
+    if budget:
+        result["reasoning_tokens"] = budget
+    return result if result else None
+
+
 def _build_capability_summary(agent: AgentConfig) -> str:
     """Generate a capability summary for eval-poc description."""
     parts = []
@@ -155,6 +179,7 @@ async def create_agent(
 
     # Register with eval-poc (pass plaintext key from request, not encrypted DB value)
     try:
+        gen_config = _build_generate_config(req.features)
         eval_config = {
             "name": agent.name,
             "api_base": agent.api_base,
@@ -163,6 +188,8 @@ async def create_agent(
             "provider": "Custom Agent",
             "is_agent": True,
             "description": _build_capability_summary(agent),
+            "system_prompt": req.system_prompt or None,
+            "generate_config": gen_config,
         }
         eval_resp = await eval_bridge.register_eval_agent(eval_config)
         agent.eval_model_id = eval_resp.get("id")
@@ -219,6 +246,34 @@ async def update_agent(
     agent.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(agent)
+
+    # Re-sync with eval-poc
+    try:
+        plain_key = (
+            raw_api_key if raw_api_key is not None
+            else (decrypt_api_key(agent.api_key_encrypted) if agent.api_key_encrypted else "")
+        )
+        gen_config = _build_generate_config(agent.features or {})
+        eval_update = {
+            "name": agent.name,
+            "api_base": agent.api_base,
+            "api_key": plain_key,
+            "model_id": agent.model_id,
+            "provider": "Custom Agent",
+            "is_agent": True,
+            "description": _build_capability_summary(agent),
+            "system_prompt": agent.system_prompt or None,
+            "generate_config": gen_config,
+        }
+        if agent.eval_model_id:
+            await eval_bridge.update_eval_model(agent.eval_model_id, eval_update)
+        else:
+            eval_resp = await eval_bridge.register_eval_agent(eval_update)
+            agent.eval_model_id = eval_resp.get("id")
+            await db.commit()
+    except Exception as e:
+        logger.warning("Failed to sync agent update with eval-poc: %s", e)
+
     return _agent_to_response(agent)
 
 
@@ -272,6 +327,7 @@ async def trigger_evaluation(
         raise HTTPException(status_code=404, detail="Agent not found")
 
     # Ensure agent is registered in eval-poc
+    gen_config = _build_generate_config(agent.features or {})
     if not agent.eval_model_id:
         try:
             plain_key = decrypt_api_key(agent.api_key_encrypted) if agent.api_key_encrypted else ""
@@ -283,6 +339,8 @@ async def trigger_evaluation(
                 "provider": "Custom Agent",
                 "is_agent": True,
                 "description": _build_capability_summary(agent),
+                "system_prompt": agent.system_prompt or None,
+                "generate_config": gen_config,
             }
             eval_resp = await eval_bridge.register_eval_agent(eval_config)
             agent.eval_model_id = eval_resp.get("id")
@@ -300,6 +358,8 @@ async def trigger_evaluation(
             "judge_model": req.judge_model,
             "agent_id": str(agent.id),
             "agent_name": agent.name,
+            "system_prompt": agent.system_prompt or None,
+            "generate_config": gen_config,
         }
         eval_job = await eval_bridge.start_evaluation(eval_payload)
         return eval_job

@@ -66,6 +66,13 @@ async def register_eval_agent(config: Dict[str, Any]) -> Dict[str, Any]:
     return resp.json()
 
 
+async def update_eval_model(model_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Update an existing model/agent in eval-poc via PUT."""
+    resp = await _get_client().put(f"/api/models/{model_id}", json=config)
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def delete_eval_model(model_id: str) -> Dict[str, Any]:
     resp = await _get_client().delete(f"/api/models/{model_id}")
     resp.raise_for_status()
