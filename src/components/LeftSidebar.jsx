@@ -9,7 +9,7 @@ import LanguageSwitcher from '../i18n/LanguageSwitcher';
  */
 export default function LeftSidebar({
   activeTab, setActiveTab,
-  appMode, setAppMode,
+  appMode,
 }) {
   const { isDark, toggleTheme } = useTheme();
   const { t } = useTranslation();
@@ -45,29 +45,7 @@ export default function LeftSidebar({
 
   return (
     <div className="w-12 sm:w-[72px] bg-surface flex flex-col items-center py-3 flex-shrink-0 border-r border-edge">
-      {/* Mode toggle */}
-      <div className="flex flex-col gap-1 w-full px-1 sm:px-2 mb-3">
-        <button
-          onClick={() => setAppMode('test')}
-          className={`py-1.5 rounded text-[10px] font-medium transition ${
-            appMode === 'test' ? 'bg-blue-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
-          }`}
-        >
-          <span className="hidden sm:inline">{t('modes.test')}</span>
-          <span className="sm:hidden">T</span>
-        </button>
-        <button
-          onClick={() => setAppMode('demo')}
-          className={`py-1.5 rounded text-[10px] font-medium transition ${
-            appMode === 'demo' ? 'bg-amber-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
-          }`}
-        >
-          <span className="hidden sm:inline">{t('modes.demo')}</span>
-          <span className="sm:hidden">D</span>
-        </button>
-      </div>
-
-      <div className="w-8 h-px bg-surface-raised mb-3" />
+      <div className="h-3" />
 
       {/* Tab buttons */}
       <div className="flex flex-col gap-0.5 w-full" role="tablist">

@@ -38,11 +38,13 @@ export const CalloutBlock = createReactBlockSpec(
         </div>
       );
     },
-    toExternalHTML: (block, serializer) => {
-      const variant = block.props.variant || 'info';
+    toExternalHTML: (props) => {
+      const variant = props.block.props.variant || 'info';
+      const icon = CALLOUT_ICONS[variant] || CALLOUT_ICONS.info;
       return (
         <div className={`callout callout-${variant}`}>
-          {serializer(block)}
+          <span>{icon}</span>
+          <div ref={props.contentRef} />
         </div>
       );
     },

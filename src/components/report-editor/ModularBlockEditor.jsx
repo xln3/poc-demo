@@ -112,7 +112,44 @@ export default function ModularBlockEditor({
         const content = mod.content;
         if (content && typeof content === 'string' && content.trim()) {
           try {
-            const parsed = editor.tryParseHTMLToBlocks(content);
+            // Sanitize LLM-generated HTML for BlockNote compatibility.
+            // BlockNote crashes on: <section> wrappers, callout divs with block content,
+            // chart placeholders without data-chart-config, and nested structures it can't map.
+            const tmp = document.createElement('div');
+            tmp.innerHTML = content;
+
+            // Unwrap all <section> elements — keep their children
+            for (const el of [...tmp.querySelectorAll('section')]) {
+              el.replaceWith(...el.childNodes);
+            }
+
+            // Convert callout divs to blockquotes (callout block only supports inline, not lists/tables)
+            for (const el of [...tmp.querySelectorAll('div.callout')]) {
+              const bq = document.createElement('blockquote');
+              bq.innerHTML = el.innerHTML;
+              el.replaceWith(bq);
+            }
+
+            // Remove the first <h2> since we manually added a heading block above
+            const firstH2 = tmp.querySelector('h2');
+            if (firstH2) firstH2.remove();
+
+            // Convert unrecognized chart placeholders to text
+            for (const el of [...tmp.querySelectorAll('div.chart-placeholder')]) {
+              if (!el.getAttribute('data-chart-config')) {
+                const p = document.createElement('p');
+                p.textContent = `[Chart: ${el.getAttribute('data-chart') || 'placeholder'}]`;
+                el.replaceWith(p);
+              }
+            }
+
+            // Remove any remaining unknown <div> wrappers that might confuse BlockNote
+            for (const el of [...tmp.querySelectorAll('div:not(.chart-placeholder)')]) {
+              el.replaceWith(...el.childNodes);
+            }
+
+            const safeHtml = tmp.innerHTML;
+            const parsed = editor.tryParseHTMLToBlocks(safeHtml);
             if (Array.isArray(parsed) && parsed.length > 0) {
               blocks.push(...parsed);
             }
@@ -142,7 +179,7 @@ export default function ModularBlockEditor({
       console.error('Failed to initialize editor content:', e);
       setEditorError(e.message || 'Failed to load content');
     }
-  }, [modules?.map(m => m.id + ':' + (m.status || '')).join(',')]);
+  }, [editor, modules?.map(m => m.id + ':' + (m.status || '')).join(',')]);
 
   // Auto-save with 5s debounce
   const handleContentChange = useCallback(() => {

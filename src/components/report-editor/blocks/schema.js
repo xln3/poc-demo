@@ -17,9 +17,9 @@ import { ImageBlock } from './ImageBlock.jsx';
 export const reportSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
-    chart: ChartBlock,
-    callout: CalloutBlock,
-    reportImage: ImageBlock,
+    chart: ChartBlock(),
+    callout: CalloutBlock(),
+    reportImage: ImageBlock(),
   },
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,

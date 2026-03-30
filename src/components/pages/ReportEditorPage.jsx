@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, Component } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   listReports, createReport, getReport, deleteReport,
@@ -15,6 +15,29 @@ import ModuleGeneratingView from '../report-editor/ModuleGeneratingView.jsx';
 
 // Lazy-load the heavy BlockNote editor
 const ModularBlockEditor = lazy(() => import('../report-editor/ModularBlockEditor.jsx'));
+
+/** Error boundary that falls back to read-only HTML view when BlockNote crashes */
+class EditorFallbackBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('BlockNote editor crashed, falling back to HTML view:', error, info);
+    this.setState({ errorInfo: info });
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.renderFallback
+        ? this.props.renderFallback(this.state.error, this.state.errorInfo)
+        : this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 /**
  * ReportEditorPage — main page for the report editor feature.
@@ -382,19 +405,39 @@ export default function ReportEditorPage() {
         {/* Editor: Modular (BlockNote) or Legacy (contentEditable) */}
         {viewMode === 'editor' && selectedReport && (
           isModular ? (
-            <Suspense fallback={
-              <div className="flex-1 flex items-center justify-center text-on-canvas/50">
-                {t('loadingEditor')}
-              </div>
-            }>
-              <ModularBlockEditor
-                report={selectedReport}
-                modules={modules}
-                onUpdated={handleReportUpdated}
-                onModuleRegenerate={handleModuleRegenerate}
-                onInsertModule={handleInsertModule}
-              />
-            </Suspense>
+            <EditorFallbackBoundary
+              renderFallback={(error) => (
+                <div className="flex-1 overflow-y-auto">
+                  <div className="max-w-4xl mx-auto p-6">
+                    <div className="flex items-center gap-2 mb-4 p-3 rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-200">
+                      <span>⚠</span>
+                      <span>{t('editor.fallbackNotice', 'Editor could not load. Showing read-only HTML view.')}</span>
+                      {error?.message && <span className="text-xs opacity-70">({error.message})</span>}
+                    </div>
+                    <article
+                      className="max-w-none text-on-canvas report-html-fallback [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-2 [&_h4]:font-semibold [&_h4]:mt-3 [&_h4]:mb-1 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-2 [&_li]:mb-1 [&_table]:w-full [&_table]:border-collapse [&_table]:mb-4 [&_th]:border [&_th]:border-edge [&_th]:px-3 [&_th]:py-1.5 [&_th]:bg-surface [&_th]:text-left [&_th]:text-sm [&_td]:border [&_td]:border-edge [&_td]:px-3 [&_td]:py-1.5 [&_td]:text-sm [&_blockquote]:border-l-4 [&_blockquote]:border-blue-400 [&_blockquote]:pl-4 [&_blockquote]:my-3 [&_blockquote]:bg-blue-50 [&_blockquote]:dark:bg-blue-900/20 [&_blockquote]:p-3 [&_blockquote]:rounded [&_code]:bg-surface-raised [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_pre]:bg-surface-raised [&_pre]:p-3 [&_pre]:rounded [&_pre]:overflow-x-auto"
+                      dangerouslySetInnerHTML={{
+                        __html: modules?.map(m => m.content || '').join('\n') || selectedReport?.content || '',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            >
+              <Suspense fallback={
+                <div className="flex-1 flex items-center justify-center text-on-canvas/50">
+                  {t('loadingEditor')}
+                </div>
+              }>
+                <ModularBlockEditor
+                  report={selectedReport}
+                  modules={modules}
+                  onUpdated={handleReportUpdated}
+                  onModuleRegenerate={handleModuleRegenerate}
+                  onInsertModule={handleInsertModule}
+                />
+              </Suspense>
+            </EditorFallbackBoundary>
           ) : (
             <ReportEditor
               report={selectedReport}
