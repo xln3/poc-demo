@@ -43,3 +43,9 @@ backend/data/saved-cases/
 backend/data/test_results/
 # 保留静态模板
 !backend/data/report-templates/
+
+# Generated test output
+e2e/screenshots/
+e2e/test-results/
+e2e/report/
+poc-data/
