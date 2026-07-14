@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../config.js';
+import AgentPicker from './AgentPicker.jsx';
 
 /**
  * RealTestControlPanel - execution controls + config summary for RunPage.
@@ -39,7 +40,7 @@ export default function RealTestControlPanel({
   // Custom test payload from Config page (enables Start Test without scenario)
   customTestPayload,
   // Agent ID — set when case config is applied (enables act mode Start Test)
-  selectedAgentId,
+  selectedAgentId, setSelectedAgentId, setSelectedModel,
 }) {
   const { t } = useTranslation();
   const isDemo = appMode === 'demo';
@@ -62,10 +63,19 @@ export default function RealTestControlPanel({
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         {/* Left: config summary badges */}
         <div className={`flex items-center gap-2 flex-wrap${!canRun ? ' opacity-40' : ''}`}>
-          {/* Model badge */}
-          <span className="text-xs px-2 py-0.5 bg-surface-raised rounded text-on-surface">
-            {providerName ? `${providerName} / ` : ''}{modelName}
-          </span>
+          {/* Agent picker (真机 target) — sets both agent id and its model */}
+          {setSelectedAgentId ? (
+            <AgentPicker
+              selectedAgentId={selectedAgentId}
+              disabled={isDemo}
+              onSelect={(id, model) => { setSelectedAgentId(id); if (model && setSelectedModel) setSelectedModel(model); }}
+            />
+          ) : (
+            /* Model badge (fallback / provider path) */
+            <span className="text-xs px-2 py-0.5 bg-surface-raised rounded text-on-surface">
+              {providerName ? `${providerName} / ` : ''}{modelName}
+            </span>
+          )}
           {/* Feature badges */}
           {mcpEnabled && (
             <span className={`text-xs px-1.5 py-0.5 rounded ${

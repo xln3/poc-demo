@@ -1638,6 +1638,7 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
               showDocument, setShowDocument,
               docTab, setDocTab,
               documentReadme,
+              setCustomTestPayload,
             }}
             testControl={{
               // Read-only summary
@@ -1670,7 +1671,7 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
               apiError,
               // Current attack (for disable logic)
               currentAttack: translatedAttack || currentAttack,
-              customTestPayload, selectedAgentId,
+              customTestPayload, selectedAgentId, setSelectedAgentId, setSelectedModel,
             }}
             conversationPanel={{
               leftPanelTab, setLeftPanelTab,

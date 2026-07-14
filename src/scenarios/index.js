@@ -10,6 +10,7 @@ import { autoRepair } from './F1-conversation/autoRepair.js';
 
 // ============ F2-file-injection: 文件注入 ============
 import { indirectInjection } from './F2-file-injection/index.js';
+import { carLoanReview } from './F2-file-injection/carLoan.js';
 
 // ============ F3-tool-use: 沙箱终端工具 ============
 import { sandbox } from './F3-tool-use/sandbox.js';
@@ -45,6 +46,7 @@ export const SCENARIOS = {
 
   // F2-file-injection: 文件注入
   indirectInjection,
+  carLoanReview,
 
   // F3-tool-use: 沙箱终端工具
   sandbox,
@@ -78,7 +80,8 @@ export const SCENARIOS_BY_LEVEL = {
     autoRepair
   },
   'F2-file-injection': {
-    indirectInjection
+    indirectInjection,
+    carLoanReview
   },
   'F3-tool-use': {
     sandbox,
@@ -113,6 +116,7 @@ export {
   autoRepair,
   // F2-file-injection
   indirectInjection,
+  carLoanReview,
   // F3-tool-use
   sandbox,
   finbot,

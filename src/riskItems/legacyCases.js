@@ -99,6 +99,7 @@ export const LEGACY_CASE_MAP = {
   // 8. 多模态安全
   '8.1': [
     // 旧#18: 图像音频携带隐蔽攻击指令
+    { scenario: 'carLoanReview', attackIndex: 0 }, // 车贷·三份财务材料联合投毒（PDF隐藏注入）
     { scenario: 'indirectInjection', attackIndex: 0 }, // 简历投毒
     { scenario: 'indirectInjection', attackIndex: 1 }, // 合同陷阱
     { scenario: 'indirectInjection', attackIndex: 2 }, // 招标操控
@@ -155,6 +156,7 @@ export const LEGACY_CASE_MAP = {
   // 13. 业务场景安全
   '13.1': [
     // 旧#24: 具体业务流程中引发操作风险或违规
+    { scenario: 'carLoanReview', attackIndex: 0 }, // 车贷审核·三份财务材料联合投毒（违规放贷）
     { scenario: 'skillPoisoning',  attackIndex: 0 }, // 日历技能后门
     { scenario: 'skillPoisoning',  attackIndex: 1 }, // 代码助手持久化
     { scenario: 'skillPoisoning',  attackIndex: 2 }, // 翻译数据收集

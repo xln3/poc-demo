@@ -1,14 +1,21 @@
 import { useTranslation } from 'react-i18next';
+import PdfInjectionLab from './PdfInjectionLab.jsx';
 
 export default function AttackDetailPanel({
   currentAttack,
   showDocument, setShowDocument,
   docTab, setDocTab,
   documentReadme,
+  setCustomTestPayload,
 }) {
   const { t } = useTranslation();
 
   if (!currentAttack?.documentFile) return null;
+
+  // 富交互攻击视图（车贷审核等携带 lab 数据的场景）
+  if (currentAttack.lab) {
+    return <PdfInjectionLab attack={currentAttack} setCustomTestPayload={setCustomTestPayload} />;
+  }
 
   return (
     <div className="mb-4 p-3 bg-surface rounded-lg border border-edge">

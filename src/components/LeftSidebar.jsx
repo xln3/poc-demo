@@ -18,6 +18,7 @@ export default function LeftSidebar({
 
   const tabs = [
     { id: 'risks', label: t('nav.risks'), icon: '\uD83D\uDEE1\uFE0F' },
+    { id: 'risk-items', label: t('nav.riskItems'), icon: '\uD83C\uDFAF' },
     { id: 'eval', label: tEval('nav.eval'), icon: '\uD83D\uDD2C' },
     { id: 'report', label: t('nav.report'), icon: '\uD83D\uDCCA' },
     { id: 'cases', label: t('nav.cases'), icon: '\uD83D\uDCCB', expandable: true },
