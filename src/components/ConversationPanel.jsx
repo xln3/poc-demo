@@ -2,6 +2,15 @@ import { forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CONFIG } from '../config.js';
 import JsonTree from './JsonTree.jsx';
+import ThinkingView from './interaction/ThinkingView.jsx';
+import { DEMO_THINKING_LAYOUT } from './interaction/demoLayout.js';
+
+function formatBytes(bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 const ConversationPanel = forwardRef(function ConversationPanel({
   leftPanelTab, setLeftPanelTab,
@@ -16,6 +25,9 @@ const ConversationPanel = forwardRef(function ConversationPanel({
   apiInteractions, setApiInteractions, expandedApiInteraction, setExpandedApiInteraction,
 }, chatRef) {
   const { t } = useTranslation();
+  // TEMP demo: thinking lives in the right column, so the left column always shows
+  // conversation — ignore any programmatic switch to 'thinking'/'raw' (test hooks flip it).
+  const effectiveTab = DEMO_THINKING_LAYOUT ? 'conversation' : leftPanelTab;
 
   return (
     <div className="bg-surface rounded-lg p-3 flex flex-col min-h-0">
@@ -25,30 +37,35 @@ const ConversationPanel = forwardRef(function ConversationPanel({
           <button
             onClick={() => setLeftPanelTab('conversation')}
             className={`text-xs px-2 py-1 rounded transition ${
-              leftPanelTab === 'conversation' ? 'bg-blue-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
+              effectiveTab === 'conversation' ? 'bg-blue-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
             }`}
           >
             {t('tabs.conversation')}
           </button>
-          <button
-            onClick={() => setLeftPanelTab('thinking')}
-            className={`text-xs px-2 py-1 rounded transition ${
-              leftPanelTab === 'thinking' ? 'bg-purple-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
-            }`}
-          >
-            {t('tabs.thinking')}
-          </button>
-          <button
-            onClick={() => setLeftPanelTab('raw')}
-            className={`text-xs px-2 py-1 rounded transition ${
-              leftPanelTab === 'raw' ? 'bg-green-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
-            }`}
-          >
-            {t('tabs.rawResponse')}
-          </button>
+          {/* TEMP demo: thinking + raw tabs hidden (thinking now lives in the right column) */}
+          {!DEMO_THINKING_LAYOUT && (
+            <>
+              <button
+                onClick={() => setLeftPanelTab('thinking')}
+                className={`text-xs px-2 py-1 rounded transition ${
+                  leftPanelTab === 'thinking' ? 'bg-purple-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
+                }`}
+              >
+                {t('tabs.thinking')}
+              </button>
+              <button
+                onClick={() => setLeftPanelTab('raw')}
+                className={`text-xs px-2 py-1 rounded transition ${
+                  leftPanelTab === 'raw' ? 'bg-green-600 text-white' : 'bg-surface-raised text-on-muted hover:bg-surface-hover'
+                }`}
+              >
+                {t('tabs.rawResponse')}
+              </button>
+            </>
+          )}
         </div>
         {/* 清空按钮 - 仅思考/原始时显示 */}
-        {leftPanelTab !== 'conversation' && (
+        {effectiveTab !== 'conversation' && (
           <button
             onClick={() => {
               setThinkingEntries([]);
@@ -65,7 +82,7 @@ const ConversationPanel = forwardRef(function ConversationPanel({
       </div>
 
       {/* 内容区 - 根据 Tab 显示 */}
-      {leftPanelTab === 'conversation' && (
+      {effectiveTab === 'conversation' && (
         <>
           {/* 被测模型信息 */}
           <div className="flex items-center gap-2 mb-2 text-xs flex-shrink-0">
@@ -83,10 +100,33 @@ const ConversationPanel = forwardRef(function ConversationPanel({
                     : msg.isDangerous ? 'bg-orange-900/50 border border-orange-500/40'
                       : msg.isStreaming ? 'bg-surface-raised/70 border border-blue-500/40' : 'bg-surface-raised'
                 }`}>
-                  <pre className="whitespace-pre-wrap break-all font-sans leading-relaxed">
-                    {msg.content}
-                    {msg.isStreaming && <span className="animate-pulse text-blue-400">|</span>}
-                  </pre>
+                  {msg.attachments?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {msg.attachments.map((att, ai) => (
+                        <div
+                          key={ai}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md border ${
+                            msg.isInjection ? 'bg-red-950/50 border-red-500/50' : 'bg-surface-raised border-edge'
+                          }`}
+                        >
+                          <span className="text-sm leading-none">📎</span>
+                          <div className="flex flex-col leading-tight">
+                            <span className="font-medium text-on-surface">{att.name}</span>
+                            <span className="text-[10px] text-on-dim">
+                              {att.size ? formatBytes(att.size) : 'PDF'}
+                              {msg.isInjection && <span className="text-red-300"> · {t('labels.injectedAttachmentTag')}</span>}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {msg.content && (
+                    <pre className="whitespace-pre-wrap break-all font-sans leading-relaxed">
+                      {msg.content}
+                      {msg.isStreaming && <span className="animate-pulse text-blue-400">|</span>}
+                    </pre>
+                  )}
                   {msg.isInjection && <div className="mt-1 text-red-300 text-xs">{t('labels.maliciousInjection')}</div>}
                   {msg.isDangerous && <div className="mt-1 text-orange-300 text-xs">{t('labels.dangerousOutput')}</div>}
                 </div>
@@ -159,69 +199,16 @@ const ConversationPanel = forwardRef(function ConversationPanel({
         </>
       )}
 
-      {leftPanelTab === 'thinking' && (
-        <div className="flex-1 overflow-y-auto custom-scroll font-mono text-xs pr-1">
-          {thinkingEntries.length > 0 ? (
-            <div className="space-y-1">
-              {thinkingEntries.map((entry, i) => {
-                const isExpanded = entry.isStreaming || expandedThinking.has(i);
-                const toggleExpand = () => {
-                  if (entry.isStreaming) return;
-                  setExpandedThinking(prev => {
-                    const next = new Set(prev);
-                    if (next.has(i)) next.delete(i);
-                    else next.add(i);
-                    return next;
-                  });
-                };
-                return (
-                  <div key={i} className={`p-2 rounded border-l-2 bg-surface-muted/50 ${entry.isStreaming ? 'border-pink-500' : 'border-purple-500'}`}>
-                    <div className="flex items-start">
-                      <span className={`inline-block w-12 flex-shrink-0 ${entry.isStreaming ? 'text-pink-400 animate-pulse' : 'text-pink-400'}`}>
-                        {entry.isStreaming ? '[流式]' : '[思考]'}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        {entry.isStreaming ? (
-                          <>
-                            <span className="text-on-surface">
-                              {t('labels.modelThinking', { chars: entry.chars })}
-                            </span>
-                            <pre className="mt-2 text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
-                              {entry.content}<span className="animate-pulse text-pink-400">|</span>
-                            </pre>
-                          </>
-                        ) : (
-                          <>
-                            <span
-                              onClick={toggleExpand}
-                              className="text-on-surface cursor-pointer hover:text-on-canvas transition"
-                            >
-                              <span className="text-on-muted mr-1">{isExpanded ? '▼' : '▶'}</span>
-                              {t('labels.modelThinkingProcess', { chars: entry.chars })}
-                              <span className="text-on-dim ml-1">({t('labels.clickToAction', { action: isExpanded ? t('labels.collapse') : t('labels.expand') })})</span>
-                            </span>
-                            {isExpanded && (
-                              <pre className="mt-2 text-purple-300/80 text-xs whitespace-pre-wrap break-all max-h-64 overflow-auto custom-scroll">
-                                {entry.content}
-                              </pre>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-on-dim text-center py-8">
-              {apiStatus === 'loading' ? t('labels.waitingForThinking') : t('labels.noThinkingContent')}
-            </div>
-          )}
-        </div>
+      {effectiveTab === 'thinking' && (
+        <ThinkingView
+          thinkingEntries={thinkingEntries}
+          expandedThinking={expandedThinking}
+          setExpandedThinking={setExpandedThinking}
+          apiStatus={apiStatus}
+        />
       )}
 
-      {leftPanelTab === 'raw' && (
+      {effectiveTab === 'raw' && (
         <div className="flex-1 overflow-y-auto custom-scroll font-mono text-xs pr-1">
           {apiInteractions.length > 0 ? (
             <div className="space-y-1">

@@ -3,3 +3,6 @@
 
 export { sandbox } from './sandbox.js';
 export { finbot } from './finbot.js';
+export { finbotErrata } from './finbotErrata.js';
+export { finbotPurge } from './finbotPurge.js';
+export { finbotExfil } from './finbotExfil.js';

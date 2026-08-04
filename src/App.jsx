@@ -1587,6 +1587,41 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
     }
   };
 
+  // 演示用一键启动沙箱：创建终端；若当前场景有预置文件（如 FinBot 的 raw_data_*.json）则自动写入
+  const startDemoSandbox = async () => {
+    const info = await createTerminal(`demo-${Date.now() % 1000000}`);
+    const filesMap = currentScenario?.sandboxFiles;
+    if (info && filesMap) {
+      // presetSandboxFiles 内部有 sandboxStatus 守卫，此时状态尚未刷新（闭包旧值），
+      // 这里直接写入并手动登记文件列表
+      for (const [path, content] of Object.entries(filesMap)) {
+        try {
+          await sandboxClient.writeFile(path, content);
+          const fileName = path.split('/').pop();
+          setSandboxFiles(prev => [...prev, {
+            name: fileName,
+            path,
+            size: content.length,
+            preset: true
+          }]);
+        } catch (error) {
+          console.error('预置文件失败:', path, error);
+        }
+      }
+    }
+  };
+
+  // 运行日志列「工具沙箱」文件内容预览
+  const [sandboxFilePreview, setSandboxFilePreview] = useState(null);
+  const viewSandboxFile = async (path) => {
+    try {
+      const res = await sandboxClient.readFile(path);
+      setSandboxFilePreview({ path, content: res?.result ?? res?.error ?? '(空文件)' });
+    } catch (e) {
+      setSandboxFilePreview({ path, content: `读取失败: ${e.message}` });
+    }
+  };
+
   // 文件解析函数已移至 useFileParsing hook
 
 
@@ -1607,7 +1642,24 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* 配置 tab — v3 self-contained ConfigPage */}
         {activeTab === 'config' && (
-          <ConfigPage setActiveTab={setActiveTab} caseId={editingCaseId} onApplyCaseConfig={applyCaseConfig} />
+          <ConfigPage setActiveTab={setActiveTab} caseId={editingCaseId} onApplyCaseConfig={applyCaseConfig}
+            runConfig={{
+              agentId: selectedAgentId,
+              modelId: selectedModel,
+              temperature: llmTemperature,
+              maxTokens: llmMaxTokens,
+              topP: llmTopP,
+              thinkingEnabled,
+              thinkingBudget,
+              systemPrompt: customSystemPrompt,
+              testPayload: customTestPayload,
+              dialogMode,
+              enabledTools: Object.entries(enabledTools).filter(([, v]) => v).map(([k]) => k),
+              caseName: currentAttack
+                ? `${(translatedScenario || currentScenario)?.name || ''} / ${(translatedAttack || currentAttack)?.name || ''}`
+                : '',
+            }}
+          />
         )}
 
         {/* 运行 tab */}
@@ -1617,8 +1669,15 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
             chatRef={chatRef} logRef={logRef}
             simulator={simulator}
             thinkingEnabled={thinkingEnabled}
-            sandboxStatus={sandboxStatus}
-            toolCallHistory={toolCallHistory}
+            sandboxPanel={{
+              sandboxStatus,
+              sandboxFiles,
+              onRefreshFiles: refreshSandboxFiles,
+              onViewFile: viewSandboxFile,
+              onDownloadFile: downloadFileWithProgress,
+              filePreview: sandboxFilePreview,
+              onClosePreview: () => setSandboxFilePreview(null),
+            }}
             playbackBar={{
               isPlaybackMode, playbackCase,
               isPlaybackPlaying, isPlaybackPaused,
@@ -1672,6 +1731,8 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
               // Current attack (for disable logic)
               currentAttack: translatedAttack || currentAttack,
               customTestPayload, selectedAgentId, setSelectedAgentId, setSelectedModel,
+              // Demo: one-click sandbox start
+              startDemoSandbox,
             }}
             conversationPanel={{
               leftPanelTab, setLeftPanelTab,
@@ -1698,6 +1759,9 @@ ${t('toasts.reportPromptOutputMarkdown')}`;
               judgeConfig, setJudgeConfig,
               humanJudgment, setHumanJudgment,
               submitHumanJudgment,
+              // Thinking (TEMP demo: shown in the right column)
+              thinkingEntries, setThinkingEntries,
+              expandedThinking, apiStatus,
             }}
           />
         )}

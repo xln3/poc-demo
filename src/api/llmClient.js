@@ -11,7 +11,13 @@ import { CONFIG } from '../config.js';
 
 /**
  * Parse an SSE stream and accumulate content, thinking, and tool calls.
+ *
+ * 带停滞看门狗：网关/代理可能保持连接但长时间不下发任何 chunk
+ * （表现为"卡死"）。超过 INACTIVITY_MS 无任何数据即中止并抛错，
+ * 由上层 streamWithRetry 重试。
  */
+const INACTIVITY_MS = 90000;
+
 async function consumeSSEStream(response, onDelta) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -25,62 +31,80 @@ async function consumeSSEStream(response, onDelta) {
   // Tool call accumulator — streamed tool_calls are grouped by index
   const toolCallsMap = new Map();
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  let watchdog = null;
+  const readWithWatchdog = () => {
+    clearTimeout(watchdog);
+    return Promise.race([
+      reader.read(),
+      new Promise((_, reject) => {
+        watchdog = setTimeout(() => {
+          reader.cancel().catch(() => {});
+          reject(new Error(`流式响应 ${INACTIVITY_MS / 1000}s 无数据（连接停滞）`));
+        }, INACTIVITY_MS);
+      }),
+    ]);
+  };
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+  try {
+    while (true) {
+      const { done, value } = await readWithWatchdog();
+      if (done) break;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed === 'data: [DONE]') continue;
-      if (!trimmed.startsWith('data: ')) continue;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-      try {
-        const json = JSON.parse(trimmed.slice(6));
-        rawChunks.push(json);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === 'data: [DONE]') continue;
+        if (!trimmed.startsWith('data: ')) continue;
 
-        const choice = json.choices?.[0];
-        if (choice?.finish_reason) {
-          finishReason = choice.finish_reason;
-        }
+        try {
+          const json = JSON.parse(trimmed.slice(6));
+          rawChunks.push(json);
 
-        const delta = choice?.delta;
-        if (delta) {
-          const deltaContent = delta.content || '';
-          const deltaThinking = delta.thinking || delta.reasoning_content || '';
-
-          accumulatedContent += deltaContent;
-          accumulatedThinking += deltaThinking;
-
-          if (onDelta && (deltaContent || deltaThinking)) {
-            onDelta(deltaContent, deltaThinking);
+          const choice = json.choices?.[0];
+          if (choice?.finish_reason) {
+            finishReason = choice.finish_reason;
           }
 
-          // Tool call deltas
-          if (delta.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              const idx = tc.index;
-              if (!toolCallsMap.has(idx)) {
-                toolCallsMap.set(idx, {
-                  id: tc.id || '',
-                  type: 'function',
-                  function: { name: '', arguments: '' }
-                });
+          const delta = choice?.delta;
+          if (delta) {
+            const deltaContent = delta.content || '';
+            const deltaThinking = delta.thinking || delta.reasoning_content || '';
+
+            accumulatedContent += deltaContent;
+            accumulatedThinking += deltaThinking;
+
+            if (onDelta && (deltaContent || deltaThinking)) {
+              onDelta(deltaContent, deltaThinking);
+            }
+
+            // Tool call deltas
+            if (delta.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index;
+                if (!toolCallsMap.has(idx)) {
+                  toolCallsMap.set(idx, {
+                    id: tc.id || '',
+                    type: 'function',
+                    function: { name: '', arguments: '' }
+                  });
+                }
+                const entry = toolCallsMap.get(idx);
+                if (tc.id) entry.id = tc.id;
+                if (tc.function?.name) entry.function.name += tc.function.name;
+                if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
               }
-              const entry = toolCallsMap.get(idx);
-              if (tc.id) entry.id = tc.id;
-              if (tc.function?.name) entry.function.name += tc.function.name;
-              if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
             }
           }
+        } catch (e) {
+          // parse failure — skip
         }
-      } catch (e) {
-        // parse failure — skip
       }
     }
+  } finally {
+    clearTimeout(watchdog);
   }
 
   const toolCalls = Array.from(toolCallsMap.values()).filter(tc => tc.function.name);
@@ -128,6 +152,12 @@ export async function callLLM({
   const startTime = Date.now();
   const params = { ...CONFIG.llmParams, ...llmParams };
 
+  // kimi-k3 服务端硬性要求 temperature=1 / top_p=0.95，其它取值会 400
+  if (modelId && modelId.includes('kimi-k3')) {
+    params.temperature = 1;
+    params.top_p = 0.95;
+  }
+
   // --- Backend proxy mode (providerId or agentId given) ---
   if (providerId || agentId) {
     const body = {
@@ -156,11 +186,21 @@ export async function callLLM({
       body.thinking = thinkingConfig;
     }
 
-    const response = await authFetch('/api/llm/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    // 响应头阶段超时：网关排队/停滞时快速失败交给上层重试。
+    // 流式拿到响应头后由 consumeSSEStream 的停滞看门狗接管；非流式给足 300s 读完整响应。
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), stream ? 90000 : 300000);
+    let response;
+    try {
+      response = await authFetch('/api/llm/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } finally {
+      if (stream) clearTimeout(timer);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -175,6 +215,7 @@ export async function callLLM({
     }
 
     const data = await response.json();
+    clearTimeout(timer);
     const message = data.choices?.[0]?.message;
     const finishReason = data.choices?.[0]?.finish_reason;
 

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CaseConfigProvider } from '../../contexts/CaseConfigContext.jsx';
+import { CaseConfigProvider, createDefaultState } from '../../contexts/CaseConfigContext.jsx';
 import { useCaseConfig } from '../../hooks/useCaseConfig.js';
 import {
   ConfigPageHeader,
@@ -20,10 +20,52 @@ import { saveCaseToServer, getCaseDetail, updateCase } from '../../caseApi.js';
 /**
  * ConfigPage — v4 self-contained case config page.
  * Wraps all components in CaseConfigProvider.
+ *
+ * runConfig: 运行页当前案例的配置快照（场景系统提示词/payload/工具/思考/LLM 参数等）。
+ * 打开配置页时以此为初始值，使配置页镜像运行页当前选中的案例；
+ * 若带 caseId（从案例页编辑），LOAD_CASE 会随后整体覆盖。
  */
-export default function ConfigPage({ setActiveTab, caseId, onApplyCaseConfig }) {
+export default function ConfigPage({ setActiveTab, caseId, onApplyCaseConfig, runConfig }) {
+  // 仅在挂载时取一次快照（切 tab 会重新挂载）；编辑期间运行页变化不影响表单
+  const initialState = useMemo(() => {
+    const s = createDefaultState();
+    if (runConfig) {
+      if (runConfig.agentId) {
+        s.agent = { ...s.agent, agent_id: runConfig.agentId, model_id: runConfig.modelId || '' };
+      }
+      s.llm_params = {
+        temperature: runConfig.temperature ?? null,
+        max_tokens: runConfig.maxTokens ?? null,
+        top_p: runConfig.topP ?? null,
+      };
+      s.thinking = {
+        ...s.thinking,
+        enabled: !!runConfig.thinkingEnabled,
+        budget: runConfig.thinkingBudget || 10000,
+      };
+      // 运行页当前系统提示词（选中场景后即场景提示词）；标记 override 防止被智能体默认值覆盖
+      s.system_prompt = runConfig.systemPrompt || '';
+      s.system_prompt_override = !!runConfig.systemPrompt;
+      if (runConfig.testPayload) {
+        s.chat_config = {
+          messages: [{ id: crypto.randomUUID?.() || `m-${Date.now()}`, role: 'user', content: runConfig.testPayload, files: [], images: [] }],
+        };
+      }
+      if (runConfig.enabledTools?.length) {
+        s.act_config = {
+          ...s.act_config,
+          tool_sandbox: { ...s.act_config.tool_sandbox, enabled_tools: runConfig.enabledTools },
+        };
+      }
+      if (runConfig.caseName) {
+        s.meta = { ...s.meta, name: runConfig.caseName };
+      }
+    }
+    return s;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <CaseConfigProvider>
+    <CaseConfigProvider initialState={initialState}>
       <ConfigPageInner setActiveTab={setActiveTab} caseId={caseId} onApplyCaseConfig={onApplyCaseConfig} />
     </CaseConfigProvider>
   );
@@ -113,7 +155,12 @@ function ConfigPageInner({ setActiveTab, caseId, onApplyCaseConfig }) {
 
         <hr className="border-edge" />
 
-        {/* LLM Judger — standalone section */}
+        <TestModeSelector />
+        <ModeEditor />
+
+        <hr className="border-edge" />
+
+        {/* LLM Judger — standalone section（置于测试模式下方） */}
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-on-canvas">
             {t('caseConfig.envLLMJudger')}
@@ -122,11 +169,6 @@ function ConfigPageInner({ setActiveTab, caseId, onApplyCaseConfig }) {
             <LLMJudgerConfig />
           </div>
         </div>
-
-        <hr className="border-edge" />
-
-        <TestModeSelector />
-        <ModeEditor />
 
         {/* Action bar */}
         <div className="flex gap-3 pt-4 border-t border-edge">

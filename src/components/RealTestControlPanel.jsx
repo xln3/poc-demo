@@ -41,6 +41,8 @@ export default function RealTestControlPanel({
   customTestPayload,
   // Agent ID — set when case config is applied (enables act mode Start Test)
   selectedAgentId, setSelectedAgentId, setSelectedModel,
+  // Demo: one-click sandbox start (creates terminal + presets scenario files)
+  startDemoSandbox,
 }) {
   const { t } = useTranslation();
   const isDemo = appMode === 'demo';
@@ -231,6 +233,16 @@ export default function RealTestControlPanel({
           </button>
 
           <div className="w-px h-6 bg-surface-hover mx-1" />
+
+          {/* Demo: one-click sandbox start — only when tools on and sandbox not yet running */}
+          {toolsEnabled && sandboxStatus !== 'running' && startDemoSandbox && (
+            <button
+              onClick={startDemoSandbox}
+              className="px-3 py-1.5 rounded text-xs font-medium transition bg-cyan-700 hover:bg-cyan-600"
+            >
+              {t('realTestControl.startSandbox')}
+            </button>
+          )}
 
           {/* Execution buttons */}
           {lastRecording ? (

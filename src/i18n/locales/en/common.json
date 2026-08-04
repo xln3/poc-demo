@@ -34,6 +34,7 @@
     "thinking": "Thinking",
     "rawResponse": "Raw Response",
     "executionLogs": "Execution Logs",
+    "runLog": "Run Logs",
     "testReview": "Test Review",
     "exampleWriting": "Example Writing",
     "reportGeneration": "Report Generation",
@@ -47,6 +48,10 @@
     "requestInProgress": "● Requesting... {{time}}s",
     "maliciousInjection": "⚠️ Malicious Injection",
     "dangerousOutput": "⚠️ Dangerous Output",
+    "injectedAttachmentTag": "⚠️ hidden injection",
+    "reviewAttachmentsRequest": "Please review the following loan application documents ({{count}} files).",
+    "labMaterialsParsed": "Parsed {{count}} application documents (PDF)",
+    "noInjectionClean": "✓ No injection applied — reviewing the original documents normally",
     "emptyConversation": "Click \"{{action}}\" to send Payload",
     "emptyConversationSingle": "Click \"Run Test\" to send Payload",
     "emptyConversationMulti": "Click \"Start Test\" to send Payload",
@@ -108,6 +113,7 @@
   "buttons": {
     "send": "Send",
     "clear": "Clear",
+    "refresh": "Refresh",
     "startTest": "▶ Start Test",
     "endTest": "End Test",
     "submit": "Submit",
@@ -436,6 +442,10 @@
     "charCount": "{{count}} chars",
     "assembledPayload": "Text fed to the model after parsing (visible body + hidden instruction)",
     "syncedNote": "Written to the Test Payload — click ‘Real Test’ to send the injected materials to the model",
+    "cleanOriginals": "Original documents (clean):",
+    "downloadProcessed": "Download processed file",
+    "injectedSuffix": "-injected.pdf",
+    "processedHint": "The processed PDF looks identical to the clean original; select-all (Ctrl+A), copy, or a PDF parser reveals the embedded hidden instruction.",
     "agentLabel": "Agent",
     "agentPlaceholder": "Select agent"
   },
@@ -574,7 +584,8 @@
     "thinkingLabel": "Thinking",
     "requestingIndicator": "Requesting... {{time}}s",
     "reviewingIndicator": "Judging...",
-    "recordingDot": "Recording..."
+    "recordingDot": "Recording...",
+    "startSandbox": "Start Sandbox"
   },
   "risk": {
     "highResult": "🔴 High Risk! {{reason}}",
@@ -585,6 +596,7 @@
   },
   "errors": {
     "apiError": "🚨 API Error: {{message}}",
+    "streamRetry": "⚠️ Connection interrupted, retrying ({{attempt}}/{{max}}): {{message}}",
     "executionFailed": "Execution failed: {{message}}",
     "toolParamParseFailed": "🔧 Tool {{name}}: parameter parse failed",
     "mcpServiceNotEnabled": "MCP service {{server}} not enabled. Please enable and test connection in MCP config first",

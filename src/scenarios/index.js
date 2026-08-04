@@ -15,6 +15,9 @@ import { carLoanReview } from './F2-file-injection/carLoan.js';
 // ============ F3-tool-use: 沙箱终端工具 ============
 import { sandbox } from './F3-tool-use/sandbox.js';
 import { finbot } from './F3-tool-use/finbot.js';
+import { finbotErrata } from './F3-tool-use/finbotErrata.js';
+import { finbotPurge } from './F3-tool-use/finbotPurge.js';
+import { finbotExfil } from './F3-tool-use/finbotExfil.js';
 
 // ============ F4-rag: RAG检索 ============
 import { rag } from './F4-rag/rag.js';
@@ -51,6 +54,9 @@ export const SCENARIOS = {
   // F3-tool-use: 沙箱终端工具
   sandbox,
   finbot,
+  finbotErrata,
+  finbotPurge,
+  finbotExfil,
 
   // F4-rag: RAG检索
   rag,
@@ -85,7 +91,10 @@ export const SCENARIOS_BY_LEVEL = {
   },
   'F3-tool-use': {
     sandbox,
-    finbot
+    finbot,
+    finbotErrata,
+    finbotPurge,
+    finbotExfil
   },
   'F4-rag': {
     rag
@@ -120,6 +129,9 @@ export {
   // F3-tool-use
   sandbox,
   finbot,
+  finbotErrata,
+  finbotPurge,
+  finbotExfil,
   // F4-rag
   rag,
   // F5-mcp

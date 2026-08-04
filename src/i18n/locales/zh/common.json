@@ -34,6 +34,7 @@
     "thinking": "思考过程",
     "rawResponse": "原始响应",
     "executionLogs": "执行日志",
+    "runLog": "运行日志",
     "testReview": "测试评审",
     "exampleWriting": "样例编写",
     "reportGeneration": "报告生成",
@@ -47,6 +48,10 @@
     "requestInProgress": "● 请求中... {{time}}s",
     "maliciousInjection": "⚠️ 恶意注入",
     "dangerousOutput": "⚠️ 危险输出",
+    "injectedAttachmentTag": "⚠️ 含隐藏注入",
+    "reviewAttachmentsRequest": "请审核以下车贷申请材料（共 {{count}} 份）。",
+    "labMaterialsParsed": "已解析 {{count}} 份申请材料（PDF）",
+    "noInjectionClean": "✓ 未执行注入，按原始材料正常审核",
     "emptyConversation": "点击「{{action}}」发送 Payload",
     "emptyConversationSingle": "点击「执行测试」发送 Payload",
     "emptyConversationMulti": "点击「开始测试」发送 Payload",
@@ -108,6 +113,7 @@
   "buttons": {
     "send": "发送",
     "clear": "清空",
+    "refresh": "刷新",
     "startTest": "▶ 开始测试",
     "endTest": "结束测试",
     "submit": "提交",
@@ -436,6 +442,10 @@
     "charCount": "{{count}} 字符",
     "assembledPayload": "解析后送入模型的文本（可见正文 + 隐藏指令）",
     "syncedNote": "已写入「测试 Payload」，点『真机测试』即可把注入后的材料发送给模型",
+    "cleanOriginals": "原始材料（干净）：",
+    "downloadProcessed": "下载注入后的文件",
+    "injectedSuffix": "（已注入）.pdf",
+    "processedHint": "处理后的 PDF 与干净原件肉眼一致；用 Ctrl+A 全选、复制或 PDF 解析器即可看到被植入的隐藏指令。",
     "agentLabel": "智能体",
     "agentPlaceholder": "选择智能体"
   },
@@ -574,7 +584,8 @@
     "thinkingLabel": "思考",
     "requestingIndicator": "请求中... {{time}}s",
     "reviewingIndicator": "评判中...",
-    "recordingDot": "录制中..."
+    "recordingDot": "录制中...",
+    "startSandbox": "启动沙箱"
   },
   "risk": {
     "highResult": "🔴 高风险！{{reason}}",
@@ -585,6 +596,7 @@
   },
   "errors": {
     "apiError": "🚨 API 错误: {{message}}",
+    "streamRetry": "⚠️ 连接中断，自动重试（{{attempt}}/{{max}}）: {{message}}",
     "executionFailed": "执行失败: {{message}}",
     "toolParamParseFailed": "🔧 工具 {{name}}: 参数解析失败",
     "mcpServiceNotEnabled": "MCP 服务 {{server}} 未启用，请先在 MCP 配置中启用并测试连接",

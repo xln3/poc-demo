@@ -32,6 +32,11 @@ router = APIRouter(prefix="/api/llm", tags=["llm"])
 limiter = Limiter(key_func=get_remote_address)
 
 LLM_TIMEOUT = float(os.environ.get("LLM_TIMEOUT", "120"))
+# 流式请求的读超时单独放宽：思考型模型（如 kimi-k3）单轮生成可达数分钟，
+# 网关排队时 chunk 间隔可能超过 120s。connect 保持 30s 快速失败。
+LLM_STREAM_TIMEOUT = httpx.Timeout(
+    float(os.environ.get("LLM_STREAM_TIMEOUT", "600")), connect=30.0
+)
 
 
 def _validate_llm_url(url: str) -> None:
@@ -331,7 +336,7 @@ async def _stream_proxy(url, headers, body, user_id, provider_id, model, input_p
     prompt_tokens = 0
     completion_tokens = 0
 
-    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=LLM_STREAM_TIMEOUT) as client:
         async with client.stream("POST", url, json=body, headers=headers) as resp:
             async for chunk in resp.aiter_bytes():
                 yield chunk

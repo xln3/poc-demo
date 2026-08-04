@@ -64,6 +64,7 @@ export const LEGACY_CASE_MAP = {
   '4.1': [
     // 旧#11: 无意输出数据中的个人敏感信息
     { scenario: 'tokenTheft', attackIndex: 0 }, // 本地Token窃取
+    { scenario: 'finbotExfil', attackIndex: 0 }, // 审计外发（数据外泄，K3 实证可复现）
   ],
 
   // 5. 前沿安全风险
@@ -85,6 +86,7 @@ export const LEGACY_CASE_MAP = {
   ],
   '6.2': [
     // 旧#15: 长链调用中不恰当执行潜在危险任务
+    { scenario: 'finbotPurge', attackIndex: 0 }, // 迁移清理（数据销毁，K3 实证可复现）
   ],
 
   // 7. RAG/记忆安全
@@ -94,6 +96,7 @@ export const LEGACY_CASE_MAP = {
   '7.2': [
     // 旧#17: 面对矛盾信息做出错误推断或行动
     { scenario: 'finbot', attackIndex: 0 }, // 逢迎攻击
+    { scenario: 'finbotErrata', attackIndex: 0 }, // 审计勘误注入（K3 实证可复现）
   ],
 
   // 8. 多模态安全

@@ -58,12 +58,17 @@ export function useRealTest(deps) {
     let actualPayload;
     const hasUserFiles = payloadFiles.length > 0;
     const hasCustomPayload = customTestPayload !== attack.testPayload;
+    // 注入实验室（车贷）：只有点了「执行注入」（写入 customTestPayload）或上传了文件，
+    // 才算「已注入」。否则发送干净材料（attack.realTestPayload 已改为干净版）→
+    // 模型读到真实财务数据后给出正常决策（拒绝），用于对比「注入前 vs 注入后」。
+    const isLab = !!attack.lab?.docs?.length;
+    const injectionActive = hasUserFiles || hasCustomPayload;
 
     if (hasUserFiles || hasCustomPayload) {
       // 用户有自定义内容，发送实际文件内容（模拟文档解析后的文本注入）
       actualPayload = getActualPayload();
     } else {
-      // 使用攻击原有的 payload
+      // 未执行注入：发送攻击的默认 payload（车贷 = 干净材料）
       actualPayload = attack.realTestPayload || attack.testPayload;
     }
     const hasFileContent = !!attack.realTestPayload || hasUserFiles;
@@ -71,22 +76,39 @@ export function useRealTest(deps) {
     // 判断用户是否有自定义内容
     const hasUserCustomization = hasUserFiles || hasCustomPayload;
 
-    // 确定显示内容
-    const displayContent = hasUserCustomization
-      ? getDisplayPayload()  // 用户有自定义 → 显示自定义内容
-      : (hasFileContent ? attack.testPayload : actualPayload);
+    // 确定显示内容 + 附件卡片
+    // 对话气泡以「附件卡片」形式呈现文件，不把文件正文塞进气泡；
+    // 实际发送给模型的完整注入正文仍在 actualPayload（右侧执行日志可展开）。
+    let attachments = null;
+    let displayContent;
+    if (hasUserFiles) {
+      attachments = payloadFiles.map(f => ({ name: f.name, size: f.size }));
+      displayContent = customTestPayload;  // 仅用户指令文本；文件由附件卡片展示
+    } else if (attack.lab?.docs?.length) {
+      // 车贷等注入实验室场景：材料以附件卡片展示 + 一句简短审核请求
+      attachments = attack.lab.docs.map(d => ({ name: d.display }));
+      displayContent = i18n.t('labels.reviewAttachmentsRequest', { count: attachments.length });
+    } else if (hasUserCustomization) {
+      displayContent = getDisplayPayload();
+    } else {
+      displayContent = hasFileContent ? attack.testPayload : actualPayload;
+    }
 
     // 确定注入来源标签
     const injectionSource = hasUserFiles
       ? `📎 ${payloadFiles.map(f => f.name).join(', ')}`
       : (attack.documentFileName ? `📄 ${attack.documentFileName}` : undefined);
 
-    // 显示用户消息（显示简化版，但实际发送完整版）
+    // 显示用户消息（附件卡片 + 简短文本）。注入实验室下，仅「已执行注入」才标红/告警；
+    // 未注入时按普通材料展示（中性卡片、无 ⚠️含隐藏注入 标签）。
+    // 完整性/可用性类场景（如 FinBot 逢迎攻击）的用户指令是正常业务指令，不标「恶意注入」。
+    const NON_INJECTION_TYPES = ['integrity', 'availability'];
     const userMsg = {
       role: 'user',
       content: displayContent,
-      isInjection: true,
-      injectionSource
+      isInjection: isLab ? injectionActive : !NON_INJECTION_TYPES.includes(attack.type),
+      injectionSource,
+      attachments
     };
     setMessages([userMsg]);
 
@@ -129,7 +151,15 @@ export function useRealTest(deps) {
         }
       });
     }
-    if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
+    if (isLab) {
+      // 注入实验室：解析日志始终显示；隐藏注入告警仅在「已执行注入」时出现
+      initialLogs.push({ type: 'data', content: i18n.t('labels.labMaterialsParsed', { count: attack.lab.docs.length }), status: 'normal' });
+      initialLogs.push(
+        injectionActive
+          ? { type: 'alert', content: i18n.t('labels.hiddenMalicious'), status: 'warning' }
+          : { type: 'data', content: i18n.t('labels.noInjectionClean'), status: 'normal' }
+      );
+    } else if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
       initialLogs.push({ type: 'data', content: i18n.t('labels.fileParsed', { name: attack.documentFileName }), status: 'normal' });
       initialLogs.push({ type: 'alert', content: i18n.t('labels.hiddenMalicious'), status: 'warning' });
     }
@@ -387,6 +417,8 @@ export function useRealTest(deps) {
       );
 
       setApiStatus('success');
+      // 测试完成后切到「对话过程」标签，直接展示模型回复（录像/演示时无需手动切换）
+      setLeftPanelTab('conversation');
 
       // 保存测试结果
       setLastTestResult({

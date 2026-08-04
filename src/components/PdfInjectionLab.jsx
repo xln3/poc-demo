@@ -22,14 +22,21 @@ export default function PdfInjectionLab({ attack, setCustomTestPayload }) {
   const [hideStyle, setHideStyle] = useState(lab?.docs?.[0]?.hideStyle || 'white');
   const [injection, setInjection] = useState(lab?.front || '');
   const [injected, setInjected] = useState(null);
+  const [injectedTarget, setInjectedTarget] = useState(null);
 
   if (!lab) return null;
 
   const activeDoc = lab.docs.find((d) => d.id === docId) || lab.docs[0];
 
+  // 执行注入时锁定的目标材料（用于「下载注入后的文件」按钮）
+  const injectedDocs = injectedTarget
+    ? (injectedTarget === 'all' ? lab.docs : lab.docs.filter((d) => d.id === injectedTarget))
+    : [];
+
   const runInject = () => {
     const payload = buildInjectedPayload({ target, position, injection });
     setInjected(payload);
+    setInjectedTarget(target);
     setCustomTestPayload?.(payload);
   };
 
@@ -52,12 +59,12 @@ export default function PdfInjectionLab({ attack, setCustomTestPayload }) {
           </span>
         </div>
         <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-[11px] text-on-dim mr-0.5">{t('injectionLab.cleanOriginals')}</span>
           {lab.docs.map((d) => (
             <a
               key={d.id}
-              href={d.documentFile}
-              target="_blank"
-              rel="noreferrer"
+              href={d.cleanFile || d.documentFile}
+              download={d.display}
               className="px-2 py-1 text-xs bg-surface-raised hover:bg-surface-hover rounded transition flex items-center gap-1"
             >
               📄 {d.display}
@@ -294,6 +301,24 @@ export default function PdfInjectionLab({ attack, setCustomTestPayload }) {
               <span className="text-xs text-green-400 font-medium">{t('injectionLab.injectSuccess')}</span>
               <span className="text-[11px] text-on-dim">({t('injectionLab.charCount', { count: injected.length })})</span>
             </div>
+            {/* 下载「注入后」的文件：与干净原件肉眼一致，隐藏指令已植入 */}
+            {injectedDocs.length > 0 && (
+              <div className="mb-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {injectedDocs.map((d) => (
+                    <a
+                      key={d.id}
+                      href={d.injectedFile || d.documentFile}
+                      download={`${d.display.replace(/\.pdf$/i, '')}${t('injectionLab.injectedSuffix')}`}
+                      className="px-2 py-1 text-xs bg-red-700 hover:bg-red-600 text-white rounded transition flex items-center gap-1"
+                    >
+                      ⬇️ {t('injectionLab.downloadProcessed')}：{d.display}
+                    </a>
+                  ))}
+                </div>
+                <div className="mt-1.5 text-[11px] text-on-dim leading-relaxed">{t('injectionLab.processedHint')}</div>
+              </div>
+            )}
             <div className="text-[11px] text-on-dim mb-2">{t('injectionLab.assembledPayload')}</div>
             <pre className="text-xs bg-canvas p-2 rounded max-h-40 overflow-y-auto custom-scroll whitespace-pre-wrap leading-relaxed text-on-surface">{injected}</pre>
             <div className="mt-2 text-xs text-green-400">➡️ {t('injectionLab.syncedNote')}</div>

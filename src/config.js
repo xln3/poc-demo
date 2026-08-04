@@ -452,6 +452,9 @@ export const CONFIG = {
     { id: 'doubao-seed-2-0-lite-260215', name: 'Doubao Seed 2.0 Lite' },
     { id: 'doubao-seed-1-8-251228', name: 'Doubao Seed 1.8' },
     { id: 'baidu-deepseek-v3.2', name: 'DeepSeek V3.2' },
+    { id: 'kimi-k3', name: 'Kimi K3' },
+    { id: 'doubao-seed-2-1-pro-260628', name: 'Doubao Seed 2.1 Pro' },
+    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
   ],
 
   // 评判模型（默认，当无 Judge Agent 时使用）

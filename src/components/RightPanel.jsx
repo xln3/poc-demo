@@ -1,6 +1,8 @@
 import { forwardRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fetchAgents } from '../api/evalBridgeApi.js';
+import ThinkingView from './interaction/ThinkingView.jsx';
+import { DEMO_THINKING_LAYOUT } from './interaction/demoLayout.js';
 
 const RightPanel = forwardRef(function RightPanel({
   rightPanelTab, setRightPanelTab, rightSubTab, setRightSubTab,
@@ -11,6 +13,8 @@ const RightPanel = forwardRef(function RightPanel({
   setLeftPanelTab, setExpandedThinking, chatRef,
   // Review tab
   judgeConfig, setJudgeConfig, humanJudgment, setHumanJudgment, submitHumanJudgment,
+  // Thinking (TEMP demo: shown in the right column)
+  thinkingEntries, setThinkingEntries, expandedThinking, apiStatus,
 }, logRef) {
   const { t } = useTranslation();
   const [agents, setAgents] = useState([]);
@@ -36,6 +40,37 @@ const RightPanel = forwardRef(function RightPanel({
       }));
     }
   };
+
+  // TEMP demo layout: right column shows only 思考过程 (thinking).
+  if (DEMO_THINKING_LAYOUT) {
+    return (
+      <div className="bg-surface rounded-lg p-3 flex flex-col min-h-0">
+        <div className="flex items-center justify-between mb-2 pb-2 border-b border-edge flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2 py-1 rounded bg-purple-600 text-white">
+              {t('tabs.thinking')}
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setThinkingEntries([]);
+              setExpandedThinking(new Set());
+              thinkingIndexRef.current = 0;
+            }}
+            className="text-xs px-2 py-0.5 bg-surface-raised hover:bg-surface-hover rounded transition"
+          >
+            {t('buttons.clear')}
+          </button>
+        </div>
+        <ThinkingView
+          thinkingEntries={thinkingEntries}
+          expandedThinking={expandedThinking}
+          setExpandedThinking={setExpandedThinking}
+          apiStatus={apiStatus}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-surface rounded-lg p-3 flex flex-col min-h-0">

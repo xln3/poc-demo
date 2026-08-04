@@ -23,6 +23,9 @@ export const SCENARIO_NS_MAP = {
   // F3 - Tool Use
   'sandbox': 'F3-sandbox',
   'finbot': 'F3-finbot',
+  'finbotErrata': 'F3-finbotErrata',
+  'finbotPurge': 'F3-finbotPurge',
+  'finbotExfil': 'F3-finbotExfil',
 
   // F4 - RAG
   'rag': 'F4-rag',

@@ -51,10 +51,15 @@ HIDE_STYLES = [
 # ---- 组装实验室数据 ----
 docs = []
 for d in data["docs"]:
+    stem = d["file"].rsplit(".", 1)[0]
     docs.append({
         "id": d["id"],
         "display": d["display"],
+        # documentFile 保留（= 注入后文件）以兼容旧引用；
+        # cleanFile = 干净原件（初始下载），injectedFile = 注入后文件（执行注入后下载）
         "documentFile": f"{DIR}/{d['file']}",
+        "cleanFile": f"{DIR}/{stem}-clean.pdf",
+        "injectedFile": f"{DIR}/{d['file']}",
         "hideStyle": d["hideStyle"],
         "technique": d["technique"],
         "userAsk": d["userAsk"],

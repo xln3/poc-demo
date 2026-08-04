@@ -6,6 +6,31 @@ export function useConversationEngine(deps) {
   const d = useRef(deps);
   d.current = deps;
 
+  // LLM 流式调用自动重试：网关/代理在长流式生成中可能中断连接
+  // （incomplete chunked read / 读取超时），chat completion 幂等可安全重试；
+  // 重试前清空本轮部分输出避免内容重复；4xx 与配置错误不重试。
+  const streamWithRetry = async (fn) => {
+    const { setMessages, setThinkingEntries, setLogs } = d.current;
+    const maxAttempts = 3;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        const msg = err?.message || String(err);
+        const noRetry = msg.startsWith('API Error: 4') || msg.includes('未配置 LLM provider');
+        if (noRetry || attempt >= maxAttempts) throw err;
+        setMessages(prev => prev.map(m => m.isStreaming ? { ...m, content: '' } : m));
+        setThinkingEntries(prev => prev.map(e => e.isStreaming ? { ...e, content: '', chars: 0 } : e));
+        setLogs(prev => [...prev, {
+          type: 'alert',
+          content: i18n.t('errors.streamRetry', { attempt, max: maxAttempts - 1, message: msg }),
+          status: 'warning'
+        }]);
+        await new Promise(r => setTimeout(r, 1500 * attempt));
+      }
+    }
+  };
+
   const startConversation = useCallback(async () => {
     const {
       currentAttack, currentScenario,
@@ -75,6 +100,10 @@ export function useConversationEngine(deps) {
     let actualPayload;
     const hasUserFiles = payloadFiles.length > 0;
     const hasCustomPayload = customTestPayload !== attack.testPayload;
+    // 注入实验室（车贷）：仅「执行注入」（写入 customTestPayload）或上传文件才算已注入；
+    // 否则发送干净材料（attack.realTestPayload 为干净版）→ 模型给出正常决策（拒绝）。
+    const isLab = !!attack.lab?.docs?.length;
+    const injectionActive = hasUserFiles || hasCustomPayload;
 
     if (hasUserFiles || hasCustomPayload) {
       actualPayload = getActualPayload();
@@ -86,23 +115,37 @@ export function useConversationEngine(deps) {
     // 保存初始 payload 用于评判
     setInitialPayload(actualPayload);
 
-    // 确定显示内容
+    // 确定显示内容 + 附件卡片（文件以附件卡片呈现，正文不塞进气泡；完整 payload 见执行日志）
     const hasUserCustomization = hasUserFiles || hasCustomPayload;
-    const displayContent = hasUserCustomization
-      ? getDisplayPayload()
-      : (hasFileContent ? attack.testPayload : actualPayload);
+    let attachments = null;
+    let displayContent;
+    if (hasUserFiles) {
+      attachments = payloadFiles.map(f => ({ name: f.name, size: f.size }));
+      displayContent = customTestPayload;
+    } else if (attack.lab?.docs?.length) {
+      attachments = attack.lab.docs.map(d => ({ name: d.display }));
+      displayContent = i18n.t('labels.reviewAttachmentsRequest', { count: attachments.length });
+    } else if (hasUserCustomization) {
+      displayContent = getDisplayPayload();
+    } else {
+      displayContent = hasFileContent ? attack.testPayload : actualPayload;
+    }
 
     // 确定注入来源标签
     const injectionSource = hasUserFiles
       ? `📎 ${payloadFiles.map(f => f.name).join(', ')}`
       : (attack.documentFileName ? `📄 ${attack.documentFileName}` : undefined);
 
-    // 显示用户消息
+    // 显示用户消息。注入实验室下，仅「已执行注入」才标红/告警；未注入按普通材料展示。
+    // 完整性/可用性类场景（如 FinBot 逢迎攻击）的攻击载体在系统提示词/环境里，
+    // 用户指令本身是正常业务指令，不标「恶意注入」。
+    const NON_INJECTION_TYPES = ['integrity', 'availability'];
     const userMsg = {
       role: 'user',
       content: displayContent,
-      isInjection: true,
-      injectionSource
+      isInjection: isLab ? injectionActive : !NON_INJECTION_TYPES.includes(attack.type),
+      injectionSource,
+      attachments
     };
     setMessages([userMsg]);
 
@@ -123,7 +166,14 @@ export function useConversationEngine(deps) {
         status: 'normal'
       });
     }
-    if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
+    if (isLab) {
+      initialLogs.push({ type: 'data', content: i18n.t('labels.labMaterialsParsed', { count: attack.lab.docs.length }), status: 'normal' });
+      initialLogs.push(
+        injectionActive
+          ? { type: 'alert', content: i18n.t('labels.hiddenMalicious'), status: 'warning' }
+          : { type: 'data', content: i18n.t('labels.noInjectionClean'), status: 'normal' }
+      );
+    } else if (attack.realTestPayload && !hasUserFiles && !hasCustomPayload) {
       initialLogs.push({ type: 'data', content: i18n.t('labels.fileParsed', { name: attack.documentFileName }), status: 'normal' });
       initialLogs.push({ type: 'alert', content: i18n.t('labels.hiddenMalicious'), status: 'warning' });
     }
@@ -245,7 +295,7 @@ export function useConversationEngine(deps) {
 
         if (useToolCalling && enabledToolNames.length > 0) {
           const toolDefinitions = CONFIG.buildToolDefinitions(enabledToolNames);
-          response = await CONFIG.callModelWithToolsStream(
+          response = await streamWithRetry(() => CONFIG.callModelWithToolsStream(
             messageHistory,
             activeSystemPrompt,
             selectedModel,
@@ -254,9 +304,9 @@ export function useConversationEngine(deps) {
             thinkingConfig,
             onDelta,
             null, selectedAgentId
-          );
+          ));
         } else {
-          response = await CONFIG.callModelStream(
+          response = await streamWithRetry(() => CONFIG.callModelStream(
             messageHistory,
             activeSystemPrompt,
             selectedModel,
@@ -264,7 +314,7 @@ export function useConversationEngine(deps) {
             thinkingConfig,
             onDelta,
             null, selectedAgentId
-          );
+          ));
         }
 
         totalApiTime += response.timing?.totalTime || 0;
@@ -460,6 +510,8 @@ export function useConversationEngine(deps) {
       ]);
 
       setApiStatus('idle');
+      // 流式回答完成后切到「对话过程」标签，直接展示模型回复（录像/演示时无需手动切换）
+      setLeftPanelTab('conversation');
 
     } catch (error) {
       setApiStatus('error');
@@ -608,7 +660,7 @@ export function useConversationEngine(deps) {
 
         if (useToolCalling && enabledToolNames.length > 0) {
           const toolDefinitions = CONFIG.buildToolDefinitions(enabledToolNames);
-          response = await CONFIG.callModelWithToolsStream(
+          response = await streamWithRetry(() => CONFIG.callModelWithToolsStream(
             messageHistory,
             activeSystemPrompt,
             selectedModel,
@@ -617,9 +669,9 @@ export function useConversationEngine(deps) {
             thinkingConfig,
             onDelta,
             null, selectedAgentId
-          );
+          ));
         } else {
-          response = await CONFIG.callModelStream(
+          response = await streamWithRetry(() => CONFIG.callModelStream(
             messageHistory,
             activeSystemPrompt,
             selectedModel,
@@ -627,7 +679,7 @@ export function useConversationEngine(deps) {
             thinkingConfig,
             onDelta,
             null, selectedAgentId
-          );
+          ));
         }
 
         totalApiTime += response.timing?.totalTime || 0;
